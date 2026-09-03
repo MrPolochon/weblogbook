@@ -5,6 +5,7 @@ export const CHEQUE_MESSAGE_TYPES = [
   'cheque_salaire',
   'cheque_revenu_compagnie',
   'cheque_taxes_atc',
+  'cheque_salaire_atc',
   'cheque_siavi_intervention',
   'cheque_siavi_taxes',
 ] as const;

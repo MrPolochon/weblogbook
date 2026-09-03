@@ -16,6 +16,7 @@ export default function MessagerieGroundClient(props: Props) {
       colorTheme="blue"
       title="Messagerie Ground Crew"
       chequeTypes={GROUND_CHEQUE_TYPES}
+      chequesHref="/ground/messagerie"
     />
   );
 }

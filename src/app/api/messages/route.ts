@@ -27,7 +27,14 @@ export async function GET(req: NextRequest) {
       query = admin.from('messages')
         .select('*, expediteur:profiles!expediteur_id(identifiant)')
         .eq('destinataire_id', user.id)
-        .in('type_message', ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes']);
+        .in('type_message', [
+          'cheque_salaire',
+          'cheque_revenu_compagnie',
+          'cheque_taxes_atc',
+          'cheque_salaire_atc',
+          'cheque_siavi_intervention',
+          'cheque_siavi_taxes',
+        ]);
     } else {
       query = admin.from('messages')
         .select('*, expediteur:profiles!expediteur_id(identifiant)')

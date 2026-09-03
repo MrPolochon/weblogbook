@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { Landmark, Building2, Shield, Plane, Wallet, ArrowLeftRight, CreditCard } from 'lucide-react';
 import FelitzBankClient from './FelitzBankClient';
 import FelitzTransactionsHistory from '@/components/FelitzTransactionsHistory';
+import ChequesAEncaisserBanner from '@/components/ChequesAEncaisserBanner';
+import { countChequesAEncaisser } from '@/lib/felitz/cheques-count';
 
 export default async function FelitzBankPage() {
   const supabase = await createClient();
@@ -115,12 +117,14 @@ export default async function FelitzBankPage() {
     Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>,
   ];
 
+  const chequesAEncaisser = await countChequesAEncaisser(admin, user.id);
   const totalSolde = (comptePerso?.solde ?? 0) + comptesEntreprise.reduce((s, c) => s + c.solde, 0) + (compteMilitaire?.solde ?? 0);
   const nbComptes = (comptePerso ? 1 : 0) + comptesEntreprise.length + (compteMilitaire ? 1 : 0);
   const nbTransactions = transactionsPerso.length + Object.values(transactionsEntrepriseByCompte).reduce((s, t) => s + t.length, 0) + transactionsMilitaire.length;
 
   return (
     <div className="space-y-6 animate-page-reveal">
+      <ChequesAEncaisserBanner count={chequesAEncaisser} href="/messagerie" />
       {/* HUD Header */}
       <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />

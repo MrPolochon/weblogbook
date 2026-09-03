@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import {
   Radio, LayoutDashboard, LogOut, FileText, User, ScrollText, Mail, Moon, Sun,
-  ChevronDown, Menu, Flame, Landmark, Radar, BookOpen,
+  ChevronDown, Menu, Flame, Landmark, Radar, BookOpen, Plus,
 } from 'lucide-react';
 import AtcPhonebookButton from '@/components/AtcPhonebookButton';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
@@ -102,6 +102,7 @@ export default function AtcNavBar({
 
   const atcMenuItems = [
     { href: '/atc', label: 'Console', icon: Radio, badge: 0 },
+    { href: '/atc/creer-plan', label: 'Créer un plan', icon: Plus, badge: 0 },
     { href: '/atc/documents', label: 'Documents', icon: FileText, badge: 0 },
     { href: '/atc/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
     { href: '/atc/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },

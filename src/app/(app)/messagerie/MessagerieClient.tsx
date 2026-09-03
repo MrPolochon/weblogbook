@@ -9,6 +9,8 @@ import {
   Megaphone, User, Wrench,
 } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
+import ChequesAEncaisserBanner from '@/components/ChequesAEncaisserBanner';
+import { CHEQUE_MESSAGE_TYPES } from '@/lib/felitz/encaisser-cheque';
 import MessageContent from '@/components/MessageContent';
 import UserAvatar from '@/components/UserAvatar';
 import BroadcastAudienceSelector, { BroadcastAudience, audienceLabel } from '@/components/BroadcastAudienceSelector';
@@ -127,7 +129,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
   const [mobileShowDetail, setMobileShowDetail] = useState(false);
   const [composeMode, setComposeMode] = useState<'individuel' | 'diffusion'>('individuel');
   const [broadcastAudience, setBroadcastAudience] = useState<BroadcastAudience | null>(null);
-  const CHEQUE_TYPES = useMemo(() => ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_siavi_intervention', 'cheque_siavi_taxes'], []);
+  const CHEQUE_TYPES = useMemo(() => [...CHEQUE_MESSAGE_TYPES] as string[], []);
   const cheques = useMemo(() => localRecus.filter(m => CHEQUE_TYPES.includes(m.type_message)), [localRecus, CHEQUE_TYPES]);
   const invitations = useMemo(() => localRecus.filter(m => m.type_message === 'recrutement'), [localRecus]);
   const sanctions = useMemo(() => localRecus.filter(m => ['amende_ifsa', 'relance_amende'].includes(m.type_message)), [localRecus]);
@@ -278,7 +280,10 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
       const res = await fetch(`/api/messages/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'encaisser' }) });
       const data = await res.json(); if (!res.ok) throw new Error(data.error);
       patchLocal(id, { cheque_encaisse: true });
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Erreur'); }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+      throw e;
+    }
   }
 
   async function handleEncaisserTout() {
@@ -616,6 +621,7 @@ export default function MessagerieClient({ messagesRecus, messagesEnvoyes, utili
 
   return (
     <div className="space-y-4">
+      <ChequesAEncaisserBanner count={cheques.filter(c => !c.cheque_encaisse).length} />
       {/* Header de page */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">

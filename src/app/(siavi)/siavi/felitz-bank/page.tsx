@@ -3,6 +3,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { Landmark, ArrowLeft, Shield } from 'lucide-react';
 import Link from 'next/link';
+import ChequesAEncaisserBanner from '@/components/ChequesAEncaisserBanner';
+import { countChequesAEncaisser } from '@/lib/felitz/cheques-count';
 import FelitzBankSiaviClient from './FelitzBankSiaviClient';
 
 export default async function FelitzBankSiaviPage() {
@@ -53,8 +55,11 @@ export default async function FelitzBankSiaviPage() {
     transactionsSiavi = ts || [];
   }
 
+  const chequesAEncaisser = await countChequesAEncaisser(admin, user.id);
+
   return (
     <div className="space-y-6">
+      <ChequesAEncaisserBanner count={chequesAEncaisser} href="/siavi/messagerie" />
       {/* Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-600 via-red-700 to-rose-800 p-6 shadow-xl">
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>

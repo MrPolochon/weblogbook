@@ -48,7 +48,7 @@ export async function POST(req: NextRequest) {
     // Compte source + profil en parallèle (indépendants).
     const [{ data: compteSource }, { data: profile }] = await Promise.all([
       admin.from('felitz_comptes')
-        .select('id, solde, vban, type, proprietaire_id, compagnie_id, alliance_id')
+        .select('id, solde, vban, type, proprietaire_id, compagnie_id, alliance_id, entreprise_reparation_id')
         .eq('id', compte_source_id)
         .maybeSingle(),
       supabase.from('profiles').select('role').eq('id', user.id).single(),
@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     const isOwner = compteSource.proprietaire_id === user.id;
 
     // Toutes les vérifs PDG / co-PDG / alliance en parallèle.
-    const [pdgRes, coPdgRes, isAllianceLeader] = await Promise.all([
+    const [pdgRes, coPdgRes, isAllianceLeader, reparationRes] = await Promise.all([
       compteSource.compagnie_id
         ? admin.from('compagnies').select('pdg_id').eq('id', compteSource.compagnie_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -71,11 +71,15 @@ export async function POST(req: NextRequest) {
       compteSource.type === 'alliance' && compteSource.alliance_id
         ? canVirementCompteAllianceFelitz(user.id, compteSource.alliance_id, admin)
         : Promise.resolve(false),
+      compteSource.entreprise_reparation_id
+        ? admin.from('entreprises_reparation').select('pdg_id').eq('id', compteSource.entreprise_reparation_id).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
     const isPdg = pdgRes.data?.pdg_id === user.id;
     const isCoPdg = Boolean(coPdgRes.data);
+    const isReparationPdg = Boolean(reparationRes.data && String(reparationRes.data.pdg_id) === String(user.id));
 
-    if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader) {
+    if (!isAdmin && !isOwner && !isPdg && !isCoPdg && !isAllianceLeader && !isReparationPdg) {
       return NextResponse.json({ error: 'Non autorisé pour ce compte' }, { status: 403 });
     }
 

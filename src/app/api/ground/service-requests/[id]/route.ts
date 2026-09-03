@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { calculerPaiementService } from '@/lib/ground/pricing';
+import { emettreChequesServiceGround } from '@/lib/ground/cheques';
 import { finaliserContributions, getActiveTeam } from '@/lib/ground/teams';
 import type { ServiceStatut, ServiceType } from '@/lib/types';
 
@@ -112,18 +113,33 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Finaliser les contributions si le service est complété et l'équipe est connue
-  if (body.statut === 'completed' && existingRequest.team_id && updated) {
+  if (body.statut === 'completed' && updated) {
     try {
-      await finaliserContributions(
-        admin,
-        id,
-        user.id,
-        updated.score_minijeu ?? 0.75,
-        updated.montant_paye ?? 0
-      );
-    } catch {
-      // Non bloquant
+      if (existingRequest.team_id) {
+        await finaliserContributions(
+          admin,
+          id,
+          user.id,
+          updated.score_minijeu ?? 0.75,
+          updated.montant_paye ?? 0
+        );
+      }
+      const { data: planVol } = await admin
+        .from('plans_vol')
+        .select('numero_vol')
+        .eq('id', existingRequest.plan_vol_id)
+        .maybeSingle();
+      await emettreChequesServiceGround(admin, {
+        serviceRequestId: id,
+        serviceType: existingRequest.service_type as ServiceType,
+        aeroport: existingRequest.aeroport,
+        acceptedBy: (updated.accepted_by as string | null) ?? user.id,
+        teamId: existingRequest.team_id ?? null,
+        montantPaye: Number(updated.montant_paye) || 0,
+        numeroVol: planVol?.numero_vol ?? null,
+      });
+    } catch (e) {
+      console.error('[ground] chèques / contributions:', e);
     }
   }
 

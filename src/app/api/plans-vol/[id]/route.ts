@@ -652,6 +652,25 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
+    if (action === 'annuler_transfert') {
+      const { data: profile } = await supabase.from('profiles').select('role, atc').eq('id', user.id).single();
+      const isAdmin = profile?.role === 'admin';
+      const isHolder = plan.current_holder_user_id === user.id;
+      if (!isAdmin && !isHolder) {
+        return NextResponse.json({ error: 'Seul le détenteur du plan peut annuler le transfert.' }, { status: 403 });
+      }
+      if (!plan.pending_transfer_aeroport) {
+        return NextResponse.json({ error: 'Aucun transfert en attente.' }, { status: 400 });
+      }
+      const { error: err } = await admin.from('plans_vol').update({
+        pending_transfer_aeroport: null,
+        pending_transfer_position: null,
+        pending_transfer_at: null,
+      }).eq('id', id);
+      if (err) return NextResponse.json({ error: 'Erreur lors de l\'annulation' }, { status: 400 });
+      return NextResponse.json({ ok: true });
+    }
+
     // ============================================================
     // CLÔTURE FORCÉE PAR ADMIN
     // < 24h : clôture + amende 50 000 F$

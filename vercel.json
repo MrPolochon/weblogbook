@@ -7,6 +7,26 @@
     {
       "path": "/api/cron/pf-odw-tracks",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/prets",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/inactivity-cleanup",
+      "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/reparation-transit",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/vols-ferry",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/atc-transferts",
+      "schedule": "* * * * *"
     }
   ]
 }

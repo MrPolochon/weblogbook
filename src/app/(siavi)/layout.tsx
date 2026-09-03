@@ -78,6 +78,28 @@ export default async function SiaviLayout({
         sessionInfo={enService && session ? { aeroport: session.aeroport, started_at: session.started_at } : null} 
         messagesNonLusCount={messagesNonLusCount || 0} 
       />
+      {enService && estAfis && (
+        <div className="md:hidden border-b border-red-800 bg-[#3a0f18] px-3 py-2 space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-wider text-red-300">
+            Non surveillés · {plansAuto.length}
+          </p>
+          {plansAuto.length === 0 ? (
+            <p className="text-xs text-red-200/70">Aucun vol</p>
+          ) : (
+            <div className="flex gap-2 overflow-x-auto">
+              {plansAuto.map((p) => (
+                <Link
+                  key={p.id}
+                  href={`/siavi/plan/${p.id}`}
+                  className="shrink-0 rounded-lg border border-red-700 bg-red-950 px-2.5 py-1.5 text-xs font-semibold text-red-100"
+                >
+                  {p.numero_vol}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       <div className="flex flex-1 w-full min-h-0">
         {enService && estAfis && (
           <aside className="w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">

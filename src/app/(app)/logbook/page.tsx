@@ -9,6 +9,7 @@ import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 import ExportLogbookButton from './ExportLogbookButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
+import { countChequesAEncaisser } from '@/lib/felitz/cheques-count';
 
 const VOL_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   'validé': { label: 'Valide', className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', icon: <CheckCircle2 className="h-3 w-3" /> },
@@ -24,7 +25,7 @@ export default async function LogbookPage() {
   const admin = createAdminClient();
 
   // Profile + all flight data in a single parallel batch
-  const [{ data: profile }, { data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }] = await Promise.all([
+  const [{ data: profile }, { data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }, { data: plansActifs }, chequesAEncaisser] = await Promise.all([
     supabase.from('profiles').select('heures_initiales_minutes, blocked_until, role').eq('id', user.id).single(),
     admin.from('vols').select(`
       id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign,
@@ -42,6 +43,8 @@ export default async function LogbookPage() {
     admin.from('plans_vol').select('id').eq('pilote_id', user.id).eq('statut', 'refuse'),
     // Plans civils clôturés seulement : pas les MEDEVAC SIAVI (chronologie = rapport SIAVI, pas carnet via le plan)
     admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null),
+    admin.from('plans_vol').select('id, numero_vol, statut, code_transpondeur').eq('pilote_id', user.id).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']).order('created_at', { ascending: false }).limit(8),
+    countChequesAEncaisser(admin, user.id),
   ]);
 
   const isAdmin = profile?.role === 'admin';
@@ -137,6 +140,12 @@ export default async function LogbookPage() {
           </div>
         </div>
       </div>
+
+      <LogbookNextAction
+        blocked={blocked}
+        plansActifs={plansActifs ?? []}
+        chequesAEncaisser={chequesAEncaisser}
+      />
 
       {/* Statistiques */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-enter">
@@ -353,6 +362,66 @@ export default async function LogbookPage() {
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function LogbookNextAction({
+  blocked,
+  plansActifs,
+  chequesAEncaisser,
+}: {
+  blocked: boolean;
+  plansActifs: Array<{ id: string; numero_vol: string; statut: string; code_transpondeur: string | null }>;
+  chequesAEncaisser: number;
+}) {
+  const actif = plansActifs[0];
+  let title = 'Prochaine action';
+  let detail = 'Déposez un plan de vol pour commencer un vol.';
+  let href = '/logbook/depot-plan-vol';
+  let cta = 'Déposer un plan';
+
+  if (blocked) {
+    title = 'Compte bloqué';
+    detail = 'Vous ne pouvez pas déposer de vol pour le moment.';
+    href = '/messagerie';
+    cta = 'Voir la messagerie';
+  } else if (actif?.statut === 'en_attente_cloture') {
+    title = 'Clôture en attente';
+    detail = `Le plan ${actif.numero_vol} attend la confirmation ATC. Le paiement n’est pas encore versé.`;
+    href = '/logbook/plans-vol';
+    cta = 'Voir le plan';
+  } else if (actif && ['depose', 'en_attente'].includes(actif.statut) && !actif.code_transpondeur) {
+    title = 'Transpondeur à régler';
+    detail = `Plan ${actif.numero_vol} déposé — saisissez le code transpondeur avant le départ.`;
+    href = '/logbook/plans-vol';
+    cta = 'Ouvrir le transpondeur';
+  } else if (actif && ['accepte', 'en_cours', 'depose', 'en_attente'].includes(actif.statut)) {
+    title = 'Vol en cours';
+    detail = `Plan ${actif.numero_vol} actif. À l’arrivée, demandez la clôture depuis la page du plan.`;
+    href = '/logbook/plans-vol';
+    cta = 'Voir le plan';
+  } else if (chequesAEncaisser > 0) {
+    title = 'Chèques à encaisser';
+    detail = `${chequesAEncaisser} chèque${chequesAEncaisser > 1 ? 's' : ''} en attente. Sans encaissement le solde Felitz reste inchangé.`;
+    href = '/messagerie';
+    cta = 'Encaisser';
+  }
+
+  return (
+    <div className="rounded-xl border border-sky-800 bg-slate-900 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div>
+        <p className="text-xs uppercase tracking-wider text-sky-400 font-semibold">{title}</p>
+        <p className="text-sm text-slate-200 mt-0.5">{detail}</p>
+        <p className="text-[11px] text-slate-400 mt-1">Les missions MEDEVAC SIAVI n’apparaissent pas dans ce carnet : elles se clôturent via le rapport SIAVI.</p>
+      </div>
+      <Link
+        href={href}
+        className="inline-flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-bold text-white hover:bg-sky-500"
+      >
+        {cta}
+        <ArrowRight className="h-4 w-4" />
+      </Link>
     </div>
   );
 }

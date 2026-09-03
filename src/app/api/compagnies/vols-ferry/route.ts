@@ -4,11 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { COUT_VOL_FERRY, calculerVolFerryAuto, calculerUsureFerry } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
-import {
-  advanceReparationIfFerryArrivedAtHangar,
-  completeReparationReturnFerry,
-  resolveAeroportBaseRetour,
-} from '@/lib/reparation-after-ferry';
+import { resolveAeroportBaseRetour } from '@/lib/reparation-after-ferry';
+import { completeDueAutoFerryFlights } from '@/lib/vols-ferry-auto';
 
 export async function GET(request: Request) {
   try {
@@ -21,49 +18,7 @@ export async function GET(request: Request) {
     if (!compagnie_id) return NextResponse.json({ error: 'compagnie_id requis' }, { status: 400 });
 
     const admin = createAdminClient();
-    
-    // Auto-compléter les vols ferry automatiques terminés
-    const maintenant = new Date();
-    const { data: volsACompleter } = await admin
-      .from('vols_ferry')
-      .select('id, avion_id, aeroport_arrivee, automatique')
-      .eq('compagnie_id', compagnie_id)
-      .eq('automatique', true)
-      .in('statut', ['planned', 'in_progress'])
-      .not('fin_prevue_at', 'is', null)
-      .lt('fin_prevue_at', maintenant.toISOString());
-    
-    // Compléter automatiquement les vols ferry terminés
-    for (const vol of volsACompleter || []) {
-      // Mettre à jour le vol ferry
-      await admin.from('vols_ferry')
-        .update({ statut: 'completed', completed_at: maintenant.toISOString() })
-        .eq('id', vol.id);
-      
-      // Mettre à jour l'avion (position + usure + statut)
-      const { data: avion } = await admin
-        .from('compagnie_avions')
-        .select('usure_percent')
-        .eq('id', vol.avion_id)
-        .single();
-      
-      if (avion) {
-        // L'usure pour un vol ferry auto est fixe à 5%
-        const nouvelleUsure = Math.max(0, avion.usure_percent - 5);
-        const nouveauStatut = nouvelleUsure === 0 ? 'bloque' : 'ground';
-        
-        await admin.from('compagnie_avions')
-          .update({ 
-            aeroport_actuel: vol.aeroport_arrivee,
-            usure_percent: nouvelleUsure,
-            statut: nouveauStatut 
-          })
-          .eq('id', vol.avion_id);
-
-        await advanceReparationIfFerryArrivedAtHangar(admin, vol.avion_id, vol.aeroport_arrivee);
-        await completeReparationReturnFerry(admin, vol.avion_id, vol.aeroport_arrivee);
-      }
-    }
+    await completeDueAutoFerryFlights(admin);
     
     // Charger les vols ferry
     const { data: vols, error } = await supabase

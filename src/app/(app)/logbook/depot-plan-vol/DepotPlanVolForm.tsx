@@ -798,11 +798,23 @@ export default function DepotPlanVolForm({
     <>
     {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
 
+    {(avionType?.nom || selectedInventaire?.types_avion?.nom) && aeroport_depart && (
+      <div className="w-full mb-3">
+        <Link
+          href={`/perf-ptfs?avion=${encodeURIComponent(avionType?.nom || selectedInventaire?.types_avion?.nom || '')}&dep=${encodeURIComponent(aeroport_depart)}&arr=${encodeURIComponent(aeroport_arrivee)}`}
+          className="inline-flex items-center gap-2 rounded-xl border border-amber-700 bg-slate-900 px-4 py-2.5 text-sm font-semibold text-amber-200 hover:bg-slate-800"
+        >
+          <Gauge className="h-4 w-4" />
+          Calculer les perfs
+        </Link>
+      </div>
+    )}
+
     {/* ===== Bouton BRIA — appel téléphone, look cockpit ===== */}
     <div className="w-full mb-5">
       <button
         type="button"
-        onClick={() => {
+        onClick={async () => {
           unlockAudioForIOS();
           const remaining = getBriaCooldownRemaining();
           if (remaining > 0) {
@@ -810,6 +822,15 @@ export default function DepotPlanVolForm({
             toast.error(`Vous ne pouvez pas appeler le BRIA avant ${mins} minute${mins > 1 ? 's' : ''}.`);
             return;
           }
+          try {
+            const res = await fetch('/api/bria-session');
+            const d = await res.json().catch(() => ({}));
+            if (Number(d.remainingMs) > 0) {
+              const mins = Math.ceil(Number(d.remainingMs) / 60000);
+              toast.error(`Vous ne pouvez pas appeler le BRIA avant ${mins} minute${mins > 1 ? 's' : ''}.`);
+              return;
+            }
+          } catch { /* le POST vérifiera aussi */ }
           setShowBria(true);
         }}
         className="group relative w-full overflow-hidden rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-950/60 via-amber-900/40 to-amber-950/60 px-5 py-4 text-amber-50 font-semibold text-lg transition-all duration-300 hover:border-amber-400/70 hover:shadow-[0_10px_38px_rgba(251,191,36,0.25)] active:scale-[0.99]"

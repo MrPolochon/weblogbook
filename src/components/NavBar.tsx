@@ -293,11 +293,6 @@ export default function NavBar({
               <span className="hidden lg:inline">Annuaire</span>
             </NavLink>
 
-            <NavLink href="/aeroschool" active={pathname.startsWith('/aeroschool')}>
-              <GraduationCap className="h-3.5 w-3.5 shrink-0" />
-              <span className="hidden lg:inline">AeroSchool</span>
-            </NavLink>
-
             {isAdmin && (
               <NavLink href="/admin" active={pathname.startsWith('/admin')} accent="purple">
                 <LayoutDashboard className="h-3.5 w-3.5 shrink-0" />

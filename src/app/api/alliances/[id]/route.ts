@@ -174,6 +174,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     });
   }
 
+  const { data: partenairesRep } = await admin
+    .from('entreprises_reparation')
+    .select('id, nom, prix_alliance_pourcent, alliance_reparation_actif')
+    .eq('alliance_id', id)
+    .eq('alliance_reparation_actif', true);
+
   return NextResponse.json({
     ...alliance,
     parametres: parametres || null,
@@ -185,6 +191,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     demandes_fonds: demandes_fonds || [],
     contributions,
     transactions_alliance: transactions_alliance || [],
+    partenaires_reparation: partenairesRep || [],
     my_role: myRole,
     my_compagnie_id: myMember?.compagnie_id ?? null,
     my_compagnie_ids: myCompagnieIds,

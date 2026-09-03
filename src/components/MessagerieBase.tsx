@@ -7,6 +7,7 @@ import {
   Megaphone, User, Reply,
 } from 'lucide-react';
 import ChequeVisuel from '@/components/ChequeVisuel';
+import ChequesAEncaisserBanner from '@/components/ChequesAEncaisserBanner';
 import MessageContent from '@/components/MessageContent';
 import UserAvatar from '@/components/UserAvatar';
 import BroadcastAudienceSelector, { BroadcastAudience, audienceLabel } from '@/components/BroadcastAudienceSelector';
@@ -134,6 +135,7 @@ export interface MessagerieBaseProps {
   colorTheme: ColorTheme;
   title: string;
   chequeTypes: string[];
+  chequesHref?: string;
   photoByIdentifiant?: Record<string, string | null>;
 }
 
@@ -185,6 +187,7 @@ export default function MessagerieBase({
   colorTheme,
   title,
   chequeTypes,
+  chequesHref = '/messagerie',
   photoByIdentifiant = {},
 }: MessagerieBaseProps) {
   const th = THEMES[colorTheme];
@@ -327,6 +330,7 @@ export default function MessagerieBase({
       patchLocal(id, { cheque_encaisse: true });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erreur encaissement');
+      throw e;
     }
   }
 
@@ -654,8 +658,11 @@ export default function MessagerieBase({
     );
   }
 
+  const chequesAEncaisser = cheques.filter(c => !c.cheque_encaisse).length;
+
   return (
     <div className="space-y-4">
+      <ChequesAEncaisserBanner count={chequesAEncaisser} href={chequesHref} />
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <div className={`p-2.5 rounded-xl border ${th.iconBg}`}>

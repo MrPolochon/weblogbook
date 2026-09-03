@@ -82,6 +82,9 @@ function calculateTakeoffPerformanceData(
     aircraftData.speedData,
     climboutSpeed + flapReduction
   );
+  if (minimumThrust < 1) {
+    return null;
+  }
   let V_1 = -1;
   let canAccStop = false;
   let canLiftoff = false;
@@ -141,5 +144,6 @@ export function calculateTakeoffPerformance(
     tora,
     flapReduction
   );
+  if (!performance) return undefined;
   return { ...performance, asda, tora };
 }

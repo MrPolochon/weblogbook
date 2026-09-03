@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 import PerfPtfsClient from './PerfPtfsClient';
 
 export const metadata: Metadata = {
@@ -7,5 +8,9 @@ export const metadata: Metadata = {
 };
 
 export default function PerfPtfsPage() {
-  return <PerfPtfsClient />;
+  return (
+    <Suspense fallback={<div className="py-12 text-center text-slate-400">Chargement du calculateur…</div>}>
+      <PerfPtfsClient />
+    </Suspense>
+  );
 }

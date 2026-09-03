@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import EquipeTab from './EquipeTab';
 import ModalAvion from './ModalAvion';
+import GatesView from './GatesView';
 import type { ServiceType } from '@/lib/types';
 import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
 
@@ -78,6 +79,9 @@ interface Props {
   demandesInitiales: ServiceRequest[];
   gatesInitiales: Gate[];
   profile: Profile | null;
+  gcOnlineCount?: number;
+  sessionGains?: number;
+  sessionCompletedCount?: number;
 }
 
 const TABS = ['avions', 'demandes', 'equipe', 'portes'] as const;
@@ -102,6 +106,9 @@ const TAB_ICONS: Record<Tab, React.ReactNode> = {
 export default function GroundDashboard({
   userId, sessionId, aeroport,
   plansInitiaux, demandesInitiales, gatesInitiales, profile,
+  gcOnlineCount = 1,
+  sessionGains = 0,
+  sessionCompletedCount = 0,
 }: Props) {
   const [plans, setPlans] = useState<PlanVol[]>(plansInitiaux);
   const [demandes, setDemandes] = useState<ServiceRequest[]>(demandesInitiales);
@@ -109,6 +116,8 @@ export default function GroundDashboard({
   const [activeTab, setActiveTab] = useState<Tab>('avions');
   const [myTeamId, setMyTeamId] = useState<string | null>(null);
   const [gameToast, setGameToast] = useState<{ score: number; montant: number } | null>(null);
+  const [liveGains, setLiveGains] = useState(sessionGains);
+  const [liveCompleted, setLiveCompleted] = useState(sessionCompletedCount);
 
   const plansRef = useRef<PlanVol[]>(plansInitiaux);
   useEffect(() => { plansRef.current = plans; }, [plans]);
@@ -171,6 +180,30 @@ export default function GroundDashboard({
     return () => { supabase.removeChannel(channel); };
   }, [sessionId, aeroport, fetchPlanIfMissing]);
 
+  useEffect(() => {
+    const supabase = createClient();
+    const channel = supabase
+      .channel('ground_plans_' + sessionId)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'plans_vol',
+      }, (payload) => {
+        const row = (payload.new || payload.old) as { aeroport_depart?: string; aeroport_arrivee?: string } | null;
+        const dep = String(row?.aeroport_depart || '').toUpperCase();
+        const arr = String(row?.aeroport_arrivee || '').toUpperCase();
+        if (dep !== aeroport && arr !== aeroport) return;
+        fetch(`/api/ground/avions?aeroport=${encodeURIComponent(aeroport)}`)
+          .then((r) => r.json())
+          .then(({ plans: fetched }: { plans: PlanVol[] }) => {
+            if (Array.isArray(fetched)) setPlans(fetched);
+          })
+          .catch(() => {});
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [sessionId, aeroport]);
+
   const activePlanIds = new Set(plans.map(p => p.id));
   const pendingCount = demandes.filter(d => d.statut === 'pending' && activePlanIds.has(d.plan_vol_id)).length;
 
@@ -184,6 +217,8 @@ export default function GroundDashboard({
       : bases[serviceType];
     const montant = Math.round(base * (0.5 + Math.max(0, Math.min(1, score)) * 0.5));
     setGameToast({ score, montant });
+    setLiveGains((n) => n + montant);
+    setLiveCompleted((n) => n + 1);
     setTimeout(() => setGameToast(null), 6000);
   }, []);
 
@@ -198,6 +233,9 @@ export default function GroundDashboard({
           <div>
             <h1 className="text-xl font-bold text-slate-100">Ground Crew — {aeroport}</h1>
             <p className="text-slate-400 text-sm">{plans.length} vol(s) actif(s)</p>
+            <p className="text-emerald-300 text-xs font-semibold mt-0.5">
+              {gcOnlineCount} GC en ligne à {aeroport}
+            </p>
           </div>
         </div>
         {pendingCount > 0 && (
@@ -208,8 +246,17 @@ export default function GroundDashboard({
         )}
       </div>
 
+      {(liveCompleted > 0 || liveGains > 0) && (
+        <div className="rounded-xl border border-amber-800 bg-slate-900 px-4 py-3 text-sm text-slate-200">
+          Session : <span className="font-bold text-amber-300">{liveCompleted}</span> service(s) payé(s)
+          {' · '}
+          Gains estimés : <span className="font-bold text-emerald-300">{liveGains.toLocaleString('fr-FR')} F$</span>
+          <span className="text-slate-400"> (chèques à encaisser en messagerie)</span>
+        </div>
+      )}
+
       {/* Onglets */}
-      <div className="flex gap-1 rounded-xl border border-slate-700/40 bg-slate-800/30 p-1">
+      <div className="flex gap-1 rounded-xl border border-slate-700 bg-slate-900 p-1">
         {TABS.map(tab => (
           <button
             key={tab}
@@ -257,7 +304,7 @@ export default function GroundDashboard({
         />
       )}
       {activeTab === 'portes' && (
-        <PortesTab gates={gatesInitiales} plans={plans} aeroport={aeroport} />
+        <GatesView gates={gatesInitiales} aeroport={aeroport} />
       )}
 
       {/* Modal Avion */}
@@ -485,102 +532,3 @@ function DemandesTab({
   );
 }
 
-// ── Onglet Portes ─────────────────────────────────────────────────────────────
-
-function PortesTab({
-  gates, plans, aeroport,
-}: {
-  gates: Gate[];
-  plans: PlanVol[];
-  aeroport: string;
-}) {
-  if (gates.length === 0) {
-    return (
-      <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-12 text-center">
-        <LayoutGrid className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400">Aucune porte configurée pour cet aéroport</p>
-      </div>
-    );
-  }
-
-  const activePlans = plans.filter(
-    p => p.aeroport_depart === aeroport || p.aeroport_arrivee === aeroport
-  );
-
-  const normalizeGate = (s: string) =>
-    s.trim().toLowerCase().replace(/\s+/g, ' ');
-
-  const matchesGate = (planPorte: string | null | undefined, gateCode: string) => {
-    if (!planPorte || !gateCode) return false;
-    const pNorm = normalizeGate(planPorte);
-    const gNorm = normalizeGate(gateCode);
-    return pNorm === gNorm || pNorm === gNorm.replace(/^(gate|parking)\s+/i, '');
-  };
-
-  const hasPorteData = activePlans.some(p => p.porte != null && p.porte.trim() !== '');
-
-  const libreCount = gates.filter(
-    g => !activePlans.find(p => matchesGate(p.porte, g.gate_code))
-  ).length;
-  const terminals = Array.from(new Set(gates.map(g => g.terminal ?? 'Hors terminal')));
-
-  return (
-    <div className="space-y-4">
-      <p className="text-sm text-slate-400">
-        {gates.length} porte(s) — {libreCount} disponible(s)
-      </p>
-      {activePlans.length > 0 && !hasPorteData && (
-        <div className="rounded-xl border border-amber-800/40 bg-amber-950/20 px-4 py-3 text-amber-300 text-sm flex items-center gap-2">
-          <span>⚠</span>
-          <span>Données de porte non disponibles — migration SQL requise.</span>
-        </div>
-      )}
-      {terminals.map(terminal => {
-        const terminalGates = gates.filter(g => (g.terminal ?? 'Hors terminal') === terminal);
-        return (
-          <div key={terminal} className="rounded-xl border border-slate-700/40 bg-slate-800/20 overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-800/40 border-b border-slate-700/40">
-              <h3 className="text-sm font-semibold text-slate-200">{terminal}</h3>
-            </div>
-            <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {terminalGates.map(gate => {
-                const occupant = activePlans.find(p => matchesGate(p.porte, gate.gate_code));
-                const isOccupied = !!occupant;
-                return (
-                  <div
-                    key={gate.id}
-                    className={`rounded-xl border p-3 ${
-                      isOccupied
-                        ? 'border-amber-700/40 bg-amber-950/20'
-                        : 'border-slate-700/40 bg-slate-700/20'
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="font-bold text-slate-100 text-sm">{gate.gate_code}</span>
-                      <span className="text-[10px] px-1 py-0.5 rounded border border-slate-600/30 text-slate-400">
-                        {gate.gate_type}
-                      </span>
-                    </div>
-                    {isOccupied ? (
-                      <p className="text-[10px] text-amber-400 mt-1 font-medium">
-                        ↑ {occupant.callsign || occupant.immatriculation}
-                      </p>
-                    ) : (
-                      <p className="text-[10px] text-emerald-400 mt-1 font-medium">✓ Libre</p>
-                    )}
-                    {gate.requires_separation && (
-                      <p className="text-[10px] text-orange-400/80 mt-0.5">⚠ Séparation</p>
-                    )}
-                    {gate.reserved_for && (
-                      <p className="text-[10px] text-indigo-400 mt-0.5">★ {gate.reserved_for}</p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}

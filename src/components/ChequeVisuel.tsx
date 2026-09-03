@@ -51,6 +51,7 @@ export default function ChequeVisuel({
 }: ChequeProps) {
   const [loading, setLoading] = useState(false);
   const [isEncaisse, setIsEncaisse] = useState(encaisse);
+  const [erreurEncaissement, setErreurEncaissement] = useState<string | null>(null);
   
   // Synchroniser le state local avec la prop quand elle change (ex: après refresh)
   useEffect(() => {
@@ -64,11 +65,13 @@ export default function ChequeVisuel({
   async function handleEncaisser() {
     if (!onEncaisser || isEncaisse) return;
     setLoading(true);
+    setErreurEncaissement(null);
     try {
       await onEncaisser();
       setIsEncaisse(true);
     } catch (e) {
-      console.error(e);
+      const msg = e instanceof Error ? e.message : 'Impossible d’encaisser ce chèque.';
+      setErreurEncaissement(msg);
     } finally {
       setLoading(false);
     }
@@ -165,7 +168,7 @@ export default function ChequeVisuel({
               {id.slice(4, 8).toUpperCase()}
             </span>
             <span className="font-mono text-white text-sm tracking-wider">
-              {Date.now().toString().slice(-8)}
+              {id.replace(/-/g, '').slice(-8).toUpperCase()}
             </span>
             <span className="font-mono text-white text-sm tracking-wider">
               FELITZ
@@ -176,7 +179,12 @@ export default function ChequeVisuel({
 
       {/* Bouton encaisser */}
       {!isEncaisse && onEncaisser && (
-        <div className="mt-4 text-center">
+        <div className="mt-4 text-center space-y-2">
+          {erreurEncaissement && (
+            <p className="text-sm text-red-400 bg-red-950 border border-red-800 rounded-lg px-3 py-2">
+              {erreurEncaissement}
+            </p>
+          )}
           <button
             onClick={handleEncaisser}
             disabled={loading}

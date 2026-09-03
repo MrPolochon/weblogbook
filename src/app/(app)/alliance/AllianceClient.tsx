@@ -5,7 +5,7 @@ import {
   Users, Building2, Crown, Settings, Landmark, Loader2,
   Megaphone, Plane, Wallet, ShieldCheck, UserMinus, ArrowRightLeft,
   Send, HandCoins, Star, Check, X, ChevronDown, ChevronUp, MessageSquare,
-  ChevronRight, TrendingUp, Globe,
+  ChevronRight, TrendingUp, Globe, Wrench,
 } from 'lucide-react';
 
 interface Parametres {
@@ -116,6 +116,12 @@ interface AllianceDetail extends Alliance {
   transactions_alliance?: AllianceTransaction[];
   my_compagnie_ids?: string[];
   my_all_compagnie_ids?: string[];
+  partenaires_reparation?: Array<{
+    id: string;
+    nom: string;
+    prix_alliance_pourcent: number | null;
+    alliance_reparation_actif: boolean;
+  }>;
 }
 
 interface Props {
@@ -670,12 +676,37 @@ function DashboardTab({ detail }: { detail: AllianceDetail }) {
 
       {/* Président highlight */}
       {president && (
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-900/15 border border-amber-700/25">
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-amber-900 border border-amber-700">
           <Crown className="h-5 w-5 text-amber-400 shrink-0" />
           <div>
             <p className="text-xs text-amber-400/80 uppercase tracking-wide font-medium">Président de l&apos;alliance</p>
             <p className="text-slate-200 font-semibold">{president.compagnie?.nom || 'Inconnu'}</p>
           </div>
+        </div>
+      )}
+
+      {(detail.partenaires_reparation?.length ?? 0) > 0 && (
+        <div className="rounded-xl border border-orange-800 bg-slate-900 p-4 space-y-3">
+          <h3 className="font-medium text-slate-200 flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-orange-400" />
+            Entreprises de réparation partenaires
+          </h3>
+          <p className="text-xs text-slate-400">
+            Les compagnies membres bénéficient du tarif alliance chez ces ateliers.
+          </p>
+          <ul className="space-y-2">
+            {detail.partenaires_reparation!.map((ent) => (
+              <li key={ent.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2">
+                <span className="text-sm font-medium text-slate-100">{ent.nom}</span>
+                <span className="text-xs text-sky-300 font-semibold">
+                  {ent.prix_alliance_pourcent ?? 80}% du tarif
+                </span>
+              </li>
+            ))}
+          </ul>
+          <a href="/reparation?demander=1" className="inline-flex text-sm font-semibold text-orange-300 hover:text-orange-200">
+            Demander une réparation →
+          </a>
         </div>
       )}
 

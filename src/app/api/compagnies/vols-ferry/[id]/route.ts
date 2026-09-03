@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { calculerUsureFerry } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { getCompteEntrepriseCanonique } from '@/lib/felitz/ensure-comptes';
 import { advanceReparationIfFerryArrivedAtHangar, completeReparationReturnFerry } from '@/lib/reparation-after-ferry';
 
 export async function PATCH(
@@ -88,8 +89,42 @@ export async function PATCH(
       if (vol.statut === 'completed') {
         return NextResponse.json({ error: 'Impossible d\'annuler un vol terminé.' }, { status: 400 });
       }
+      if (vol.statut === 'cancelled') {
+        return NextResponse.json({ error: 'Ce vol est déjà annulé.' }, { status: 400 });
+      }
 
-      // Remettre l'avion au sol
+      const montantRembourse = Math.max(0, Math.round(Number(vol.cout_ferry) || 0));
+      if (montantRembourse > 0) {
+        const compte = await getCompteEntrepriseCanonique(admin, vol.compagnie_id);
+        if (!compte) {
+          return NextResponse.json({ error: 'Compte entreprise introuvable, remboursement impossible.' }, { status: 500 });
+        }
+        const { data: creditOk } = await admin.rpc('crediter_compte_safe', {
+          p_compte_id: compte.id,
+          p_montant: montantRembourse,
+        });
+        if (!creditOk) {
+          return NextResponse.json({ error: 'Échec du remboursement Felitz.' }, { status: 500 });
+        }
+        await admin.from('felitz_transactions').insert({
+          compte_id: compte.id,
+          type: 'credit',
+          montant: montantRembourse,
+          libelle: `Remboursement vol ferry annulé ${vol.aeroport_depart} → ${vol.aeroport_arrivee}`,
+        });
+        if (compagnie?.pdg_id) {
+          await admin.from('messages').insert({
+            destinataire_id: compagnie.pdg_id,
+            expediteur_id: null,
+            titre: 'Remboursement vol ferry',
+            contenu:
+              `Le vol ferry ${vol.aeroport_depart} → ${vol.aeroport_arrivee} a été annulé.\n\n` +
+              `${montantRembourse.toLocaleString('fr-FR')} F$ (coût + taxes) ont été recrédités sur le compte de la compagnie.`,
+            type_message: 'systeme',
+          });
+        }
+      }
+
       await admin
         .from('compagnie_avions')
         .update({ statut: vol.debloque_pour_ferry ? 'bloque' : 'ground' })
@@ -101,7 +136,7 @@ export async function PATCH(
         .eq('id', id);
 
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, remboursement: montantRembourse });
     }
 
     return NextResponse.json({ error: 'Action invalide' }, { status: 400 });

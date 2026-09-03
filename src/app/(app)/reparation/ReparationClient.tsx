@@ -10,8 +10,9 @@ import {
   Loader2, Plus, Trash2, Check, X, Play, FileText, CreditCard,
   Truck, ParkingSquare, Search, Settings, Maximize2, ArrowRight,
   Star, AlertTriangle, TrendingDown, ChevronDown, BadgePercent,
-  Filter, Clock, Edit3, Info
+  Filter, Clock, Edit3, Info, Landmark
 } from 'lucide-react';
+import FelitzBankClient from '@/app/(app)/felitz-bank/FelitzBankClient';
 
 interface Entreprise {
   id: string;
@@ -83,7 +84,7 @@ interface Detail {
   prix_alliance_pourcent?: number;
 }
 
-type Tab = 'dashboard' | 'demandes' | 'hangars' | 'tarifs' | 'employes' | 'parametres';
+type Tab = 'dashboard' | 'demandes' | 'hangars' | 'tarifs' | 'employes' | 'compte' | 'parametres';
 
 const STATUT_LABELS: Record<string, { label: string; color: string }> = {
   demandee: { label: 'Demandée', color: 'text-amber-400' },
@@ -328,10 +329,13 @@ export default function ReparationClient({ userId }: { userId: string }) {
   const tabs: { key: Tab; label: string; icon: typeof Wrench }[] = [
     { key: 'dashboard', label: 'Dashboard', icon: Building2 },
     { key: 'demandes', label: 'Demandes', icon: ClipboardList },
-    { key: 'hangars', label: 'Hangars', icon: Warehouse },
-    { key: 'tarifs', label: 'Tarifs', icon: Tags },
-    { key: 'employes', label: 'Employés', icon: Users },
-    ...(isPdg ? [{ key: 'parametres' as Tab, label: 'Paramètres', icon: Settings }] : []),
+    ...(isPdg ? [
+      { key: 'hangars' as Tab, label: 'Hangars', icon: Warehouse },
+      { key: 'tarifs' as Tab, label: 'Tarifs', icon: Tags },
+      { key: 'employes' as Tab, label: 'Employés', icon: Users },
+      { key: 'compte' as Tab, label: 'Compte', icon: Landmark },
+      { key: 'parametres' as Tab, label: 'Paramètres', icon: Settings },
+    ] : []),
   ];
 
   const demandesEnCours = detail.demandes.filter(d => !['completee', 'refusee', 'annulee'].includes(d.statut)).length;
@@ -425,7 +429,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
       {success && <p className="text-emerald-400 text-sm animate-fade-in">{success}</p>}
 
       {/* === NAV TABS PILLS === */}
-      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
+      <nav className="sticky top-0 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950 border-y border-slate-800">
         <div className="flex gap-2 overflow-x-auto scrollbar-thin">
           {tabs.map(t => {
             const Icon = t.icon;
@@ -458,9 +462,10 @@ export default function ReparationClient({ userId }: { userId: string }) {
       <div key={tab} className="card animate-fade-in">
         {tab === 'dashboard' && <DashboardTab detail={detail} />}
         {tab === 'demandes' && <DemandesTab detail={detail} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} router={router} />}
-        {tab === 'hangars' && <HangarsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
-        {tab === 'tarifs' && <TarifsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
-        {tab === 'employes' && <EmployesTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
+        {tab === 'hangars' && isPdg && <HangarsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
+        {tab === 'tarifs' && isPdg && <TarifsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
+        {tab === 'employes' && isPdg && <EmployesTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
+        {tab === 'compte' && isPdg && <CompteTab detail={detail} />}
         {tab === 'parametres' && isPdg && <ParametresTab detail={detail} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
       </div>
     </div>
@@ -545,6 +550,58 @@ function DashboardTab({ detail }: { detail: Detail }) {
           <p className="text-slate-400 font-medium">Aucune demande en cours</p>
           <p className="text-slate-500 text-sm mt-1">Les nouvelles demandes apparaîtront ici.</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+function CompteTab({ detail }: { detail: Detail }) {
+  const [transactions, setTransactions] = useState<Array<{
+    id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string;
+  }>>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!detail.compte?.id) {
+      setLoading(false);
+      return;
+    }
+    fetch(`/api/felitz/transactions?compte_id=${encodeURIComponent(detail.compte.id)}`)
+      .then((r) => r.json())
+      .then((d) => setTransactions(Array.isArray(d) ? d.slice(0, 100) : []))
+      .catch(() => setTransactions([]))
+      .finally(() => setLoading(false));
+  }, [detail.compte?.id]);
+
+  if (!detail.compte) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-700 bg-slate-900 p-10 text-center">
+        <Landmark className="h-8 w-8 text-slate-600 mx-auto mb-3" />
+        <p className="text-slate-400 font-medium">Aucun compte Felitz pour cette entreprise</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-orange-800 bg-slate-900 p-5">
+        <p className="text-xs uppercase tracking-wider text-orange-300 font-medium mb-1">Compte entreprise</p>
+        <p className="text-3xl font-bold text-orange-200 tabular-nums">
+          {detail.compte.solde.toLocaleString('fr-FR')} <span className="text-lg text-orange-400">F$</span>
+        </p>
+        <p className="text-xs text-slate-400 font-mono mt-2 break-all">VBAN {detail.compte.vban}</p>
+      </div>
+      {loading ? (
+        <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-orange-400" /></div>
+      ) : (
+        <FelitzBankClient
+          compteId={detail.compte.id}
+          solde={detail.compte.solde}
+          vban={detail.compte.vban}
+          transactions={transactions}
+          isEntreprise
+          compagnieNom={detail.nom}
+        />
       )}
     </div>
   );

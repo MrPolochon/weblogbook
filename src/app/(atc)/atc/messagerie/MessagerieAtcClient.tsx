@@ -3,7 +3,7 @@
 import type { ComponentProps } from 'react';
 import MessagerieBase from '@/components/MessagerieBase';
 
-const ATC_CHEQUE_TYPES = ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc'];
+const ATC_CHEQUE_TYPES = ['cheque_salaire', 'cheque_revenu_compagnie', 'cheque_taxes_atc', 'cheque_salaire_atc'];
 
 type Props = Pick<ComponentProps<typeof MessagerieBase>,
   'messagesRecus' | 'messagesEnvoyes' | 'utilisateurs' | 'currentUserIdentifiant' | 'isAdmin'
@@ -16,6 +16,7 @@ export default function MessagerieAtcClient(props: Props) {
       colorTheme="emerald"
       title="Messagerie ATC"
       chequeTypes={ATC_CHEQUE_TYPES}
+      chequesHref="/atc/messagerie"
     />
   );
 }

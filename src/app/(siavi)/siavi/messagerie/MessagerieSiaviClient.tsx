@@ -16,6 +16,7 @@ export default function MessagerieSiaviClient(props: Props) {
       colorTheme="orange"
       title="Messagerie SIAVI"
       chequeTypes={SIAVI_CHEQUE_TYPES}
+      chequesHref="/siavi/messagerie"
     />
   );
 }

@@ -47,7 +47,6 @@ export async function GET() {
       `)
       .eq('current_holder_user_id', user.id)
       .or('automonitoring.eq.false,automonitoring.is.null')
-      .is('pending_transfer_aeroport', null)
       .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
       .order('created_at', { ascending: false });
 
@@ -112,7 +111,10 @@ export async function GET() {
         type_wake: getTypeWake(typeAvionCodeOaci),
         code_transpondeur: plan.code_transpondeur || null,
         mode_transpondeur: plan.mode_transpondeur || 'C',
-        squawk_attendu: null,
+        squawk_attendu: plan.squawk_attendu || null,
+        pending_transfer_aeroport: plan.pending_transfer_aeroport || null,
+        pending_transfer_position: plan.pending_transfer_position || null,
+        siavi_avion_id: plan.siavi_avion_id || null,
         sid_depart: plan.sid_depart || null,
         star_arrivee: plan.star_arrivee || null,
         route_ifr: plan.route_ifr || null,
@@ -160,7 +162,6 @@ async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAd
     .select('*')
     .eq('current_holder_user_id', userId)
     .or('automonitoring.eq.false,automonitoring.is.null')
-    .is('pending_transfer_aeroport', null)
     .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
     .order('created_at', { ascending: false });
 
@@ -209,7 +210,11 @@ async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAd
       created_at: plan.created_at || '', accepted_at: plan.accepted_at || null, immatriculation,
       type_avion_code_oaci: typeAvionCodeOaci, type_avion_nom: typeAvionNom, type_wake: getTypeWake(typeAvionCodeOaci),
       code_transpondeur: plan.code_transpondeur || null, mode_transpondeur: plan.mode_transpondeur || 'C',
-      squawk_attendu: null, sid_depart: plan.sid_depart || null, star_arrivee: plan.star_arrivee || null,
+      squawk_attendu: plan.squawk_attendu || null,
+      pending_transfer_aeroport: plan.pending_transfer_aeroport || null,
+      pending_transfer_position: plan.pending_transfer_position || null,
+      siavi_avion_id: plan.siavi_avion_id || null,
+      sid_depart: plan.sid_depart || null, star_arrivee: plan.star_arrivee || null,
       route_ifr: plan.route_ifr || null, strip_atd: plan.strip_atd || null, strip_rwy: plan.strip_rwy || null,
       strip_fl: plan.strip_fl || null, strip_fl_unit: plan.strip_fl_unit || null, strip_sid_atc: plan.strip_sid_atc || null,
       strip_note_1: plan.strip_note_1 || null, strip_note_2: plan.strip_note_2 || null, strip_note_3: plan.strip_note_3 || null,

@@ -57,16 +57,21 @@ const SERVER_TO_PERF: Record<string, string> = {
  * Si le type n'a pas de données de performance, retourne null.
  */
 export function getPerfTypeFromServerNom(serverNom: string): string | null {
-  if (!serverNom || !serverNom.trim()) return null;
+  return getPerfMappingInfo(serverNom).perfType;
+}
+
+/** Mapping serveur → type PTFS, avec indication si c’est un équivalent (pas le type exact). */
+export function getPerfMappingInfo(serverNom: string): { perfType: string | null; mapped: boolean } {
+  if (!serverNom || !serverNom.trim()) return { perfType: null, mapped: false };
   const normalized = serverNom.trim();
-  if (getAircraftData(normalized)) return normalized;
+  if (getAircraftData(normalized)) return { perfType: normalized, mapped: false };
   const key = normalized.toLowerCase();
-  if (SERVER_TO_PERF[key]) return SERVER_TO_PERF[key];
+  if (SERVER_TO_PERF[key]) return { perfType: SERVER_TO_PERF[key], mapped: SERVER_TO_PERF[key].toLowerCase() !== key };
   const base = key.replace(/\s*[-–]\s*\w+$/, '').replace(/\s*(neo|max|er|lr|xl)\s*$/i, '').trim();
-  if (SERVER_TO_PERF[base]) return SERVER_TO_PERF[base];
+  if (SERVER_TO_PERF[base]) return { perfType: SERVER_TO_PERF[base], mapped: true };
   const family = key.replace(/\s*[-–]\s*\d+.*$/, '').trim();
-  if (SERVER_TO_PERF[family]) return SERVER_TO_PERF[family];
-  return null;
+  if (SERVER_TO_PERF[family]) return { perfType: SERVER_TO_PERF[family], mapped: true };
+  return { perfType: null, mapped: false };
 }
 
 export function getSupportedPerfTypes(): readonly string[] {

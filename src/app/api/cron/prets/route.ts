@@ -197,3 +197,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }
 }
+
+export async function GET(request: NextRequest) {
+  return POST(request);
+}

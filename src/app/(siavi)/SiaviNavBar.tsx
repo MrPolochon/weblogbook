@@ -1,9 +1,9 @@
 'use client';
 
-import { useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Flame, Radio, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark, HeartPulse, ClipboardList } from 'lucide-react';
+import { Flame, Radio, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark, HeartPulse, ClipboardList, Menu, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -20,6 +20,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = async () => {
     const supabase = createClient();
@@ -76,7 +77,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
           )}
 
           {/* Navigation */}
-          <div className="flex items-center gap-1">
+          <div className="hidden lg:flex items-center gap-1">
             {links.map(({ href, label, icon: Icon }) => {
               const isActive = pathname === href || (href !== '/siavi' && pathname?.startsWith(href));
               return (
@@ -144,7 +145,31 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
               <LogOut className="h-4 w-4" />
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setMobileOpen((o) => !o)}
+            className="lg:hidden p-2 rounded-lg border border-red-300/25 text-white"
+            aria-label="Menu SIAVI"
+          >
+            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </button>
         </div>
+        {mobileOpen && (
+          <div className="lg:hidden pb-3 grid grid-cols-2 gap-1">
+            {links.concat(adminLinks).map(({ href, label, icon: Icon }) => (
+              <Link
+                key={href}
+                href={href}
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 rounded-lg border border-red-800 bg-red-950 px-3 py-2 text-sm font-semibold text-red-100"
+              >
+                <Icon className="h-4 w-4" />
+                {label}
+              </Link>
+            ))}
+          </div>
+        )}
       </div>
     </nav>
   );

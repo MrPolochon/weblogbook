@@ -10,6 +10,7 @@ import RefuserPlanForm from './RefuserPlanForm';
 import InstructionsForm from './InstructionsForm';
 import TransfererForm from './TransfererForm';
 import PrendrePlanButton from './PrendrePlanButton';
+import AnnulerTransfertButton from './AnnulerTransfertButton';
 import type { PlanVol } from '@/lib/types';
 
 // Type étendu pour les plans avec données additionnelles
@@ -463,7 +464,8 @@ export default async function AtcPlanPage({ params }: { params: Promise<{ id: st
           <p className="text-slate-700 text-sm">
             Transfert vers <span className="font-mono font-bold text-amber-700">{plan.pending_transfer_position}</span> ({plan.pending_transfer_aeroport})
           </p>
-          <p className="text-slate-500 text-xs mt-2">Si non accepté sous 1 minute, le plan sera renvoyé.</p>
+          <p className="text-slate-500 text-xs mt-2">Si non accepté sous 90 secondes, le transfert expire automatiquement.</p>
+          <AnnulerTransfertButton planId={plan.id} />
         </div>
       )}
 

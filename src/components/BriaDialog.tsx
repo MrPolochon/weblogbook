@@ -22,10 +22,12 @@ interface BriaInnerProps {
 function BriaInner({ onClose }: BriaInnerProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<BriaMessage[]>([]);
-  const [phase, setPhase] = useState<'ringing' | 'connected' | 'ended'>('ringing');
+  const [phase, setPhase] = useState<'ringing' | 'connected' | 'ended' | 'submitted'>('ringing');
+  const [submittedPlanId, setSubmittedPlanId] = useState<string | null>(null);
   const messagesRef = useRef<BriaMessage[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const closedRef = useRef(false);
+  const submittedRef = useRef(false);
   // Conserve une ref vers conv pour pouvoir raccrocher depuis les outils
   // (callback appelé après soumission réussie d'un plan de vol).
   const convRef = useRef<{ endSession: () => void } | null>(null);
@@ -35,17 +37,21 @@ function BriaInner({ onClose }: BriaInnerProps) {
       createBriaClientTools({
         getConversationLog: () => messagesRef.current,
         router,
-        onPlanSubmitted: () => {
-          // Raccroche puis redirige vers la page plans-vol (transpondeur).
+        onPlanSubmitted: (planId: string) => {
+          submittedRef.current = true;
+          setSubmittedPlanId(planId);
+          setPhase('submitted');
           try { convRef.current?.endSession(); } catch { /* noop */ }
-          router.push('/logbook/plans-vol');
-          router.refresh();
         },
       }),
     [router],
   );
 
   function handleEnd() {
+    if (submittedRef.current) {
+      setPhase('submitted');
+      return;
+    }
     if (closedRef.current) return;
     closedRef.current = true;
     playPhoneEnd();
@@ -88,8 +94,15 @@ function BriaInner({ onClose }: BriaInnerProps) {
       if (cancelled) return;
       try {
         const res = await fetch('/api/bria-session', { method: 'POST' });
-        if (!res.ok) throw new Error('Session BRIA impossible');
-        const { signedUrl } = await res.json();
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 429) {
+          const secs = Math.ceil(Number(body.remainingMs || 0) / 1000);
+          toast.error(body.error || `BRIA en cooldown (${secs}s).`);
+          handleEnd();
+          return;
+        }
+        if (!res.ok) throw new Error(body.error || 'Session BRIA impossible');
+        const { signedUrl } = body;
         if (cancelled) return;
         conv.startSession({ signedUrl });
       } catch (e) {
@@ -131,6 +144,11 @@ function BriaInner({ onClose }: BriaInnerProps) {
                     <>
                       <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                       CONNECTING...
+                    </>
+                  ) : phase === 'submitted' ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                      PLAN DÉPOSÉ
                     </>
                   ) : phase === 'ended' ? (
                     <>
@@ -179,6 +197,26 @@ function BriaInner({ onClose }: BriaInnerProps) {
             </div>
           </div>
         </div>
+
+        {phase === 'submitted' && (
+          <div className="px-5 py-6 bg-emerald-950 border-b border-emerald-700 text-center space-y-3">
+            <p className="text-sm font-bold text-emerald-200">Plan de vol déposé</p>
+            <p className="text-xs text-emerald-300/80">
+              Le briefing BRIA est terminé. Réglez ensuite le transpondeur sur la page des plans.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                router.push('/logbook/plans-vol');
+                router.refresh();
+              }}
+              className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500"
+            >
+              Ouvrir le plan {submittedPlanId ? '· transpondeur' : ''}
+            </button>
+          </div>
+        )}
 
         {phase === 'ringing' && (
           <div className="px-5 py-2.5 bg-amber-500/5 border-b border-amber-500/20">

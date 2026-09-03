@@ -9,6 +9,7 @@ import { ArrowRightLeft, Inbox, PlaneLanding, Radio } from 'lucide-react';
 type PlanTransfert = { id: string; numero_vol: string };
 type PlanAccepter = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
 type PlanCloture = { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string };
+type PlanOutbound = { id: string; numero_vol: string; pending_transfer_aeroport: string | null; pending_transfer_position: string | null };
 
 function playNotificationSound(type: 'transfer' | 'cloture' | 'nouveau' | 'rappel', intensity: number = 1) {
   try {
@@ -112,10 +113,12 @@ export default function AtcAcceptTransfertSidebar({
   plansTransfert,
   plansAccepter,
   plansCloture,
+  plansOutbound = [],
 }: {
   plansTransfert: PlanTransfert[];
   plansAccepter: PlanAccepter[];
   plansCloture: PlanCloture[];
+  plansOutbound?: PlanOutbound[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -245,6 +248,44 @@ export default function AtcAcceptTransfertSidebar({
     }
   }
 
+  async function handleConfirmerCloture(planId: string) {
+    setLoadingId(planId);
+    try {
+      const res = await fetch(`/api/plans-vol/${planId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'confirmer_cloture' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Clôture confirmée');
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
+  async function handleAnnulerTransfert(planId: string) {
+    setLoadingId(planId);
+    try {
+      const res = await fetch(`/api/plans-vol/${planId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'annuler_transfert' }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Erreur');
+      toast.success('Transfert annulé');
+      startTransition(() => router.refresh());
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erreur');
+    } finally {
+      setLoadingId(null);
+    }
+  }
+
   function handleActiverPlan(planId: string) {
     setActivatedPlanIds((prev) => {
       const next = new Set(prev);
@@ -264,10 +305,10 @@ export default function AtcAcceptTransfertSidebar({
   }
 
   const plansAccepterVisibles = plansAccepter.filter((p) => !activatedPlanIds.has(p.id));
-  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0 && plansCloture.length === 0) return null;
+  if (plansTransfert.length === 0 && plansAccepterVisibles.length === 0 && plansCloture.length === 0 && plansOutbound.length === 0) return null;
 
   const maxUrgency = getMaxUrgency();
-  const total = plansTransfert.length + plansAccepterVisibles.length + plansCloture.length;
+  const total = plansTransfert.length + plansAccepterVisibles.length + plansCloture.length + plansOutbound.length;
 
   const card = (urgent: boolean, tone: 'amber' | 'sky' | 'red') => {
     const tones = {
@@ -351,6 +392,35 @@ export default function AtcAcceptTransfertSidebar({
           </section>
         )}
 
+        {plansOutbound.length > 0 && (
+          <section>
+            <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-amber-400' : 'text-amber-700'}`}>
+              <ArrowRightLeft className="h-3 w-3" /> Sortants
+            </p>
+            <ul className="space-y-1.5">
+              {plansOutbound.map((p) => (
+                <li key={p.id} className={card(false, 'amber')}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-mono font-black text-sm truncate">{p.numero_vol}</span>
+                    <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
+                  </div>
+                  <p className="text-[10px] font-semibold opacity-70 mt-0.5">
+                    → {p.pending_transfer_position} {p.pending_transfer_aeroport}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleAnnulerTransfert(p.id)}
+                    disabled={loadingId !== null}
+                    className="mt-1.5 text-[10px] font-bold uppercase tracking-wide underline"
+                  >
+                    {loadingId === p.id ? '…' : 'Annuler'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
         {plansCloture.length > 0 && (
           <section>
             <p className={`text-[10px] font-black uppercase tracking-wider mb-1.5 flex items-center gap-1.5 ${isDark ? 'text-red-400' : 'text-red-700'}`}>
@@ -364,6 +434,14 @@ export default function AtcAcceptTransfertSidebar({
                     <span className="text-[9px] font-bold tabular-nums opacity-70">{formatElapsed(p.id)}</span>
                   </div>
                   <p className="text-[10px] font-semibold opacity-70 mt-0.5">{p.aeroport_depart} → {p.aeroport_arrivee}</p>
+                  <button
+                    type="button"
+                    onClick={() => handleConfirmerCloture(p.id)}
+                    disabled={loadingId !== null}
+                    className="mt-1.5 w-full rounded bg-red-600 px-2 py-1 text-[10px] font-black uppercase tracking-wide text-white hover:bg-red-500 disabled:opacity-50"
+                  >
+                    {loadingId === p.id ? '…' : 'Confirmer'}
+                  </button>
                 </li>
               ))}
             </ul>

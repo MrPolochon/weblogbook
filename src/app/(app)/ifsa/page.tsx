@@ -104,6 +104,12 @@ export default async function IfsaPage() {
   });
   const compagniesAvecPilotes = Array.from(compagniesMap.values());
 
+  const monthStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1)).toISOString();
+  const { count: fileDuMois } = await admin
+    .from('ifsa_signalements')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', monthStart);
+
   const signalementsList = signalements || [];
   const enquetesList = enquetes || [];
   const sanctionsList = sanctions || [];
@@ -300,6 +306,18 @@ export default async function IfsaPage() {
             <Award className="h-8 w-8 text-amber-400 opacity-30 group-hover:opacity-60 group-hover:rotate-12 transition-all duration-300" />
           </div>
           <p className="text-[11px] text-slate-400/80 mt-1 truncate">Délivrer / révoquer</p>
+        </Link>
+      </div>
+
+      <div className="rounded-xl border border-indigo-800 bg-slate-900 px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-wider text-indigo-300 font-semibold">File du mois</p>
+          <p className="text-sm text-slate-200 mt-0.5">
+            {fileDuMois ?? 0} signalement{(fileDuMois ?? 0) > 1 ? 's' : ''} déposé{(fileDuMois ?? 0) > 1 ? 's' : ''} ce mois-ci
+          </p>
+        </div>
+        <Link href="/ifsa/licences" className="text-sm font-semibold text-amber-300 hover:text-amber-200">
+          Gérer les licences →
         </Link>
       </div>
 

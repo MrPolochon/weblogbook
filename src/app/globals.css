@@ -7,9 +7,9 @@
   --background: #070b14;
   --accent-gradient: linear-gradient(135deg, #22d3ee 0%, #3b82f6 42%, #6366f1 100%);
   --card-shine: linear-gradient(130deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0.03) 35%, transparent 65%);
-  --surface-0: rgba(11, 18, 32, 0.84);
-  --surface-1: rgba(15, 23, 42, 0.78);
-  --surface-2: rgba(30, 41, 59, 0.7);
+  --surface-0: #0b1220;
+  --surface-1: #0f172a;
+  --surface-2: #1e293b;
   --surface-border: rgba(148, 163, 184, 0.22);
 }
 
@@ -90,9 +90,9 @@ body.pilot-summer-mode {
   --foreground: #edf9ff;
   --background: #061827;
   --accent-gradient: linear-gradient(135deg, #22d3ee 0%, #38bdf8 38%, #fbbf24 100%);
-  --surface-0: rgba(8, 25, 43, 0.78);
-  --surface-1: rgba(15, 45, 65, 0.72);
-  --surface-2: rgba(30, 80, 100, 0.55);
+  --surface-0: #08192b;
+  --surface-1: #0f2d41;
+  --surface-2: #1e5064;
   --surface-border: rgba(125, 211, 252, 0.26);
   background:
     radial-gradient(900px 650px at 8% 0%, rgba(251, 191, 36, 0.20), transparent 58%),

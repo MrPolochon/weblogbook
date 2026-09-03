@@ -3,12 +3,13 @@
 import { useState, useEffect, useMemo, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { toast } from 'sonner';
 import {
   AlertTriangle, FileSearch, Gavel, Plus, X, Check, Loader2,
   Clock, User, Building2, Search, Eye, CheckCircle2, BookOpen, Landmark,
   ShieldCheck, XCircle, Ban, Plane, Wrench, MapPin, Hash, Calendar, Timer,
-  Filter, Inbox, Sparkles, ChevronDown
+  Filter, Inbox, Sparkles, ChevronDown, Award
 } from 'lucide-react';
 import { formatDateMediumUTC, formatTimeUTC, toLocaleDateStringUTC, toLocaleStringUTC } from '@/lib/date-utils';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
@@ -852,6 +853,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       {/* Tabs */}
       <div className="flex gap-2 flex-wrap items-center">
         <div className="inline-flex flex-wrap gap-1 p-1 rounded-2xl bg-slate-900/60 border border-slate-700/60 backdrop-blur-sm shadow-inner">
+          <Link
+            href="/ifsa/licences"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium border border-amber-700 bg-slate-900 text-amber-200 hover:bg-slate-800"
+          >
+            <Award className="h-4 w-4" />
+            Licences
+          </Link>
           {tabs.map((t) => {
             const Icon = t.icon;
             const isActive = activeTab === t.id;

@@ -51,13 +51,42 @@ type GateWithStatus = AirportGate & {
   } | null;
 };
 
+type GateInput = {
+  id: string;
+  gate_code: string;
+  gate_type: string;
+  max_aircraft_size?: string | null;
+  terminal?: string | null;
+  reserved_for?: string | null;
+  requires_separation?: boolean;
+  notes?: string | null;
+  display_order?: number | null;
+  aeroport?: string;
+  created_at?: string;
+};
+
 interface Props {
-  gates: AirportGate[];
+  gates: GateInput[];
   aeroport: string;
 }
 
 export default function GatesView({ gates: initialGates, aeroport }: Props) {
-  const [gates, setGates] = useState<GateWithStatus[]>(initialGates.map((g) => ({ ...g, available: true, plan_vol: null, assignment: null })));
+  const [gates, setGates] = useState<GateWithStatus[]>(initialGates.map((g) => ({
+    id: g.id,
+    aeroport: g.aeroport ?? aeroport,
+    gate_code: g.gate_code,
+    gate_type: g.gate_type,
+    max_aircraft_size: g.max_aircraft_size ?? null,
+    terminal: g.terminal ?? null,
+    reserved_for: g.reserved_for ?? null,
+    requires_separation: g.requires_separation ?? false,
+    notes: g.notes ?? null,
+    display_order: g.display_order ?? null,
+    created_at: g.created_at ?? '',
+    available: true,
+    plan_vol: null,
+    assignment: null,
+  })) as GateWithStatus[]);
   const [loading, setLoading] = useState(false);
 
   const loadGates = useCallback(async () => {
@@ -112,7 +141,7 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
 
   if (gates.length === 0) {
     return (
-      <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-12 text-center">
+      <div className="rounded-xl border border-slate-700 bg-slate-900 p-12 text-center">
         <LayoutGrid className="h-10 w-10 text-slate-600 mx-auto mb-3" />
         <p className="text-slate-400">Aucune porte configurée pour cet aéroport</p>
       </div>
@@ -137,8 +166,8 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
       {terminals.map((terminal) => {
         const terminalGates = gates.filter((g) => (g.terminal ?? 'Hors terminal') === terminal);
         return (
-          <div key={terminal} className="rounded-xl border border-slate-700/40 bg-slate-800/20 overflow-hidden">
-            <div className="px-4 py-2.5 bg-slate-800/40 border-b border-slate-700/40">
+          <div key={terminal} className="rounded-xl border border-slate-700 bg-slate-900 overflow-hidden">
+            <div className="px-4 py-2.5 bg-slate-800 border-b border-slate-700">
               <h3 className="text-sm font-semibold text-slate-200">{terminal}</h3>
             </div>
             <div className="p-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
@@ -147,8 +176,8 @@ export default function GatesView({ gates: initialGates, aeroport }: Props) {
                   key={gate.id}
                   className={`rounded-xl border p-3 transition-all ${
                     gate.available
-                      ? 'border-slate-700/40 bg-slate-700/20 hover:border-emerald-700/50'
-                      : 'border-slate-600/30 bg-slate-800/40 opacity-60'
+                      ? 'border-slate-700 bg-slate-800 hover:border-emerald-700'
+                      : 'border-slate-600 bg-slate-800 opacity-70'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-1">

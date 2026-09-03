@@ -94,6 +94,7 @@ const sections: Section[] = [
       { href: '/admin/storage-overview', label: 'Espace disque', desc: 'Vue d\'ensemble du stockage', icon: HardDrive },
       { href: '/admin/logs', label: 'Journal d\'activité', desc: 'Toutes les actions du site', icon: ScrollText },
       { href: '/admin/atis-bots', label: 'Bots ATIS', desc: 'Diagnostic & déploiement multi-bot', icon: Radio },
+      { href: '/admin/radar-beta', label: 'Radar beta', desc: 'Prototype radar ATC', icon: Activity },
       { href: '/admin/support-bot', label: 'Bot assistance Discord', desc: 'Tickets IA, panel et sections', icon: Bot },
     ],
   },

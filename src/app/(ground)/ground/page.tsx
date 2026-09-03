@@ -76,6 +76,19 @@ export default async function GroundPage() {
     .eq('id', user.id)
     .single();
 
+  const [{ count: gcOnlineCount }, contribRes] = await Promise.all([
+    admin.from('ground_sessions').select('id', { count: 'exact', head: true }).ilike('aeroport', aeroport),
+    admin
+      .from('ground_crew_service_contributions')
+      .select('montant_percu, completed_at')
+      .eq('user_id', user.id)
+      .gt('montant_percu', 0)
+      .gte('completed_at', session.started_at),
+  ]);
+
+  const sessionGains = (contribRes.data ?? []).reduce((s, c) => s + Math.round(Number(c.montant_percu) || 0), 0);
+  const sessionCompletedCount = contribRes.data?.length ?? 0;
+
   return (
     <GroundDashboard
       userId={user.id}
@@ -86,6 +99,9 @@ export default async function GroundPage() {
       demandesInitiales={demandes}
       gatesInitiales={(gates ?? []) as Gate[]}
       profile={profile as Profile | null}
+      gcOnlineCount={gcOnlineCount ?? 1}
+      sessionGains={sessionGains}
+      sessionCompletedCount={sessionCompletedCount}
     />
   );
 }

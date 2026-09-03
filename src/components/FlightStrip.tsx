@@ -7,6 +7,7 @@ import {
   AlertTriangle, Flame, PlaneLanding, ArrowRightLeft, MoreHorizontal,
 } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { toast } from 'sonner';
 import { formatCtot, getSquawkColor, getSquawkLabel, statutLabel } from '@/lib/atc-ui';
 
 export type StripData = {
@@ -53,6 +54,9 @@ export type StripData = {
   callsign_telephonie?: string | null;
   bria_conversation?: { role: string; text: string }[] | null;
   current_holder_user_id?: string | null;
+  pending_transfer_aeroport?: string | null;
+  pending_transfer_position?: string | null;
+  siavi_avion_id?: string | null;
 };
 
 type EditableField =
@@ -309,7 +313,7 @@ function StripActionBar({
       onRefresh?.();
     } catch (e) {
       playErrorBeep();
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(null);
       busyRef.current = false;
@@ -339,7 +343,7 @@ function StripActionBar({
         if (optimistic) onOptimisticStatut?.(strip.statut);
         if (res.status === 400 || res.status === 409) onRefresh?.();
         playErrorBeep();
-        alert(d.error || 'Erreur');
+        toast.error(d.error || 'Erreur');
         return;
       }
       if (incidentPhoto && d.incident_id) {
@@ -352,7 +356,7 @@ function StripActionBar({
       }
       onRefresh?.();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      toast.error(e instanceof Error ? e.message : 'Erreur');
     } finally {
       setLoading(null);
       busyRef.current = false;
@@ -364,7 +368,7 @@ function StripActionBar({
       <div className={`px-2 py-2 border-t space-y-1 ${isDark ? 'bg-red-950 border-red-800' : 'bg-red-50 border-red-200'}`} onClick={(e) => e.stopPropagation()}>
         <textarea autoFocus value={refuseReason} onChange={(e) => setRefuseReason(e.target.value)} placeholder="Raison du refus…" className={`w-full text-sm border rounded px-2 py-1 min-h-[36px] resize-none font-semibold ${isDark ? 'bg-slate-900 text-slate-100 border-red-700 placeholder:text-slate-500' : 'bg-white text-slate-800 border-red-300'}`} />
         <div className="flex gap-1.5">
-          <button type="button" onClick={async () => { if (!refuseReason.trim()) { alert('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
+          <button type="button" onClick={async () => { if (!refuseReason.trim()) { toast.error('Raison obligatoire'); return; } await callAction('refuser', { refusal_reason: refuseReason.trim() }); setShowRefuse(false); setRefuseReason(''); }} disabled={loading === 'refuser'} className="px-2 py-1 text-xs font-bold bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50">{loading === 'refuser' ? '…' : 'Confirmer refus'}</button>
           <button type="button" onClick={() => { setShowRefuse(false); setRefuseReason(''); }} className={`px-2 py-1 text-xs font-semibold ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>Annuler</button>
         </div>
       </div>
@@ -648,6 +652,16 @@ function FlightStripImpl({
       {(squawkMismatch || noSquawk) && !sqLabel && !isDupe && (
         <div className={`text-center text-[10px] font-bold py-0.5 ${isDark ? 'bg-amber-500 text-black' : 'bg-amber-400 text-black'}`}>
           {noSquawk ? 'PAS DE TRANSPONDEUR' : `SQUAWK INCORRECT (attendu : ${strip.squawk_attendu})`}
+        </div>
+      )}
+      {strip.pending_transfer_aeroport && (
+        <div className="text-center text-[10px] font-black tracking-widest py-0.5 bg-amber-600 text-black">
+          OUTBOUND → {strip.pending_transfer_position || 'ATC'} {strip.pending_transfer_aeroport}
+        </div>
+      )}
+      {(strip.siavi_avion_id || /medevac/i.test(strip.type_vol || '')) && (
+        <div className="text-center text-[10px] font-black tracking-[0.28em] py-0.5 bg-red-700 text-white">
+          MEDEVAC
         </div>
       )}
 

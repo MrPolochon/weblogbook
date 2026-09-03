@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { Mail, Send, Inbox, CreditCard, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
+import { purgeOldSystemMessages } from '@/lib/messages/purge-system';
 import MessagerieAtcClient from './MessagerieAtcClient';
 
 export default async function MessagerieAtcPage() {
@@ -16,15 +17,7 @@ export default async function MessagerieAtcPage() {
 
   const admin = createAdminClient();
 
-  // Nettoyage auto : supprimer les messages système de plus d'1 mois (protège les chèques non encaissés)
-  const unMoisAgo = new Date();
-  unMoisAgo.setMonth(unMoisAgo.getMonth() - 1);
-  admin.from('messages')
-    .delete()
-    .neq('type_message', 'normal')
-    .lt('created_at', unMoisAgo.toISOString())
-    .or('cheque_encaisse.is.null,cheque_encaisse.eq.true')
-    .then(() => {});
+  purgeOldSystemMessages(admin);
 
   // Récupérer les messages reçus
   const { data: messagesRecus } = await admin.from('messages')

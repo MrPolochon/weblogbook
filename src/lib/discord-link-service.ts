@@ -191,7 +191,8 @@ export async function refreshDiscordLinkState(userId: string, opts?: { force?: b
       (result.error ?? '').toLowerCase().includes('connexion') ||
       (result.error ?? '').toLowerCase().includes('connect');
     if (botUnconfigured || botUnreachable) {
-      return oauthOnlyActive();
+      // Fail-closed : on conserve le dernier état connu, sans accorder l’accès.
+      return link;
     }
     return link;
   }

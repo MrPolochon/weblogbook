@@ -59,6 +59,7 @@ export default async function AtcLayout({
   let plansAAccepter: { id: string; numero_vol: string }[] = [];
   let plansAccepter: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansCloture: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
+  let plansOutbound: { id: string; numero_vol: string; pending_transfer_aeroport: string | null; pending_transfer_position: string | null }[] = [];
   if (enService && session) {
     try {
       const admin = createAdminClient();
@@ -66,14 +67,16 @@ export default async function AtcLayout({
       // Note: les plans en autosurveillance et orphelins sont désormais affichés
       // sous le tableau de strips dans la page ATC (composant AtcNonControlesPanel),
       // donc pas besoin de les charger ici.
-      const [{ data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }] = await Promise.all([
+      const [{ data: dataAccept }, { data: dataPlansAccepter }, { data: dataCloture }, { data: dataOutbound }] = await Promise.all([
         admin.from('plans_vol').select('id, numero_vol').eq('pending_transfer_aeroport', session.aeroport).eq('pending_transfer_position', session.position),
         admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).in('statut', ['depose', 'en_attente']),
         admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee').eq('current_holder_user_id', user.id).eq('statut', 'en_attente_cloture'),
+        admin.from('plans_vol').select('id, numero_vol, pending_transfer_aeroport, pending_transfer_position').eq('current_holder_user_id', user.id).not('pending_transfer_aeroport', 'is', null),
       ]);
       plansAAccepter = dataAccept ?? [];
       plansAccepter = dataPlansAccepter ?? [];
       plansCloture = dataCloture ?? [];
+      plansOutbound = dataOutbound ?? [];
     } catch {
       // createAdminClient ou tables manquantes
     }
@@ -96,7 +99,7 @@ export default async function AtcLayout({
         <AtcAtisTicker />
         <div className="flex flex-1 w-full min-h-0">
           <AtcMain>{children}</AtcMain>
-          {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} />}
+          {enService && <AtcAcceptTransfertSidebar plansTransfert={plansAAccepter} plansAccepter={plansAccepter} plansCloture={plansCloture} plansOutbound={plansOutbound} />}
         </div>
         {enService && session && (
           <>

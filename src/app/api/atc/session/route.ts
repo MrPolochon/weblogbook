@@ -180,7 +180,7 @@ export async function DELETE(request: Request) {
         }
         contenu += `\nTotal : ${chequeMontant.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`;
 
-        await admin.from('messages').insert({
+        const { error: chequeErr } = await admin.from('messages').insert({
           destinataire_id: user.id,
           expediteur_id: null,
           titre: `Salaire ATC - ${session.aeroport} ${session.position}`,
@@ -192,11 +192,17 @@ export async function DELETE(request: Request) {
           cheque_libelle: `Salaire ATC - ${session.aeroport} ${session.position} (${durationMinutes} min)`,
           cheque_pour_compagnie: false
         });
-        chequeEnvoye = true;
+        if (chequeErr) {
+          console.error('ATC session DELETE: chèque non créé', chequeErr);
+        } else {
+          chequeEnvoye = true;
+        }
+      } else {
+        console.error('ATC session DELETE: compte Felitz introuvable, taxes pending conservées');
       }
     }
 
-    if (taxesPending && taxesPending.length > 0) {
+    if (taxesPending && taxesPending.length > 0 && (chequeEnvoye || chequeMontant === 0)) {
       await admin.from('atc_taxes_pending').delete().eq('session_id', session.id);
     }
 

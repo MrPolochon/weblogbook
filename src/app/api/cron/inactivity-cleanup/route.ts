@@ -115,3 +115,7 @@ export async function POST(request: NextRequest) {
     details: { deleted, skipped, errors },
   });
 }
+
+export async function GET(request: NextRequest) {
+  return POST(request);
+}

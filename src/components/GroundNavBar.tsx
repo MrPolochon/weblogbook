@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import {
   Wrench, LayoutDashboard, LogOut, MessageSquare,
-  Building2, MapPin, Clock, ChevronDown, Power, Loader2,
+  MapPin, Clock, ChevronDown, Power, Loader2,
 } from 'lucide-react';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
@@ -129,13 +129,6 @@ export default function GroundNavBar({
             )}
           </Link>
 
-          <div
-            className={cn(linkBase, 'cursor-not-allowed opacity-50')}
-            title="Bientôt disponible"
-          >
-            <Building2 className="h-4 w-4 flex-shrink-0" />
-            <span className="hidden sm:inline">Entreprise GC</span>
-          </div>
         </nav>
 
         {/* Info session (centre) */}

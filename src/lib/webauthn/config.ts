@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server';
 
 export const MONTHLY_EMAIL_VERIFICATION_DAYS = 30;
 
-const PRODUCTION_FALLBACK_ORIGIN = 'https://logbook.ptfs.fr';
+const PRODUCTION_FALLBACK_ORIGIN = 'https://mixouairlinesptfsweblogbook.com';
 
 /** Origine publique du site (HTTPS en production). */
 export function getWebAuthnOrigin(req?: NextRequest): string {

@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import { ArrowLeft, Mail } from 'lucide-react';
 import Link from 'next/link';
 import { getUserPhotosMap } from '@/lib/user-photos';
+import { purgeOldSystemMessages } from '@/lib/messages/purge-system';
 import MessagerieClient from './MessagerieClient';
 
 export default async function MessageriePage() {
@@ -13,15 +14,7 @@ export default async function MessageriePage() {
 
   const admin = createAdminClient();
 
-  // Nettoyage auto : supprimer les messages système de plus d'1 mois (protège les chèques non encaissés)
-  const unMoisAgo = new Date();
-  unMoisAgo.setMonth(unMoisAgo.getMonth() - 1);
-  admin.from('messages')
-    .delete()
-    .neq('type_message', 'normal')
-    .lt('created_at', unMoisAgo.toISOString())
-    .or('cheque_encaisse.is.null,cheque_encaisse.eq.true')
-    .then(() => {});
+  purgeOldSystemMessages(admin);
 
   const [recusResult, envoyesResult, utilisateursResult, profileResult] = await Promise.all([
     admin.from('messages')
