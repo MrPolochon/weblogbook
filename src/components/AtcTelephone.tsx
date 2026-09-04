@@ -8,6 +8,7 @@ import {
   Delete, Settings2, RefreshCw,
 } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import { ATC_NAV_BTN, atcNavIdle, atcNavOpen } from '@/lib/atc-ui';
 import { useLiveKitCall } from '@/hooks/useLiveKitCall';
 import { usePhoneAudioDevices } from '@/hooks/usePhoneAudioDevices';
 import { cn } from '@/lib/utils';
@@ -31,6 +32,8 @@ interface AtcTelephoneProps {
   aeroport: string;
   position: string;
 }
+
+const PANEL_W = 272;
 
 const KEYPAD: string[][] = [
   ['1', '2', '3'],
@@ -78,6 +81,24 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
   const checkIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const callTimerRef = useRef<NodeJS.Timeout | null>(null);
   const shouldPlaySoundRef = useRef(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
+
+  // Le panneau se place sous son bouton plutôt que dans un coin de l'écran.
+  useEffect(() => {
+    if (!isOpen) return;
+    const place = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setAnchor({
+        left: Math.max(8, Math.min(r.left, window.innerWidth - PANEL_W - 8)),
+        top: r.bottom + 6,
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [isOpen]);
 
   const ownNumber = formatStationNumber(aeroport, position);
   const parsed = useMemo(() => parseDialedNumber(number, aeroport), [number, aeroport]);
@@ -625,58 +646,51 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     : 'border border-slate-200 bg-slate-100 text-slate-900 hover:bg-slate-200';
   const screenClass = isDark ? 'bg-slate-950/80 border-slate-800' : 'bg-slate-50 border-slate-200';
 
-  const navTone =
-    callState === 'incoming'
-      ? (isDark ? 'border-emerald-500/70 bg-emerald-950/80 text-emerald-100' : 'border-emerald-400 bg-emerald-50 text-emerald-900')
-      : callState === 'connected'
-        ? (isDark ? 'border-emerald-700/70 bg-emerald-950/70 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900')
-        : isOpen || callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing'
-          ? (isDark ? 'border-sky-700/50 bg-sky-950/80 text-sky-200' : 'border-sky-300 bg-sky-100 text-sky-900')
-          : (isDark ? 'border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white' : 'border-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900');
+  const busyCall = callState === 'ringing' || callState === 'connecting' || callState === 'atis_playing';
+  const activeCall = callState === 'incoming' || callState === 'connected';
+
+  // Au repos, le bouton est strictement identique aux autres liens de la barre.
+  const navTone = activeCall
+    ? (isDark ? 'border-emerald-700/60 bg-emerald-950/80 text-emerald-100' : 'border-emerald-300 bg-emerald-50 text-emerald-900')
+    : (isOpen || busyCall) ? atcNavOpen(isDark) : atcNavIdle(isDark);
 
   const statusHint =
-    callState === 'incoming' && incomingCall
-      ? `${incomingCall.from}`
-      : callState === 'connected'
-        ? formatDuration(callDuration)
-        : callState === 'atis_playing'
-          ? 'ATIS'
-          : callState === 'ringing' || callState === 'connecting'
-            ? '…'
-            : null;
+    callState === 'incoming' && incomingCall ? `appel de ${incomingCall.from}`
+      : callState === 'connected' ? `en ligne · ${formatDuration(callDuration)}`
+        : callState === 'atis_playing' ? 'lecture ATIS'
+          : busyCall ? 'appel en cours' : null;
 
   return (
     <>
       <AudioSink onRef={(el) => { audioContainerRef.current = el; }} />
       <button
+        ref={triggerRef}
         type="button"
         onClick={() => {
           unlockAudioForIOS();
           setIsOpen((open) => !open);
         }}
-        className={cn(
-          'relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border',
-          navTone,
-        )}
+        className={cn(ATC_NAV_BTN, 'relative', navTone)}
         aria-label="Téléphone ATC"
         aria-expanded={isOpen}
-        title={statusHint ? `Téléphone — ${statusHint}` : `Téléphone — ${aeroport} ${position}`}
+        title={`Téléphone ${aeroport} ${position}${statusHint ? ` — ${statusHint}` : ''}`}
       >
-        <span className="relative">
-          <Phone className={cn('h-4 w-4', callState === 'incoming' ? 'text-emerald-400' : undefined)} />
-          {callState === 'incoming' && (
-            <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-          )}
-        </span>
-        <span className="hidden sm:inline">Tél.</span>
-        {statusHint && (
-          <span className={cn('hidden md:inline font-mono text-[10px] uppercase tracking-wider', muted)}>
-            {statusHint}
+        <Phone className="h-4 w-4" />
+        <span className="hidden sm:inline">Téléphone</span>
+        {(activeCall || busyCall) && (
+          <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
+            {callState === 'incoming' && (
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+            )}
+            <span className={cn('relative inline-flex h-2.5 w-2.5 rounded-full', activeCall ? 'bg-emerald-400' : 'bg-sky-400')} />
           </span>
         )}
       </button>
-      {isOpen && (
-      <div className={cn('fixed right-3 top-[3.75rem] z-[60] w-[272px] rounded-2xl shadow-2xl overflow-hidden', shell)}>
+      {isOpen && anchor && (
+      <div
+        style={{ position: 'fixed', left: anchor.left, top: anchor.top, width: PANEL_W, zIndex: 70 }}
+        className={cn('overflow-hidden rounded-2xl shadow-2xl', shell)}
+      >
         <div className={cn('px-3 py-2.5 flex items-center justify-between border-b', isDark ? 'border-slate-800' : 'border-slate-200')}>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">

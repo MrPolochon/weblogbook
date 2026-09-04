@@ -97,6 +97,26 @@ export function formatCtot(iso: string): string {
   }
 }
 
+/**
+ * Géométrie commune à tous les boutons de la barre ATC (liens, ATIS, téléphone).
+ * Partagée pour que les composants montés dans la nav restent alignés avec les
+ * liens plutôt que de redéfinir chacun leur propre style.
+ */
+export const ATC_NAV_BTN =
+  'flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border';
+
+export function atcNavIdle(isDark: boolean): string {
+  return isDark
+    ? 'border-transparent bg-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white'
+    : 'border-transparent bg-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900';
+}
+
+export function atcNavOpen(isDark: boolean): string {
+  return isDark
+    ? 'border-sky-700/50 bg-sky-950/80 text-sky-200'
+    : 'border-sky-300 bg-sky-100 text-sky-900';
+}
+
 export function formatElapsedClock(startedAt: string, now: Date): string {
   const elapsedSec = Math.max(0, (now.getTime() - new Date(startedAt).getTime()) / 1000);
   const h = Math.floor(elapsedSec / 3600);

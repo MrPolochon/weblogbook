@@ -29,6 +29,9 @@ yarn-error.log*
 .env.development.local
 .env.test.local
 .env.production.local
+# Couvre aussi les variantes non listees ci-dessus (ex. .env.vercel.local
+# produit par `vercel env pull`), qui contiennent des cles de service.
+.env*.local
 
 # vercel
 .vercel

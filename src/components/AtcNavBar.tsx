@@ -14,7 +14,7 @@ import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
-import { formatElapsedClock } from '@/lib/atc-ui';
+import { ATC_NAV_BTN, atcNavIdle, atcNavOpen, formatElapsedClock } from '@/lib/atc-ui';
 
 function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport: string; position: string; startedAt: string; isDark: boolean }) {
   const [now, setNow] = useState(() => new Date());
@@ -114,13 +114,9 @@ export default function AtcNavBar({
 
   const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');
 
-  const linkBase = 'flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border';
-  const linkActive = isDark
-    ? 'atc-link-active border-sky-700/50 bg-sky-950/80 text-sky-200'
-    : 'atc-link-active border-sky-300 bg-sky-100 text-sky-900';
-  const linkInactive = isDark
-    ? 'border-transparent bg-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white'
-    : 'border-transparent bg-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900';
+  const linkBase = ATC_NAV_BTN;
+  const linkActive = cn('atc-link-active', atcNavOpen(isDark));
+  const linkInactive = atcNavIdle(isDark);
 
   const headerBg = isDark
     ? 'bg-[#05080e] border-slate-800'

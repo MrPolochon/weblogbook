@@ -37,6 +37,7 @@ import {
   type AtisKind,
   type TmaAirportDraft,
 } from '@/lib/atis-priority';
+import { ATC_NAV_BTN, atcNavIdle, atcNavOpen } from '@/lib/atc-ui';
 
 // Types alignes sur /api/atc/atis/overview
 interface ControllerInfo {
@@ -198,11 +199,32 @@ function applyPendingEdits(
 export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisButtonProps) {
   const { theme } = useAtcTheme();
   const isDark = theme === 'dark';
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number; width: number } | null>(null);
 
   // ---------------------------------------------------------------------------
   // Etat panneau
   // ---------------------------------------------------------------------------
   const [isOpen, setIsOpen] = useState(false);
+
+  // Le panneau se place sous son bouton plutôt que dans un coin de l'écran.
+  useEffect(() => {
+    if (!isOpen) return;
+    const place = () => {
+      const r = triggerRef.current?.getBoundingClientRect();
+      if (!r) return;
+      const width = Math.min(480, window.innerWidth - 16);
+      setAnchor({
+        left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+        top: r.bottom + 6,
+        width,
+      });
+    };
+    place();
+    window.addEventListener('resize', place);
+    return () => window.removeEventListener('resize', place);
+  }, [isOpen]);
+
   const [tab, setTab] = useState<Tab>('config');
   const [overview, setOverview] = useState<OverviewResponse | null>(null);
   const [overviewLoading, setOverviewLoading] = useState(false);
@@ -771,59 +793,43 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     ? 'border border-slate-800 bg-slate-950/60'
     : 'border border-slate-600/40 bg-slate-700/40';
 
+  const liveCount = instances.filter((i) => i.broadcasting).length;
+
+  // Au repos, le bouton est strictement identique aux autres liens de la barre.
   const navAtisTone = broadcasting
-    ? (isDark ? 'border-red-600/60 bg-red-950/70 text-red-100' : 'border-red-400 bg-red-50 text-red-900')
+    ? (isDark ? 'border-red-700/60 bg-red-950/80 text-red-100' : 'border-red-300 bg-red-50 text-red-900')
     : anyBroadcasting
-      ? (isDark ? 'border-amber-600/50 bg-amber-950/60 text-amber-100' : 'border-amber-400 bg-amber-50 text-amber-900')
-      : isOpen
-        ? (isDark ? 'border-sky-700/50 bg-sky-950/80 text-sky-200' : 'border-sky-300 bg-sky-100 text-sky-900')
-        : (isDark ? 'border-transparent text-slate-300 hover:border-slate-700 hover:bg-slate-800/80 hover:text-white' : 'border-transparent text-slate-700 hover:border-slate-300 hover:bg-white/80 hover:text-slate-900');
+      ? (isDark ? 'border-amber-700/60 bg-amber-950/80 text-amber-100' : 'border-amber-300 bg-amber-50 text-amber-900')
+      : isOpen ? atcNavOpen(isDark) : atcNavIdle(isDark);
 
   const atisTrigger = (
     <button
+      ref={triggerRef}
       type="button"
       onClick={() => setIsOpen((open) => !open)}
-      className={`relative flex items-center gap-1.5 rounded-lg px-3 py-2 text-[13px] font-semibold tracking-wide transition-all whitespace-nowrap flex-shrink-0 border ${navAtisTone}`}
+      className={`${ATC_NAV_BTN} relative ${navAtisTone}`}
       title={
         broadcasting
-          ? 'ATIS en cours — Cliquer pour gérer'
+          ? `ATIS en direct depuis ${isFromDiscord ? 'Discord' : 'la console'} — cliquer pour gérer`
           : anyBroadcasting
-            ? `ATIS actif (${instances.filter((i) => i.broadcasting).length}/${instances.length}) — Cliquer pour voir`
+            ? `ATIS actif ailleurs (${liveCount}/${instances.length}) — cliquer pour voir`
             : 'Panneau ATIS'
       }
       aria-expanded={isOpen}
       aria-label="Panneau ATIS"
     >
-      <span className="relative">
-        <Radio
-          className={`h-4 w-4 ${
-            broadcasting
-              ? 'text-red-400'
-              : anyBroadcasting
-                ? (isDark ? 'text-amber-300' : 'text-amber-600')
-                : (isDark ? 'text-amber-300' : 'text-amber-600')
-          }`}
-        />
-        {anyBroadcasting && (
-          <span className="absolute -top-1 -right-1 h-2 w-2 rounded-full bg-red-500 animate-ping" />
-        )}
-      </span>
+      <Radio className="h-4 w-4" />
       <span className="hidden sm:inline">ATIS</span>
       {anyBroadcasting && (
-        <span className="hidden md:inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider">
-          {broadcasting ? 'Live' : `${instances.filter((i) => i.broadcasting).length}`}
-          {broadcasting &&
-            (isFromDiscord ? (
-              <MessageCircle className="h-3 w-3 opacity-70" />
-            ) : (
-              <Monitor className="h-3 w-3 opacity-70" />
-            ))}
+        <span className="absolute -right-1 -top-1 flex h-2.5 w-2.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+          <span className={`relative inline-flex h-2.5 w-2.5 rounded-full ${broadcasting ? 'bg-red-500' : 'bg-amber-400'}`} />
         </span>
       )}
     </button>
   );
 
-  if (!isOpen) return atisTrigger;
+  if (!isOpen || !anchor) return atisTrigger;
 
   // ---------------------------------------------------------------------------
   // Panneau ouvert
@@ -847,8 +853,11 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     <>
     {atisTrigger}
     <div
-      className={`fixed left-3 top-[3.75rem] z-[60] ${bgMain} rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[min(88vh,calc(100dvh-4.5rem))]`}
-      style={{ width: 'min(480px, 95vw)' }}
+      className={`fixed ${bgMain} flex flex-col overflow-hidden rounded-2xl shadow-2xl`}
+      style={{
+        left: anchor.left, top: anchor.top, width: anchor.width, zIndex: 70,
+        maxHeight: `calc(100dvh - ${anchor.top + 12}px)`,
+      }}
     >
       {/* Header */}
       <div className={`px-5 py-3 flex items-center justify-between border-b ${borderCl} flex-shrink-0`}>
