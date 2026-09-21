@@ -61,6 +61,11 @@ interface EnqueteEditState {
   statut: string;
 }
 
+interface SignalementEditState {
+  statut: string;
+  reponse_ifsa: string;
+}
+
 interface Sanction {
   id: string;
   type_sanction: string;
@@ -275,6 +280,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [showSanctionModal, setShowSanctionModal] = useState(false);
   const [showEnqueteModal, setShowEnqueteModal] = useState(false);
   const [selectedSignalement, setSelectedSignalement] = useState<Signalement | null>(null);
+  const [signalementEditState, setSignalementEditState] = useState<SignalementEditState | null>(null);
   const [selectedEnquete, setSelectedEnquete] = useState<Enquete | null>(null);
   const [showEnqueteDetailModal, setShowEnqueteDetailModal] = useState(false);
   const [enqueteEditState, setEnqueteEditState] = useState<EnqueteEditState | null>(null);
@@ -397,6 +403,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       toast.success(`Enquête ${data.enquete.numero_dossier} ouverte`);
       setShowEnqueteModal(false);
       setSelectedSignalement(null);
+      setSignalementEditState(null);
       resetEnqueteForm();
       startTransition(() => router.refresh());
     } catch (err) {
@@ -442,12 +449,37 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
       toast.success('Signalement mis à jour');
       setSelectedSignalement(null);
+      setSignalementEditState(null);
       startTransition(() => router.refresh());
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Erreur');
     } finally {
       setLoading(false);
     }
+  }
+
+  function openSignalementDetail(sig: Signalement) {
+    setSelectedSignalement(sig);
+    setSignalementEditState({
+      statut: sig.statut,
+      reponse_ifsa: sig.reponse_ifsa || '',
+    });
+  }
+
+  async function handleSaveSignalementEdit() {
+    if (!selectedSignalement || !signalementEditState) return;
+
+    const statutChanged = signalementEditState.statut !== selectedSignalement.statut;
+    const reponseChanged = (signalementEditState.reponse_ifsa || '') !== (selectedSignalement.reponse_ifsa || '');
+    if (!statutChanged && !reponseChanged) {
+      toast.message('Aucune modification à enregistrer');
+      return;
+    }
+
+    await handleUpdateSignalement(selectedSignalement.id, {
+      statut: signalementEditState.statut,
+      reponse_ifsa: signalementEditState.reponse_ifsa.trim() || null,
+    });
   }
 
   function resetSanctionForm() {
@@ -910,10 +942,29 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                             </button>
                           </>
                         )}
+                        {sig.statut === 'enquete_ouverte' && (
+                          <>
+                            <button
+                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'classe' })}
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                            >
+                              Classer
+                            </button>
+                            <button
+                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'rejete' })}
+                              disabled={loading}
+                              className="px-2.5 py-1 bg-red-600/90 hover:bg-red-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
+                            >
+                              Rejeter
+                            </button>
+                          </>
+                        )}
                         <button
-                          onClick={() => setSelectedSignalement(sig)}
+                          onClick={() => openSignalementDetail(sig)}
                           className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-700/50 rounded-md transition-colors"
-                          aria-label="Voir détails"
+                          aria-label="Voir et modifier"
+                          title="Voir et modifier le statut"
                         >
                           <Eye className="h-4 w-4" />
                         </button>
@@ -2021,7 +2072,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
 
             <div className="flex gap-3 mt-6">
               <button
-                onClick={() => { setShowEnqueteModal(false); setSelectedSignalement(null); resetEnqueteForm(); }}
+                onClick={() => { setShowEnqueteModal(false); setSelectedSignalement(null); setSignalementEditState(null); resetEnqueteForm(); }}
                 className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium"
               >
                 Annuler
@@ -2040,8 +2091,8 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
         document.body
       )}
 
-      {/* Modal Détails Signalement */}
-      {selectedSignalement && !showEnqueteModal && mounted && createPortal(
+      {/* Modal Détails / Édition Signalement */}
+      {selectedSignalement && !showEnqueteModal && signalementEditState && mounted && createPortal(
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-2xl w-full max-h-[90dvh] overflow-y-auto">
             <div className="flex items-start justify-between mb-4">
@@ -2049,7 +2100,11 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                 <span className="text-xs font-mono text-slate-500">{selectedSignalement.numero_signalement}</span>
                 <h3 className="text-lg font-semibold text-slate-100">{selectedSignalement.titre}</h3>
               </div>
-              <button onClick={() => setSelectedSignalement(null)} className="text-slate-400 hover:text-slate-200" aria-label="Fermer">
+              <button
+                onClick={() => { setSelectedSignalement(null); setSignalementEditState(null); }}
+                className="text-slate-400 hover:text-slate-200"
+                aria-label="Fermer"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -2076,22 +2131,70 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                   <p className="text-sm text-slate-400">Date (UTC)</p>
                   <p className="text-slate-200">{toLocaleStringUTC(selectedSignalement.created_at)} UTC</p>
                 </div>
+                {selectedSignalement.pilote_signale && (
+                  <div>
+                    <p className="text-sm text-slate-400">Pilote signalé</p>
+                    <p className="text-red-300">{selectedSignalement.pilote_signale.identifiant}</p>
+                  </div>
+                )}
+                {selectedSignalement.compagnie_signalee && (
+                  <div>
+                    <p className="text-sm text-slate-400">Compagnie signalée</p>
+                    <p className="text-red-300">{selectedSignalement.compagnie_signalee.nom}</p>
+                  </div>
+                )}
               </div>
 
-              {selectedSignalement.reponse_ifsa && (
-                <div className="p-3 bg-blue-500/10 rounded-lg border border-blue-500/30">
-                  <p className="text-xs text-blue-400 mb-1">Réponse IFSA</p>
-                  <p className="text-blue-300">{selectedSignalement.reponse_ifsa}</p>
+              <div className="grid gap-4 sm:grid-cols-2 border-t border-slate-700/70 pt-4">
+                <div>
+                  <label className="label" htmlFor="signalement-statut">Statut</label>
+                  <select
+                    id="signalement-statut"
+                    value={signalementEditState.statut}
+                    onChange={(e) => setSignalementEditState({ ...signalementEditState, statut: e.target.value })}
+                    className="input w-full"
+                  >
+                    {(Object.keys(STATUTS_SIGNALEMENT) as Array<keyof typeof STATUTS_SIGNALEMENT>).map((key) => (
+                      <option key={key} value={key}>{STATUTS_SIGNALEMENT[key].label}</option>
+                    ))}
+                  </select>
                 </div>
-              )}
+                <div className="sm:col-span-2">
+                  <label className="label" htmlFor="signalement-reponse">Réponse IFSA (optionnel)</label>
+                  <textarea
+                    id="signalement-reponse"
+                    value={signalementEditState.reponse_ifsa}
+                    onChange={(e) => setSignalementEditState({ ...signalementEditState, reponse_ifsa: e.target.value })}
+                    rows={3}
+                    className="input w-full"
+                    placeholder="Motif de classement, rejet, ou note interne pour le signaleur…"
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="flex gap-3 mt-6">
+            <div className="flex flex-wrap gap-3 mt-6">
+              {(selectedSignalement.statut === 'nouveau' || selectedSignalement.statut === 'en_examen') && (
+                <button
+                  onClick={() => openEnqueteFromSignalement(selectedSignalement)}
+                  className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium"
+                >
+                  Ouvrir enquête
+                </button>
+              )}
               <button
-                onClick={() => setSelectedSignalement(null)}
+                onClick={() => { setSelectedSignalement(null); setSignalementEditState(null); }}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 rounded-lg font-medium"
               >
-                Fermer
+                Annuler
+              </button>
+              <button
+                onClick={handleSaveSignalementEdit}
+                disabled={loading}
+                className="ml-auto px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium flex items-center gap-2 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                Enregistrer
               </button>
             </div>
           </div>
