@@ -474,25 +474,9 @@ class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
 
 
 async def handle_calendrier(interaction: discord.Interaction) -> None:
+    # ACK immédiat comme /register. Un POST site avant le modal dépasse les 3 s Discord.
+    # Le check admin reste dans CalendarModal.on_submit.
     if interaction.response.is_done():
-        return
-    try:
-        status, data = await api_post(
-            "/api/support/bot/calendrier",
-            {"action": "check", "discord_id": str(interaction.user.id)},
-        )
-    except Exception:
-        log.exception("API /api/support/bot/calendrier check a échoué")
-        try:
-            await interaction.response.send_message("Impossible de vérifier tes droits (erreur serveur).", ephemeral=True)
-        except discord.HTTPException:
-            pass
-        return
-    if status >= 400 or not data.get("admin"):
-        try:
-            await interaction.response.send_message(data.get("hint") or WEBSTAFF_HINT, ephemeral=True)
-        except discord.HTTPException:
-            pass
         return
     try:
         await interaction.response.send_modal(CalendarModal())

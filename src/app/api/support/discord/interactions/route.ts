@@ -20,7 +20,6 @@ import { discordSendMessage } from '@/lib/support/discord-api';
 import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
 import { createSiteAccountFromDiscord } from '@/lib/auth/create-discord-account';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
-import { findSiteAdminByDiscordId } from '@/lib/calendrier/staff';
 import { createCalendarEventFromDiscord } from '@/lib/calendrier/create';
 import { formatEventDateTimeDiscord } from '@/lib/calendrier/time';
 import { WEBSTAFF_HINT } from '@/lib/calendrier/types';
@@ -539,14 +538,8 @@ export async function POST(req: Request) {
   }
 
   if (interaction.type === APPLICATION_COMMAND && commandName === CALENDRIER_COMMAND) {
-    const user = interactionUser(interaction);
-    const staff = user?.id ? await findSiteAdminByDiscordId(String(user.id)) : null;
-    if (!staff) {
-      return json({
-        type: 4,
-        data: { content: WEBSTAFF_HINT, flags: EPHEMERAL },
-      });
-    }
+    // ACK immédiat (type 9) comme /register. Le check admin se fait au submit :
+    // un await Supabase ici dépasse souvent les 3 s Discord (cold start).
     return json(calendarModal());
   }
 
