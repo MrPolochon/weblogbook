@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   BookOpen, BookUser, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
-  ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map,
+  ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, CalendarDays,
   Store, AlertTriangle, Flame, Gauge, Wrench, Eye, Trophy, Menu, X, Clock, GraduationCap,
 } from 'lucide-react';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
@@ -172,6 +172,7 @@ export default function NavBar({
       items: [
         { href: '/documents', label: 'Documents', icon: FileText, badge: 0 },
         { href: '/code-de-conduite', label: 'Code de conduite', icon: ScrollText, badge: 0 },
+        { href: '/calendrier', label: 'Calendrier', icon: CalendarDays, badge: 0 },
         { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
         { href: '/aeroschool', label: 'AeroSchool', icon: GraduationCap, badge: 0 },
         { href: '/livret-progression', label: 'Livret CAT', icon: BookOpen, badge: 0 },
@@ -189,7 +190,7 @@ export default function NavBar({
     '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
     '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
     '/marche-cargo', '/perf-ptfs', '/alliance', '/signalement', '/reparation',
-    '/documents', '/notams', '/classement', '/aeroschool', '/code-de-conduite',
+    '/documents', '/notams', '/calendrier', '/classement', '/aeroschool', '/code-de-conduite',
     '/livret-progression', '/manuel-controleur',
   ].some(p => pathname.startsWith(p));
 

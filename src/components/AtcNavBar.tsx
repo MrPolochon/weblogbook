@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import {
   Radio, LayoutDashboard, LogOut, FileText, User, ScrollText, Mail, Moon, Sun,
-  ChevronDown, Menu, Flame, Landmark, Radar, BookOpen, Plus,
+  ChevronDown, Menu, Flame, Landmark, Radar, BookOpen, Plus, CalendarDays,
 } from 'lucide-react';
 import AtcPhonebookButton from '@/components/AtcPhonebookButton';
 import AtcTelephone from '@/components/AtcTelephone';
@@ -108,11 +108,12 @@ export default function AtcNavBar({
     { href: '/atc', label: 'Console', icon: Radio, badge: 0 },
     { href: '/atc/creer-plan', label: 'Créer un plan', icon: Plus, badge: 0 },
     { href: '/atc/documents', label: 'Documents', icon: FileText, badge: 0 },
+    { href: '/atc/calendrier', label: 'Calendrier', icon: CalendarDays, badge: 0 },
     { href: '/atc/messagerie', label: 'Messagerie', icon: Mail, badge: messagesNonLusCount },
     { href: '/atc/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
   ];
 
-  const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/messagerie');
+  const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/calendrier') || pathname.startsWith('/atc/messagerie');
 
   const linkBase = ATC_NAV_BTN;
   const linkActive = cn('atc-link-active', atcNavOpen(isDark));

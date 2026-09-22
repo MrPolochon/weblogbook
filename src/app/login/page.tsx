@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint, ScrollText } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
@@ -1270,6 +1270,13 @@ function LoginPageContent() {
           >
             <GraduationCap className="h-4 w-4 sm:h-5 sm:w-5 text-amber-400 group-hover:scale-110 transition-transform shrink-0" />
             <span className="font-semibold text-sm">AeroSchool</span>
+          </Link>
+          <Link
+            href="/calendrier"
+            className="inline-flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/30 text-violet-300 hover:text-violet-200 hover:bg-violet-500/20 hover:border-violet-500/50 transition-all backdrop-blur-sm group cursor-pointer"
+          >
+            <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5 text-violet-400 group-hover:scale-110 transition-transform shrink-0" />
+            <span className="font-semibold text-sm">Calendrier</span>
           </Link>
           <Link
             href="/carte-atc"

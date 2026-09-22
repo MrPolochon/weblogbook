@@ -20,6 +20,10 @@ import { discordSendMessage } from '@/lib/support/discord-api';
 import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
 import { createSiteAccountFromDiscord } from '@/lib/auth/create-discord-account';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
+import { findSiteAdminByDiscordId } from '@/lib/calendrier/staff';
+import { createCalendarEventFromDiscord } from '@/lib/calendrier/create';
+import { formatEventDateTimeDiscord } from '@/lib/calendrier/time';
+import { WEBSTAFF_HINT } from '@/lib/calendrier/types';
 
 const PING = 1;
 const APPLICATION_COMMAND = 2;
@@ -36,6 +40,13 @@ const REGISTER_COMMAND = 'register';
 const REGISTER_MODAL = 'support_register';
 const REGISTER_IDENTIFIANT = 'register_identifiant';
 const REGISTER_PASSWORD = 'register_password';
+const CALENDRIER_COMMAND = 'calendrier';
+const CALENDRIER_MODAL = 'calendrier_create';
+const CAL_TITLE = 'cal_title';
+const CAL_DESC = 'cal_desc';
+const CAL_START = 'cal_start';
+const CAL_END = 'cal_end';
+const CAL_ANNOUNCE = 'cal_announce';
 
 const OPEN_TICKET_BUTTON = 'support_open_ticket';
 const REASON_MODAL = 'support_ticket_reason';
@@ -145,6 +156,89 @@ function registerModal() {
   };
 }
 
+function calendarModal() {
+  return {
+    type: MODAL,
+    data: {
+      custom_id: CALENDRIER_MODAL,
+      title: 'Nouvel événement',
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: CAL_TITLE,
+              label: 'Titre',
+              style: 1,
+              required: true,
+              min_length: 1,
+              max_length: 120,
+            },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: CAL_DESC,
+              label: 'Description',
+              style: 2,
+              required: false,
+              max_length: 1000,
+            },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: CAL_START,
+              label: 'Début UTC (YYYY-MM-DD HH:MM)',
+              style: 1,
+              required: true,
+              min_length: 15,
+              max_length: 20,
+              placeholder: '2026-09-22 19:00',
+            },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: CAL_END,
+              label: 'Fin UTC optionnelle (YYYY-MM-DD HH:MM)',
+              style: 1,
+              required: false,
+              max_length: 20,
+              placeholder: '2026-09-22 21:00',
+            },
+          ],
+        },
+        {
+          type: 1,
+          components: [
+            {
+              type: 4,
+              custom_id: CAL_ANNOUNCE,
+              label: 'Annonce : non ou oui #salon @role',
+              style: 1,
+              required: false,
+              max_length: 120,
+              placeholder: 'non',
+              value: 'non',
+            },
+          ],
+        },
+      ],
+    },
+  };
+}
+
 function reasonModal() {
   return {
     type: MODAL,
@@ -243,6 +337,43 @@ async function finishRegister(interaction: DiscordInteraction) {
     console.error('[support-interactions] register', e);
     try {
       await patchOriginal(interaction, 'Impossible de créer le compte (erreur serveur).');
+    } catch { /* ignore */ }
+  }
+}
+
+async function finishCalendrierCreate(interaction: DiscordInteraction) {
+  try {
+    const user = interactionUser(interaction);
+    if (!user?.id) {
+      await patchOriginal(interaction, 'Identité Discord introuvable.');
+      return;
+    }
+    const result = await createCalendarEventFromDiscord({
+      discordId: String(user.id),
+      title: modalValue(interaction, CAL_TITLE),
+      description: modalValue(interaction, CAL_DESC),
+      startRaw: modalValue(interaction, CAL_START),
+      endRaw: modalValue(interaction, CAL_END),
+      announceRaw: modalValue(interaction, CAL_ANNOUNCE),
+    });
+    if (!result.ok) {
+      await patchOriginal(interaction, result.status === 403 ? WEBSTAFF_HINT : result.error);
+      return;
+    }
+    const ev = result.event;
+    const announced = ev.announce_discord
+      ? ev.announced_at
+        ? ' Annonce Discord envoyée.'
+        : ' Annonce Discord demandée mais non envoyée.'
+      : '';
+    await patchOriginal(
+      interaction,
+      `Événement créé : **${ev.title}** — ${formatEventDateTimeDiscord(ev.starts_at)}.${announced}\n${OFFICIAL_SITE_URL.replace(/\/$/, '')}/calendrier`,
+    );
+  } catch (e) {
+    console.error('[support-interactions] calendrier', e);
+    try {
+      await patchOriginal(interaction, 'Impossible de créer l’événement (erreur serveur).');
     } catch { /* ignore */ }
   }
 }
@@ -407,6 +538,18 @@ export async function POST(req: Request) {
     return json(registerModal());
   }
 
+  if (interaction.type === APPLICATION_COMMAND && commandName === CALENDRIER_COMMAND) {
+    const user = interactionUser(interaction);
+    const staff = user?.id ? await findSiteAdminByDiscordId(String(user.id)) : null;
+    if (!staff) {
+      return json({
+        type: 4,
+        data: { content: WEBSTAFF_HINT, flags: EPHEMERAL },
+      });
+    }
+    return json(calendarModal());
+  }
+
   if (interaction.type === MESSAGE_COMPONENT && customId === OPEN_TICKET_BUTTON) {
     return json(reasonModal());
   }
@@ -418,6 +561,11 @@ export async function POST(req: Request) {
 
   if (interaction.type === MODAL_SUBMIT && customId === REASON_MODAL) {
     waitUntil(finishOpenTicket(interaction));
+    return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
+  }
+
+  if (interaction.type === MODAL_SUBMIT && customId === CALENDRIER_MODAL) {
+    waitUntil(finishCalendrierCreate(interaction));
     return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
   }
 

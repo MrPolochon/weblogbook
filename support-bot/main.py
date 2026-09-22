@@ -216,6 +216,15 @@ GUILD_COMMANDS = [
         "integration_types": [0],
         "contexts": [0],
     },
+    {
+        "name": "calendrier",
+        "description": "Créer un événement du calendrier (admins site)",
+        "type": 1,
+        "dm_permission": False,
+        "default_member_permissions": None,
+        "integration_types": [0],
+        "contexts": [0],
+    },
 ]
 
 
@@ -243,7 +252,7 @@ async def register_guild_commands(_client: discord.Client | None = None) -> None
                 if resp.status >= 400:
                     log.warning("Enregistrement slash HTTP %s %s", resp.status, body[:240])
                     return
-            log.info("Slash /ticketdel /ticketia /register enregistrés guild=%s app=%s", guild_id, app_id)
+            log.info("Slash /ticketdel /ticketia /register /calendrier enregistrés guild=%s app=%s", guild_id, app_id)
             _commands_guild = guild_id
     except Exception:
         log.exception("Impossible d'enregistrer les commandes slash")
@@ -381,6 +390,114 @@ async def handle_register(interaction: discord.Interaction) -> None:
         await interaction.response.send_modal(RegisterModal())
     except discord.HTTPException:
         log.exception("send_modal /register a échoué")
+
+
+WEBSTAFF_HINT = (
+    "Tu dois être administrateur sur le site internet. "
+    "Possible de postuler via le formulaire Webstaff (AeroSchool). "
+    "Pour plus d’informations, contacte MrPolochon."
+)
+
+
+class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
+    titre = discord.ui.TextInput(
+        label="Titre",
+        style=discord.TextStyle.short,
+        min_length=1,
+        max_length=120,
+        required=True,
+        custom_id="cal_title",
+    )
+    description = discord.ui.TextInput(
+        label="Description",
+        style=discord.TextStyle.paragraph,
+        max_length=1000,
+        required=False,
+        custom_id="cal_desc",
+    )
+    debut = discord.ui.TextInput(
+        label="Début UTC (YYYY-MM-DD HH:MM)",
+        style=discord.TextStyle.short,
+        min_length=15,
+        max_length=20,
+        required=True,
+        custom_id="cal_start",
+        placeholder="2026-09-22 19:00",
+    )
+    fin = discord.ui.TextInput(
+        label="Fin UTC optionnelle (YYYY-MM-DD HH:MM)",
+        style=discord.TextStyle.short,
+        max_length=20,
+        required=False,
+        custom_id="cal_end",
+        placeholder="2026-09-22 21:00",
+    )
+    announce = discord.ui.TextInput(
+        label="Annonce : non ou oui #salon @role",
+        style=discord.TextStyle.short,
+        max_length=120,
+        required=False,
+        custom_id="cal_announce",
+        placeholder="non",
+        default="non",
+    )
+
+    def __init__(self) -> None:
+        super().__init__(title="Nouvel événement", custom_id="calendrier_create")
+
+    async def on_submit(self, interaction: discord.Interaction) -> None:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        try:
+            status, data = await api_post(
+                "/api/support/bot/calendrier",
+                {
+                    "action": "create",
+                    "discord_id": str(interaction.user.id),
+                    "title": str(self.titre.value),
+                    "description": str(self.description.value or ""),
+                    "start": str(self.debut.value),
+                    "end": str(self.fin.value or ""),
+                    "announce": str(self.announce.value or "non"),
+                },
+            )
+        except Exception:
+            log.exception("API /api/support/bot/calendrier a échoué")
+            await interaction.followup.send("Impossible de créer l’événement (erreur serveur).", ephemeral=True)
+            return
+        if status >= 400:
+            await interaction.followup.send(data.get("error") or WEBSTAFF_HINT, ephemeral=True)
+            return
+        event = data.get("event") or {}
+        title = event.get("title") or self.titre.value
+        await interaction.followup.send(f"Événement créé : **{title}**.", ephemeral=True)
+
+
+async def handle_calendrier(interaction: discord.Interaction) -> None:
+    if interaction.response.is_done():
+        return
+    try:
+        status, data = await api_post(
+            "/api/support/bot/calendrier",
+            {"action": "check", "discord_id": str(interaction.user.id)},
+        )
+    except Exception:
+        log.exception("API /api/support/bot/calendrier check a échoué")
+        try:
+            await interaction.response.send_message("Impossible de vérifier tes droits (erreur serveur).", ephemeral=True)
+        except discord.HTTPException:
+            pass
+        return
+    if status >= 400 or not data.get("admin"):
+        try:
+            await interaction.response.send_message(data.get("hint") or WEBSTAFF_HINT, ephemeral=True)
+        except discord.HTTPException:
+            pass
+        return
+    try:
+        await interaction.response.send_modal(CalendarModal())
+    except discord.HTTPException:
+        log.exception("send_modal /calendrier a échoué")
 
 
 async def send_open_ticket_modal(interaction: discord.Interaction) -> None:
@@ -527,6 +644,9 @@ def attach_handlers(client: discord.Client) -> None:
             return
         if command == "register":
             await handle_register(interaction)
+            return
+        if command == "calendrier":
+            await handle_calendrier(interaction)
             return
         cid = _component_custom_id(interaction)
         if cid != "support_open_ticket":

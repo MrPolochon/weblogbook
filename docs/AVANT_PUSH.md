@@ -53,6 +53,11 @@ Copier `env.example.txt` vers `.env.local` et remplir. En production (ex. Vercel
 5. **`supabase/add_felitz_atomic_helpers.sql`**  
    Crée les RPC `debiter_avec_trace`, `crediter_avec_trace`, `virer_avec_trace` qui font le mouvement de solde **et** l'insertion dans `felitz_transactions` dans une **seule transaction PG**. Tout le code TS est désormais migré vers ces helpers, ce qui élimine toute possibilité de "débit fantôme" / "crédit sans trace" sur les chemins de rollback.
 
+### Calendrier communautaire
+
+6. **`supabase/add_site_calendar.sql`**  
+   Table `site_calendar_events` (événements en UTC / timestamptz, lecture publique, écriture réservée aux admins site). À exécuter une fois avant d’utiliser `/calendrier`.
+
 ### Scripts one-shot (si besoin)
 
 - **`supabase/archive/revoke_admin_except_mrpolochon.sql`** – Retirer le rôle admin à tous sauf `mrpolochon` (à lancer uniquement si tu veux faire ce nettoyage).
@@ -85,6 +90,7 @@ add_login_email_verification.sql
 add_login_pending_email.sql
 add_site_config.sql
 add_felitz_atomic_helpers.sql
+add_site_calendar.sql
 ```
 
 Les autres scripts du dossier `supabase/` dépendent de ton état de base déjà migrée ; suivre l’ordre des migrations existantes si tu pars de zéro.

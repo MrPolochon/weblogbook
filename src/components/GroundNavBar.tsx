@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import {
   Wrench, LayoutDashboard, LogOut, MessageSquare,
-  MapPin, Clock, ChevronDown, Power, Loader2,
+  MapPin, Clock, ChevronDown, Power, Loader2, CalendarDays,
 } from 'lucide-react';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
@@ -114,6 +114,14 @@ export default function GroundNavBar({
           >
             <LayoutDashboard className="h-4 w-4 flex-shrink-0" />
             <span className="hidden sm:inline">Dashboard</span>
+          </Link>
+
+          <Link
+            href="/ground/calendrier"
+            className={cn(linkBase, pathname.startsWith('/ground/calendrier') ? linkActive : linkInactive)}
+          >
+            <CalendarDays className="h-4 w-4 flex-shrink-0" />
+            <span className="hidden sm:inline">Calendrier</span>
           </Link>
 
           <Link

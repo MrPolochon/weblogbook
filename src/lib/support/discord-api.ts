@@ -229,6 +229,15 @@ export const SUPPORT_GUILD_COMMANDS = [
     integration_types: [0],
     contexts: [0],
   },
+  {
+    name: 'calendrier',
+    description: 'Créer un événement du calendrier (admins site)',
+    type: 1,
+    dm_permission: false,
+    default_member_permissions: null,
+    integration_types: [0],
+    contexts: [0],
+  },
 ];
 
 let lastCommandsEnsure = 0;
