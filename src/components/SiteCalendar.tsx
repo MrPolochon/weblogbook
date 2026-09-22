@@ -8,10 +8,10 @@ import type { CalendarEvent, DiscordCalendarTarget } from '@/lib/calendrier/type
 import {
   formatEventDateTime,
   formatEventTime,
-  localInputToUtcIso,
   utcDayKey,
   utcDayKeyFromDate,
-  utcIsoToLocalInput,
+  utcInputToUtcIso,
+  utcIsoToUtcInput,
 } from '@/lib/calendrier/time';
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
@@ -38,8 +38,8 @@ type FormState = {
   title: string;
   description: string;
   location: string;
-  starts_local: string;
-  ends_local: string;
+  starts_utc: string;
+  ends_utc: string;
   announce_discord: boolean;
   announce_channel_id: string;
   announce_role_id: string;
@@ -49,8 +49,8 @@ const emptyForm = (): FormState => ({
   title: '',
   description: '',
   location: '',
-  starts_local: '',
-  ends_local: '',
+  starts_utc: '',
+  ends_utc: '',
   announce_discord: false,
   announce_channel_id: '',
   announce_role_id: '',
@@ -61,8 +61,8 @@ function eventToForm(e: CalendarEvent): FormState {
     title: e.title,
     description: e.description || '',
     location: e.location || '',
-    starts_local: utcIsoToLocalInput(e.starts_at),
-    ends_local: e.ends_at ? utcIsoToLocalInput(e.ends_at) : '',
+    starts_utc: utcIsoToUtcInput(e.starts_at),
+    ends_utc: e.ends_at ? utcIsoToUtcInput(e.ends_at) : '',
     announce_discord: Boolean(e.announce_discord),
     announce_channel_id: e.announce_channel_id || '',
     announce_role_id: e.announce_role_id || '',
@@ -151,7 +151,7 @@ export default function SiteCalendar({
 
   function openCreate(day?: string) {
     const base = emptyForm();
-    if (day) base.starts_local = utcIsoToLocalInput(`${day}T18:00:00.000Z`);
+    if (day) base.starts_utc = utcIsoToUtcInput(`${day}T18:00:00.000Z`);
     setForm(base);
     setEditing(null);
     setCreating(true);
@@ -166,12 +166,12 @@ export default function SiteCalendar({
   }
 
   async function save() {
-    const starts = localInputToUtcIso(form.starts_local);
+    const starts = utcInputToUtcIso(form.starts_utc);
     if (!starts) {
-      setError('Indique le début (heure de ton appareil, enregistré en UTC).');
+      setError('Indique le début (UTC).');
       return;
     }
-    const ends = form.ends_local ? localInputToUtcIso(form.ends_local) : null;
+    const ends = form.ends_utc ? utcInputToUtcIso(form.ends_utc) : null;
     setSaving(true);
     setError(null);
     try {
@@ -394,16 +394,16 @@ export default function SiteCalendar({
               <button type="button" aria-label="Fermer" onClick={() => setCreating(false)}><X className="h-4 w-4" /></button>
             </div>
             <p className="text-xs text-slate-400">
-              Saisie à l’heure de cet appareil, enregistrement UTC. Affichage : 19H UTC (7h Local).
+              Saisie UTC. Affichage ailleurs : 19H UTC (7h Local).
             </p>
             <input className="input" placeholder="Titre" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
             <textarea className="input min-h-[72px]" placeholder="Description" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             <input className="input" placeholder="Lieu (optionnel)" value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} />
-            <label className="text-xs text-slate-400">Début (heure locale)
-              <input type="datetime-local" className="input mt-1" value={form.starts_local} onChange={(e) => setForm({ ...form, starts_local: e.target.value })} />
+            <label className="text-xs text-slate-400">Début (UTC)
+              <input type="datetime-local" className="input mt-1" value={form.starts_utc} onChange={(e) => setForm({ ...form, starts_utc: e.target.value })} />
             </label>
-            <label className="text-xs text-slate-400">Fin (optionnel, heure locale)
-              <input type="datetime-local" className="input mt-1" value={form.ends_local} onChange={(e) => setForm({ ...form, ends_local: e.target.value })} />
+            <label className="text-xs text-slate-400">Fin (optionnel, UTC)
+              <input type="datetime-local" className="input mt-1" value={form.ends_utc} onChange={(e) => setForm({ ...form, ends_utc: e.target.value })} />
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.announce_discord} onChange={(e) => setForm({ ...form, announce_discord: e.target.checked })} />

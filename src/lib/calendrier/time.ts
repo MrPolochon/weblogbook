@@ -4,17 +4,22 @@ function pad2(n: number) {
   return String(n).padStart(2, '0');
 }
 
-export function utcIsoToLocalInput(iso: string): string {
+/** `datetime-local` value from UTC wall-clock (`YYYY-MM-DDTHH:mm`). */
+export function utcIsoToUtcInput(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}T${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}`;
 }
 
-export function localInputToUtcIso(local: string): string | null {
-  if (!local) return null;
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
+/** Parse a timezone-naive `datetime-local` value as UTC (19:00 → 19:00Z). */
+export function utcInputToUtcIso(input: string): string | null {
+  if (!input) return null;
+  const t = String(input).trim().replace(' ', 'T');
+  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!m) return null;
+  const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4].padStart(2, '0')}:${m[5]}:${(m[6] || '00').padStart(2, '0')}.000Z`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
 /** Parse « YYYY-MM-DD HH:MM » ou « YYYY-MM-DDTHH:MM » comme UTC (saisie Discord). */
