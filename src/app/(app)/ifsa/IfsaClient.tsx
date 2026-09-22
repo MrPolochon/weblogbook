@@ -900,74 +900,44 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                           </span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        {sig.statut === 'nouveau' && (
-                          <>
-                            <button
-                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'en_examen' })}
-                              disabled={loading}
-                              className="px-2.5 py-1 bg-amber-600/90 hover:bg-amber-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                            >
-                              Examiner
-                            </button>
-                            <button
-                              onClick={() => openEnqueteFromSignalement(sig)}
-                              className="px-2.5 py-1 bg-purple-600/90 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95"
-                            >
-                              Ouvrir enquête
-                            </button>
-                          </>
-                        )}
-                        {sig.statut === 'en_examen' && (
-                          <>
-                            <button
-                              onClick={() => openEnqueteFromSignalement(sig)}
-                              className="px-2.5 py-1 bg-purple-600/90 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95"
-                            >
-                              Ouvrir enquête
-                            </button>
-                            <button
-                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'classe' })}
-                              disabled={loading}
-                              className="px-2.5 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                            >
-                              Classer
-                            </button>
-                            <button
-                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'rejete' })}
-                              disabled={loading}
-                              className="px-2.5 py-1 bg-red-600/90 hover:bg-red-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                            >
-                              Rejeter
-                            </button>
-                          </>
-                        )}
-                        {sig.statut === 'enquete_ouverte' && (
-                          <>
-                            <button
-                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'classe' })}
-                              disabled={loading}
-                              className="px-2.5 py-1 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                            >
-                              Classer
-                            </button>
-                            <button
-                              onClick={() => handleUpdateSignalement(sig.id, { statut: 'rejete' })}
-                              disabled={loading}
-                              className="px-2.5 py-1 bg-red-600/90 hover:bg-red-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                            >
-                              Rejeter
-                            </button>
-                          </>
-                        )}
-                        <button
-                          onClick={() => openSignalementDetail(sig)}
-                          className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-700/50 rounded-md transition-colors"
-                          aria-label="Voir et modifier"
-                          title="Voir et modifier le statut"
+                      <div className="flex flex-col gap-2 basis-full w-full">
+                        <label className="sr-only" htmlFor={`signalement-statut-${sig.id}`}>
+                          Statut de {sig.numero_signalement}
+                        </label>
+                        <select
+                          id={`signalement-statut-${sig.id}`}
+                          value={sig.statut}
+                          disabled={loading}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (next !== sig.statut) {
+                              handleUpdateSignalement(sig.id, { statut: next });
+                            }
+                          }}
+                          className="input py-1.5 text-sm w-full sm:w-44"
                         >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                          {(Object.keys(STATUTS_SIGNALEMENT) as Array<keyof typeof STATUTS_SIGNALEMENT>).map((key) => (
+                            <option key={key} value={key}>{STATUTS_SIGNALEMENT[key].label}</option>
+                          ))}
+                        </select>
+                        <div className="flex items-center gap-2">
+                          {(sig.statut === 'nouveau' || sig.statut === 'en_examen') && (
+                            <button
+                              onClick={() => openEnqueteFromSignalement(sig)}
+                              className="px-2.5 py-1 bg-purple-600/90 hover:bg-purple-500 text-white rounded-md text-xs font-medium transition-all hover:scale-105 active:scale-95"
+                            >
+                              Ouvrir enquête
+                            </button>
+                          )}
+                          <button
+                            onClick={() => openSignalementDetail(sig)}
+                            className="p-1.5 text-slate-400 hover:text-sky-300 hover:bg-slate-700/50 rounded-md transition-colors"
+                            aria-label="Voir et modifier"
+                            title="Voir et modifier le statut"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
