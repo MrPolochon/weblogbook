@@ -63,7 +63,7 @@ function eventToForm(e: CalendarEvent): FormState {
     location: e.location || '',
     starts_local: utcIsoToLocalInput(e.starts_at),
     ends_local: e.ends_at ? utcIsoToLocalInput(e.ends_at) : '',
-    announce_discord: e.announce_discord,
+    announce_discord: Boolean(e.announce_discord),
     announce_channel_id: e.announce_channel_id || '',
     announce_role_id: e.announce_role_id || '',
   };
@@ -87,6 +87,7 @@ export default function SiteCalendar({
   const [form, setForm] = useState<FormState>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [channels, setChannels] = useState<DiscordCalendarTarget[]>([]);
   const [roles, setRoles] = useState<DiscordCalendarTarget[]>([]);
 
@@ -104,6 +105,17 @@ export default function SiteCalendar({
   }, []);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!creating && !pendingDeleteId) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== 'Escape') return;
+      setCreating(false);
+      setPendingDeleteId(null);
+    }
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [creating, pendingDeleteId]);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -192,9 +204,11 @@ export default function SiteCalendar({
   }
 
   async function remove(id: string) {
-    if (!confirm('Supprimer cet événement ?')) return;
     const res = await fetch(`/api/calendrier/${id}`, { method: 'DELETE' });
-    if (res.ok) await load();
+    if (res.ok) {
+      setPendingDeleteId(null);
+      await load();
+    }
   }
 
   const shell =
@@ -221,17 +235,29 @@ export default function SiteCalendar({
     <div className={`space-y-4 ${shell}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <button type="button" className="btn-secondary px-2 py-1" onClick={() => {
-            const n = addMonthsUtc(year, month, -1);
-            setYear(n.year); setMonth(n.month);
-          }}>
+          <button
+            type="button"
+            className="btn-secondary px-2 py-1"
+            aria-label={`Mois précédent : ${monthLabel} UTC`}
+            onClick={() => {
+              const n = addMonthsUtc(year, month, -1);
+              setYear(n.year); setMonth(n.month);
+            }}
+          >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <h2 className="min-w-[10rem] text-center text-lg font-semibold capitalize">{monthLabel} UTC</h2>
-          <button type="button" className="btn-secondary px-2 py-1" onClick={() => {
-            const n = addMonthsUtc(year, month, 1);
-            setYear(n.year); setMonth(n.month);
-          }}>
+          <h2 id="site-calendar-month" className="min-w-[10rem] text-center text-lg font-semibold capitalize">
+            {monthLabel} UTC
+          </h2>
+          <button
+            type="button"
+            className="btn-secondary px-2 py-1"
+            aria-label={`Mois suivant : ${monthLabel} UTC`}
+            onClick={() => {
+              const n = addMonthsUtc(year, month, 1);
+              setYear(n.year); setMonth(n.month);
+            }}
+          >
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
@@ -328,7 +354,7 @@ export default function SiteCalendar({
                       </p>
                     )}
                     {e.description && <p className="text-sm mt-2 whitespace-pre-wrap">{e.description}</p>}
-                    {e.announce_discord && (
+                    {e.announce_discord && canEdit && (
                       <p className={`text-xs mt-2 flex items-center gap-1 ${muted}`}>
                         <Megaphone className="h-3 w-3" />
                         Annonce Discord {e.announced_at ? 'envoyée' : 'prévue'}
@@ -338,7 +364,7 @@ export default function SiteCalendar({
                   {canEdit && (
                     <div className="flex gap-1">
                       <button type="button" className="btn-secondary text-xs" onClick={() => openEdit(e)}>Modifier</button>
-                      <button type="button" className="btn-secondary text-xs px-2" onClick={() => remove(e.id)}>
+                      <button type="button" className="btn-secondary text-xs px-2" aria-label="Supprimer l’événement" onClick={() => setPendingDeleteId(e.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -351,11 +377,21 @@ export default function SiteCalendar({
       </div>
 
       {creating && canEdit && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-3">
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-3"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="site-calendar-dialog-title"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setCreating(false);
+          }}
+        >
           <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold">{editing ? 'Modifier l’événement' : 'Nouvel événement'}</h3>
-              <button type="button" onClick={() => setCreating(false)}><X className="h-4 w-4" /></button>
+              <h3 id="site-calendar-dialog-title" className="font-semibold">
+                {editing ? 'Modifier l’événement' : 'Nouvel événement'}
+              </h3>
+              <button type="button" aria-label="Fermer" onClick={() => setCreating(false)}><X className="h-4 w-4" /></button>
             </div>
             <p className="text-xs text-slate-400">
               Saisie à l’heure de cet appareil, enregistrement UTC. Affichage : 19H UTC (7h Local).
@@ -398,6 +434,29 @@ export default function SiteCalendar({
               <button type="button" className="btn-secondary" onClick={() => setCreating(false)}>Annuler</button>
               <button type="button" className="btn-primary" disabled={saving} onClick={() => void save()}>
                 {saving ? 'Enregistrement…' : 'Enregistrer'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingDeleteId && canEdit && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-3"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="site-calendar-delete-title"
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setPendingDeleteId(null);
+          }}
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-4 space-y-3">
+            <h3 id="site-calendar-delete-title" className="font-semibold">Supprimer cet événement ?</h3>
+            <p className="text-sm text-slate-400">Cette action est définitive.</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className="btn-secondary" onClick={() => setPendingDeleteId(null)}>Annuler</button>
+              <button type="button" className="btn-primary" onClick={() => void remove(pendingDeleteId)}>
+                Supprimer
               </button>
             </div>
           </div>

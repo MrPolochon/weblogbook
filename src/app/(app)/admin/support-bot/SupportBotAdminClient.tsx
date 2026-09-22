@@ -160,11 +160,13 @@ export default function SupportBotAdminClient() {
     created_at: string;
   }>>([]);
   const [loading, setLoading] = useState(false);
+  const [tokenMismatch, setTokenMismatch] = useState(false);
 
   useEffect(() => {
     fetch('/api/support/config', { credentials: 'include' })
       .then((r) => r.json())
       .then((d) => {
+        setTokenMismatch(Boolean(d.bot_identity?.token_mismatch));
         if (d.config) {
           const motifs = Array.isArray(d.config.instructor_motifs) && d.config.instructor_motifs.length
             ? d.config.instructor_motifs
@@ -272,6 +274,13 @@ export default function SupportBotAdminClient() {
         Le serveur vient de <code className="text-xs">DISCORD_GUILD_ID</code> (Vercel). Choisis les salons et rôles ci-dessous.
         L’instructeur a accès et est pingé seulement sur les motifs cochés (CAT, instruction…).
       </p>
+      {tokenMismatch && (
+        <p className="text-sm text-red-200 bg-red-950/50 border border-red-700/60 rounded-md px-3 py-2">
+          <strong className="text-red-100">Tokens Discord différents.</strong> Le bot Railway n’est pas le même
+          que <code className="text-xs">SUPPORT_BOT_TOKEN</code> sur Vercel. Les tickets s’ouvrent pour le mauvais
+          bot et l’IA reste muette. Même token des deux côtés, Interactions URL avec www, intent Message Content.
+        </p>
+      )}
       <div className="text-xs text-slate-400 bg-slate-900/50 border border-slate-700/60 rounded-md px-3 py-2 space-y-1">
         <p className="text-slate-300 font-medium">Inactivité d’un ticket (délais comptés sur le dernier message humain)</p>
         <ul className="list-disc list-inside space-y-0.5">

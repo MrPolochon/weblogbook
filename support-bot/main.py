@@ -15,7 +15,8 @@ from discord.ext import tasks
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("support-bot")
 
-SECRET = (os.getenv("SUPPORT_BOT_SECRET") or os.getenv("ATIS_WEBHOOK_SECRET") or "").strip()
+# Secret dédié — pas de fallback ATIS_WEBHOOK_SECRET (bots ops indépendants).
+SECRET = (os.getenv("SUPPORT_BOT_SECRET") or "").strip()
 TOKEN = (os.getenv("SUPPORT_BOT_TOKEN") or "").strip()
 
 
@@ -55,8 +56,18 @@ _TICKETISH_PREFIX = ("🤖", "🔴", "🟠", "🟢", "tkt-")
 _TICKETISH_RE = re.compile(r"^(🤖|🔴|🟠|🟢|tkt-)|-\w{4}$")
 
 
+def _gateway_user_id() -> str:
+    c = _slash_client
+    if c and c.user:
+        return str(c.user.id)
+    return ""
+
+
 async def api_request(method: str, path: str, payload: dict | None = None) -> tuple[int, dict]:
     headers = {"Content-Type": "application/json", "x-support-bot-secret": SECRET}
+    gateway_id = _gateway_user_id()
+    if gateway_id:
+        headers["x-support-gateway-user-id"] = gateway_id
     timeout = aiohttp.ClientTimeout(total=90)
     url = f"{WEBLOGBOOK_URL}{path}"
     async with aiohttp.ClientSession(timeout=timeout) as session:
@@ -438,7 +449,7 @@ class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
         max_length=120,
         required=False,
         custom_id="cal_announce",
-        placeholder="non",
+        placeholder="oui #annonce @Pilotes",
         default="non",
     )
 
@@ -470,7 +481,100 @@ class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
             return
         event = data.get("event") or {}
         title = event.get("title") or self.titre.value
+        event_id = str(event.get("id") or "").strip()
+        if data.get("pick_targets") and event_id:
+            await interaction.followup.send(
+                "Choisis un salon Discord pour l'annonce.",
+                view=CalendarAnnounceView(event_id),
+                ephemeral=True,
+            )
+            return
         await interaction.followup.send(f"Événement créé : **{title}**.", ephemeral=True)
+
+
+class CalendarAnnounceView(discord.ui.View):
+    """Sélecteurs Discord (salon + rôle) — le bot ne lit pas un message de chat."""
+
+    def __init__(self, event_id: str) -> None:
+        super().__init__(timeout=900)
+        self.event_id = event_id
+        channel = discord.ui.ChannelSelect(
+            placeholder="Salon d'annonce",
+            channel_types=[discord.ChannelType.text, discord.ChannelType.news],
+            min_values=1,
+            max_values=1,
+            custom_id=f"cal_ch:{event_id}",
+        )
+        channel.callback = self._on_channel
+        self.add_item(channel)
+        role = discord.ui.RoleSelect(
+            placeholder="Rôle à ping (optionnel)",
+            min_values=0,
+            max_values=1,
+            custom_id=f"cal_role:{event_id}",
+        )
+        role.callback = self._on_role
+        self.add_item(role)
+
+    def _selected_id(self, interaction: discord.Interaction) -> str:
+        data = interaction.data
+        values = data.get("values") if isinstance(data, dict) else None
+        if values:
+            return str(values[0])
+        return ""
+
+    async def _announce(self, interaction: discord.Interaction, *, channel_id: str | None, role_id: str | None) -> dict:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        try:
+            payload: dict[str, Any] = {
+                "action": "announce",
+                "discord_id": str(interaction.user.id),
+                "event_id": self.event_id,
+            }
+            if channel_id:
+                payload["channel_id"] = channel_id
+            if role_id is not None:
+                payload["role_id"] = role_id
+            status, data = await api_post("/api/support/bot/calendrier", payload)
+        except Exception:
+            log.exception("API /api/support/bot/calendrier announce a échoué")
+            await interaction.followup.send("Impossible d'enregistrer le salon (erreur serveur).", ephemeral=True)
+            return {}
+        if status >= 400:
+            await interaction.followup.send(data.get("error") or WEBSTAFF_HINT, ephemeral=True)
+            return {}
+        return data
+
+    async def _on_channel(self, interaction: discord.Interaction) -> None:
+        channel_id = self._selected_id(interaction)
+        data = await self._announce(interaction, channel_id=channel_id or None, role_id=None)
+        if not data:
+            return
+        event = data.get("event") or {}
+        title = event.get("title") or "événement"
+        announced = " Annonce Discord envoyée." if event.get("announced_at") else ""
+        try:
+            await interaction.edit_original_response(
+                content=f"Événement créé : **{title}**.{announced}",
+                view=None,
+            )
+        except discord.HTTPException:
+            await interaction.followup.send(f"Événement créé : **{title}**.{announced}", ephemeral=True)
+
+    async def _on_role(self, interaction: discord.Interaction) -> None:
+        role_id = self._selected_id(interaction)
+        data = await self._announce(interaction, channel_id=None, role_id=role_id)
+        if not data:
+            return
+        event = data.get("event") or {}
+        if event.get("announced_at"):
+            await interaction.followup.send("Rôle enregistré. L'annonce a déjà été envoyée.", ephemeral=True)
+            return
+        await interaction.followup.send(
+            "Rôle enregistré. Choisis encore un salon pour envoyer l'annonce.",
+            ephemeral=True,
+        )
 
 
 async def handle_calendrier(interaction: discord.Interaction) -> None:

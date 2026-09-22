@@ -20,7 +20,7 @@ import { discordSendMessage } from '@/lib/support/discord-api';
 import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
 import { createSiteAccountFromDiscord } from '@/lib/auth/create-discord-account';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
-import { createCalendarEventFromDiscord } from '@/lib/calendrier/create';
+import { attachCalendarAnnounceFromDiscord, createCalendarEventFromDiscord } from '@/lib/calendrier/create';
 import { formatEventDateTimeDiscord } from '@/lib/calendrier/time';
 import { WEBSTAFF_HINT } from '@/lib/calendrier/types';
 
@@ -46,6 +46,10 @@ const CAL_DESC = 'cal_desc';
 const CAL_START = 'cal_start';
 const CAL_END = 'cal_end';
 const CAL_ANNOUNCE = 'cal_announce';
+const CAL_PICK_CHANNEL = 'cal_ch:';
+const CAL_PICK_ROLE = 'cal_role:';
+const CHANNEL_SELECT = 8;
+const ROLE_SELECT = 6;
 
 const OPEN_TICKET_BUTTON = 'support_open_ticket';
 const REASON_MODAL = 'support_ticket_reason';
@@ -65,6 +69,7 @@ type DiscordInteraction = {
     name?: string;
     custom_id?: string;
     component_type?: number;
+    values?: string[];
     components?: Array<{ components?: Array<{ custom_id?: string; value?: string }> }>;
   };
 };
@@ -228,7 +233,7 @@ function calendarModal() {
               style: 1,
               required: false,
               max_length: 120,
-              placeholder: 'non',
+              placeholder: 'oui #annonce @Pilotes',
               value: 'non',
             },
           ],
@@ -263,10 +268,53 @@ function reasonModal() {
   };
 }
 
-async function patchOriginal(interaction: DiscordInteraction, content: string) {
+async function patchOriginalPayload(interaction: DiscordInteraction, payload: Record<string, unknown>) {
   const appId = await getDiscordApplicationId(interaction.application_id);
   if (!appId) throw new Error('application id manquant');
-  await discordEditOriginalInteraction(appId, interaction.token, { content });
+  await discordEditOriginalInteraction(appId, interaction.token, payload);
+}
+
+async function patchOriginal(interaction: DiscordInteraction, content: string) {
+  await patchOriginalPayload(interaction, { content });
+}
+
+function calendarAnnounceSelects(eventId: string) {
+  return [
+    {
+      type: 1,
+      components: [
+        {
+          type: CHANNEL_SELECT,
+          custom_id: `${CAL_PICK_CHANNEL}${eventId}`,
+          placeholder: 'Salon d’annonce',
+          min_values: 1,
+          max_values: 1,
+          channel_types: [0, 5],
+        },
+      ],
+    },
+    {
+      type: 1,
+      components: [
+        {
+          type: ROLE_SELECT,
+          custom_id: `${CAL_PICK_ROLE}${eventId}`,
+          placeholder: 'Rôle à ping (optionnel)',
+          min_values: 0,
+          max_values: 1,
+        },
+      ],
+    },
+  ];
+}
+
+function calendarCreatedMessage(ev: { title: string; starts_at: string; announce_discord?: boolean; announced_at?: string | null }) {
+  const announced = ev.announce_discord
+    ? ev.announced_at
+      ? ' Annonce Discord envoyée.'
+      : ' Annonce Discord demandée mais non envoyée.'
+    : '';
+  return `Événement créé : **${ev.title}** — ${formatEventDateTimeDiscord(ev.starts_at)}.${announced}\n${OFFICIAL_SITE_URL.replace(/\/$/, '')}/calendrier`;
 }
 
 async function followupEphemeral(interaction: DiscordInteraction, content: string) {
@@ -359,16 +407,22 @@ async function finishCalendrierCreate(interaction: DiscordInteraction) {
       await patchOriginal(interaction, result.status === 403 ? WEBSTAFF_HINT : result.error);
       return;
     }
-    const ev = result.event;
-    const announced = ev.announce_discord
-      ? ev.announced_at
-        ? ' Annonce Discord envoyée.'
-        : ' Annonce Discord demandée mais non envoyée.'
-      : '';
-    await patchOriginal(
-      interaction,
-      `Événement créé : **${ev.title}** — ${formatEventDateTimeDiscord(ev.starts_at)}.${announced}\n${OFFICIAL_SITE_URL.replace(/\/$/, '')}/calendrier`,
-    );
+    if (result.pickTargets) {
+      try {
+        await patchOriginalPayload(interaction, {
+          content: 'Choisis un salon Discord pour l’annonce.',
+          components: calendarAnnounceSelects(result.event.id),
+        });
+      } catch (selectErr) {
+        console.error('[support-interactions] calendrier selects', selectErr);
+        await patchOriginalPayload(interaction, {
+          content: 'Choisis un salon Discord pour l’annonce.',
+          components: calendarAnnounceSelects(result.event.id).slice(0, 1),
+        });
+      }
+      return;
+    }
+    await patchOriginal(interaction, calendarCreatedMessage(result.event));
   } catch (e) {
     console.error('[support-interactions] calendrier', e);
     try {
@@ -404,6 +458,50 @@ async function finishTicketDel(interaction: DiscordInteraction) {
     console.error('[support-interactions] ticketdel', e);
     try {
       await patchOriginal(interaction, 'Impossible de fermer le ticket (erreur serveur).');
+    } catch { /* ignore */ }
+  }
+}
+
+async function finishCalendrierTargetPick(interaction: DiscordInteraction, customId: string) {
+  try {
+    const user = interactionUser(interaction);
+    if (!user?.id) {
+      await followupEphemeral(interaction, 'Identité Discord introuvable.');
+      return;
+    }
+    const isChannel = customId.startsWith(CAL_PICK_CHANNEL);
+    const eventId = customId.slice(isChannel ? CAL_PICK_CHANNEL.length : CAL_PICK_ROLE.length);
+    const value = String(interaction.data?.values?.[0] || '').trim();
+    if (isChannel && !value) {
+      await followupEphemeral(interaction, 'Choisis un salon Discord pour l’annonce.');
+      return;
+    }
+    const result = await attachCalendarAnnounceFromDiscord({
+      discordId: String(user.id),
+      eventId,
+      channelId: isChannel ? value : null,
+      roleId: isChannel ? undefined : value || null,
+    });
+    if (!result.ok) {
+      await followupEphemeral(interaction, result.status === 403 ? WEBSTAFF_HINT : result.error);
+      return;
+    }
+    if (isChannel) {
+      await patchOriginalPayload(interaction, {
+        content: calendarCreatedMessage(result.event),
+        components: [],
+      });
+      return;
+    }
+    if (result.event.announced_at) {
+      await followupEphemeral(interaction, 'Rôle enregistré. L’annonce a déjà été envoyée.');
+      return;
+    }
+    await followupEphemeral(interaction, 'Rôle enregistré. Choisis encore un salon pour envoyer l’annonce.');
+  } catch (e) {
+    console.error('[support-interactions] calendrier target', e);
+    try {
+      await followupEphemeral(interaction, 'Impossible d’enregistrer le salon (erreur serveur).');
     } catch { /* ignore */ }
   }
 }
@@ -560,6 +658,14 @@ export async function POST(req: Request) {
   if (interaction.type === MODAL_SUBMIT && customId === CALENDRIER_MODAL) {
     waitUntil(finishCalendrierCreate(interaction));
     return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
+  }
+
+  if (
+    interaction.type === MESSAGE_COMPONENT &&
+    (customId.startsWith(CAL_PICK_CHANNEL) || customId.startsWith(CAL_PICK_ROLE))
+  ) {
+    waitUntil(finishCalendrierTargetPick(interaction, customId));
+    return json({ type: DEFERRED_UPDATE });
   }
 
   if (

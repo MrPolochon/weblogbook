@@ -169,6 +169,37 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
                 {label}
               </Link>
             ))}
+            {isAdmin && (
+              <>
+                <Link
+                  href="/atc"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2 rounded-lg border border-emerald-800 bg-emerald-950 px-3 py-2 text-sm font-semibold text-emerald-100"
+                >
+                  <Radio className="h-4 w-4" />
+                  ATC
+                </Link>
+                <Link
+                  href="/logbook"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-2 rounded-lg border border-sky-800 bg-sky-950 px-3 py-2 text-sm font-semibold text-sky-100"
+                >
+                  <Plane className="h-4 w-4" />
+                  Pilote
+                </Link>
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setMobileOpen(false);
+                void handleLogout();
+              }}
+              className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-red-700 bg-red-900 px-3 py-2 text-sm font-semibold text-red-50"
+            >
+              <LogOut className="h-4 w-4" />
+              Déconnexion
+            </button>
           </div>
         )}
       </div>

@@ -113,7 +113,9 @@ export default function AtcNavBar({
     { href: '/atc/felitz-bank', label: 'Felitz Bank', icon: Landmark, badge: 0 },
   ];
 
-  const isAtcMenuActive = pathname === '/atc' || pathname.startsWith('/atc/documents') || pathname.startsWith('/atc/calendrier') || pathname.startsWith('/atc/messagerie');
+  const isAtcMenuActive = atcMenuItems.some((item) =>
+    item.href === '/atc' ? pathname === '/atc' : Boolean(pathname?.startsWith(item.href)),
+  );
 
   const linkBase = ATC_NAV_BTN;
   const linkActive = cn('atc-link-active', atcNavOpen(isDark));

@@ -36,7 +36,7 @@ export function sanitizeCalendarInput(
       ends_at: endsAt,
       announce_discord: announce,
       announce_channel_id: channelId,
-      announce_role_id: announce ? String(body.announce_role_id || '').trim() || null : null,
+      announce_role_id: String(body.announce_role_id || '').trim() || null,
     },
   };
 }
@@ -77,6 +77,10 @@ export async function persistCalendarEvent(opts: {
   return { ok: true, event };
 }
 
+export type DiscordCalendarCreateResult =
+  | { ok: true; event: CalendarEvent; pickTargets?: boolean }
+  | { ok: false; error: string; status: number };
+
 export async function createCalendarEventFromDiscord(opts: {
   discordId: string;
   title: string;
@@ -84,7 +88,7 @@ export async function createCalendarEventFromDiscord(opts: {
   startRaw: string;
   endRaw: string;
   announceRaw: string;
-}): Promise<{ ok: true; event: CalendarEvent } | { ok: false; error: string; status: number }> {
+}): Promise<DiscordCalendarCreateResult> {
   const staff = await findSiteAdminByDiscordId(opts.discordId);
   if (!staff) {
     return { ok: false, error: 'Administrateur site uniquement.', status: 403 };
@@ -102,13 +106,14 @@ export async function createCalendarEventFromDiscord(opts: {
 
   const targets = await listDiscordCalendarTargets();
   const announce = parseAnnounceField(opts.announceRaw, targets.channels, targets.roles);
+  const needsChannelPick = announce.announce && !announce.channelId;
 
   const parsed = sanitizeCalendarInput({
     title: opts.title,
     description: opts.description,
     starts_at: startsAt,
     ends_at: endsAt,
-    announce_discord: announce.announce,
+    announce_discord: announce.announce && !needsChannelPick,
     announce_channel_id: announce.channelId,
     announce_role_id: announce.roleId,
   });
@@ -120,5 +125,63 @@ export async function createCalendarEventFromDiscord(opts: {
     createdVia: 'discord',
   });
   if (!saved.ok) return { ok: false, error: saved.error, status: 500 };
-  return { ok: true, event: saved.event };
+  return { ok: true, event: saved.event, pickTargets: needsChannelPick || undefined };
+}
+
+export async function attachCalendarAnnounceFromDiscord(opts: {
+  discordId: string;
+  eventId: string;
+  channelId?: string | null;
+  roleId?: string | null;
+}): Promise<DiscordCalendarCreateResult> {
+  const staff = await findSiteAdminByDiscordId(opts.discordId);
+  if (!staff) {
+    return { ok: false, error: 'Administrateur site uniquement.', status: 403 };
+  }
+
+  const eventId = String(opts.eventId || '').trim();
+  if (!eventId) return { ok: false, error: 'Événement introuvable.', status: 404 };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin.from('site_calendar_events').select(SELECT).eq('id', eventId).maybeSingle();
+  if (!existing) return { ok: false, error: 'Événement introuvable.', status: 404 };
+  const current = existing as CalendarEvent;
+  if (current.created_by && current.created_by !== staff.id) {
+    return { ok: false, error: 'Cet événement ne t’appartient pas.', status: 403 };
+  }
+
+  const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (opts.channelId) {
+    patch.announce_channel_id = String(opts.channelId);
+    patch.announce_discord = true;
+  }
+  if (opts.roleId !== undefined) {
+    patch.announce_role_id = opts.roleId ? String(opts.roleId) : null;
+  }
+
+  const { data, error } = await admin
+    .from('site_calendar_events')
+    .update(patch)
+    .eq('id', eventId)
+    .select(SELECT)
+    .maybeSingle();
+  if (error || !data) return { ok: false, error: error?.message || 'Mise à jour impossible', status: 500 };
+
+  const event = data as CalendarEvent;
+  if (event.announce_discord && !event.announced_at && event.announce_channel_id) {
+    try {
+      const msgId = await announceCalendarEvent(event);
+      if (msgId) {
+        const now = new Date().toISOString();
+        await admin
+          .from('site_calendar_events')
+          .update({ announced_at: now, announce_message_id: msgId, updated_at: now })
+          .eq('id', event.id);
+        event.announced_at = now;
+      }
+    } catch (e) {
+      console.error('[calendrier] announce', e);
+    }
+  }
+  return { ok: true, event };
 }

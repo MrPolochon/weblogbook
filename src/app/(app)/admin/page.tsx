@@ -4,6 +4,7 @@ import {
   Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock,
   Package, KeyRound, Wrench, Handshake, LayoutDashboard, Activity,
   Settings, Route, Flame, ImageIcon, HardDrive, ScrollText,   Radio,
+  CalendarDays,
   TrendingUp, CheckCircle2, Bot,
 } from 'lucide-react';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -96,6 +97,7 @@ const sections: Section[] = [
       { href: '/admin/atis-bots', label: 'Bots ATIS', desc: 'Diagnostic & déploiement multi-bot', icon: Radio },
       { href: '/admin/radar-beta', label: 'Radar beta', desc: 'Prototype radar ATC', icon: Activity },
       { href: '/admin/support-bot', label: 'Bot assistance Discord', desc: 'Tickets IA, panel et sections', icon: Bot },
+      { href: '/app/calendrier', label: 'Calendrier site', desc: 'Événements PTFR (édition admin)', icon: CalendarDays },
     ],
   },
 ];

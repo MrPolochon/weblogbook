@@ -43,7 +43,7 @@ l’IA les poste seulement quand elle pense avoir réglé le problème (`[[RESOL
 | Variable | Valeur |
 |---|---|
 | `SUPPORT_BOT_TOKEN` | token du **nouveau** bot |
-| `SUPPORT_BOT_SECRET` | même secret que Vercel |
+| `SUPPORT_BOT_SECRET` | même secret que Vercel (dédié, pas ATIS_WEBHOOK_SECRET) |
 | `WEBLOGBOOK_URL` | `https://www.mixouairlinesptfsweblogbook.com` (**www** obligatoire) |
 
 Pas de `GROQ_API_KEY` ici : l’IA tourne sur Vercel. Redémarrer le service après un push.
@@ -53,7 +53,7 @@ Pas de `GROQ_API_KEY` ici : l’IA tourne sur Vercel. Redémarrer le service apr
 | Variable | Rôle |
 |---|---|
 | `SUPPORT_BOT_TOKEN` | **le même** token (créer salons / panel / transcripts / follow-up interactions) |
-| `SUPPORT_BOT_SECRET` | **le même** secret |
+| `SUPPORT_BOT_SECRET` | **le même** secret dédié (pas ATIS_WEBHOOK_SECRET) |
 | `DISCORD_PUBLIC_KEY` | Public Key du portail Discord (General Information) |
 | `GROQ_API_KEY` | Groq (volume) |
 | `DISCORD_GUILD_ID` | serveur (déjà en place, pas à retaper) |

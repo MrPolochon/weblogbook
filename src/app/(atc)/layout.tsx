@@ -7,6 +7,7 @@ import AutoRefresh from '@/components/AutoRefresh';
 import AtcAcceptTransfertSidebar from './AtcAcceptTransfertSidebar';
 import { AtcThemeProvider } from '@/contexts/AtcThemeContext';
 import AtcAtisTicker from '@/components/AtcAtisTicker';
+import AtcAtisDesyncBanner from '@/components/AtcAtisDesyncBanner';
 import InactivityLogout from '@/components/InactivityLogout';
 import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
 import AtcPlansRealtimeRefresh from '@/components/AtcPlansRealtimeRefresh';
@@ -117,6 +118,7 @@ export default async function AtcLayout({
         <AtcModeBg isAdmin={isAdmin} />
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} userId={user.id} />
         <AtcAtisTicker />
+        <AtcAtisDesyncBanner />
         <div className="flex flex-1 w-full min-h-0">
           <AtcMain>{children}</AtcMain>
           {enService && (

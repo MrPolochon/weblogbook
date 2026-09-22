@@ -172,12 +172,12 @@ export default function NavBar({
       items: [
         { href: '/documents', label: 'Documents', icon: FileText, badge: 0 },
         { href: '/code-de-conduite', label: 'Code de conduite', icon: ScrollText, badge: 0 },
-        { href: '/calendrier', label: 'Calendrier', icon: CalendarDays, badge: 0 },
+        { href: '/app/calendrier', label: 'Calendrier', icon: CalendarDays, badge: 0 },
         { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },
         { href: '/aeroschool', label: 'AeroSchool', icon: GraduationCap, badge: 0 },
         { href: '/livret-progression', label: 'Livret CAT', icon: BookOpen, badge: 0 },
         { href: '/manuel-controleur', label: 'Manuel contrôleur', icon: BookOpen, badge: 0 },
-        { href: '/signalement', label: 'Signalement IFSA', icon: AlertTriangle, badge: 0 },
+        { href: '/signalement', label: 'Déposer un signalement', icon: AlertTriangle, badge: 0 },
         { href: '/classement', label: 'Classement', icon: Trophy, badge: 0 },
       ],
     },
@@ -189,8 +189,8 @@ export default function NavBar({
   const isPiloteActive = [
     '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
     '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
-    '/marche-cargo', '/perf-ptfs', '/alliance', '/signalement', '/reparation',
-    '/documents', '/notams', '/calendrier', '/classement', '/aeroschool', '/code-de-conduite',
+    '/perf-ptfs', '/alliance', '/signalement', '/reparation',
+    '/documents', '/notams', '/app/calendrier', '/classement', '/aeroschool', '/code-de-conduite',
     '/livret-progression', '/manuel-controleur',
   ].some(p => pathname.startsWith(p));
 

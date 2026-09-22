@@ -5,12 +5,13 @@ export type CalendarEvent = {
   location: string | null;
   starts_at: string;
   ends_at: string | null;
-  announce_discord: boolean;
-  announce_channel_id: string | null;
-  announce_role_id: string | null;
-  announced_at: string | null;
-  created_by: string | null;
-  created_via: 'site' | 'discord';
+  /** Présents uniquement pour une session admin (GET staff). Absents du listage public. */
+  announce_discord?: boolean;
+  announce_channel_id?: string | null;
+  announce_role_id?: string | null;
+  announced_at?: string | null;
+  created_by?: string | null;
+  created_via?: 'site' | 'discord';
   created_at: string;
 };
 

@@ -10,6 +10,8 @@ import {
   ensureSupportGuildCommands,
 } from '@/lib/support/discord-api';
 import { repairOpenTicketSlashAccess } from '@/lib/support/repair-ticket-slash';
+import { discordGetMe } from '@/lib/support/discord-api';
+import { getCachedSupportGatewayUser } from '@/lib/support/bot-auth';
 
 async function requireAdmin() {
   const supabase = await createClient();
@@ -28,10 +30,30 @@ export async function GET() {
   const admin = createAdminClient();
   const { data } = await admin.from('support_bot_config').select('*').eq('id', 'default').maybeSingle();
   const guildId = getDiscordGuildId() || data?.guild_id || null;
+
+  let vercelBot: { id: string; username: string | null } | null = null;
+  try {
+    const me = await discordGetMe();
+    const id = String(me?.id || '').trim();
+    if (id) vercelBot = { id, username: typeof me?.username === 'string' ? me.username : null };
+  } catch {
+    vercelBot = null;
+  }
+  const cachedGw = getCachedSupportGatewayUser();
+  const row = data as { gateway_bot_user_id?: string | null } | null;
+  const railwayId = (cachedGw?.id || row?.gateway_bot_user_id || '').trim() || null;
+  const tokenMismatch = Boolean(vercelBot?.id && railwayId && vercelBot.id !== railwayId);
+
   return NextResponse.json({
     config: data ? { ...data, guild_id: guildId } : { guild_id: guildId },
     motifs: SUPPORT_MOTIFS,
     env_guild_id: guildId,
+    bot_identity: {
+      vercel_user_id: vercelBot?.id ?? null,
+      vercel_username: vercelBot?.username ?? null,
+      railway_user_id: railwayId,
+      token_mismatch: tokenMismatch,
+    },
   });
 }
 
