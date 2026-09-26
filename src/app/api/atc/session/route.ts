@@ -7,6 +7,7 @@ import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { ATC_TAUX_PAR_MINUTE } from '@/lib/atc-salaire';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
+import { finaliserCloturesEnAttenteSansControleur } from '@/lib/plans-vol/closure';
 import { checkAtcAccess, isKnownAtcAirportCode, loadAllAtcAccessRules, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
 
 /**
@@ -140,6 +141,8 @@ export async function DELETE(request: Request) {
         })
         .eq('current_holder_user_id', user.id)
         .in('statut', ['depose', 'en_attente']);
+
+      await finaliserCloturesEnAttenteSansControleur(admin);
     }
 
     const { data: session } = await supabase.from('atc_sessions').select('id, started_at, aeroport, position').eq('user_id', user.id).single();

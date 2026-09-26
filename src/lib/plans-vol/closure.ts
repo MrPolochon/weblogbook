@@ -1163,3 +1163,37 @@ export async function finaliserCloturePlan(
 
   return { success: true, paiementResult, usureAppliquee };
 }
+
+const PLAN_CLOTURE_SELECT =
+  'id, pilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
+
+/**
+ * Clôture les vols déjà demandés par le pilote, restés en attente ATC
+ * alors qu’ils sont en autosurveillance ou sans contrôleur.
+ */
+export async function finaliserCloturesEnAttenteSansControleur(
+  admin: AdminClient,
+): Promise<{ finalized: number; errors: number }> {
+  const { data, error } = await admin
+    .from('plans_vol')
+    .select(PLAN_CLOTURE_SELECT)
+    .eq('statut', 'en_attente_cloture')
+    .or('automonitoring.eq.true,current_holder_user_id.is.null');
+  if (error) {
+    console.error('[cloture-auto] lecture:', error.message);
+    return { finalized: 0, errors: 1 };
+  }
+
+  let finalized = 0;
+  let errors = 0;
+  const now = new Date();
+  for (const row of data || []) {
+    const result = await finaliserCloturePlan(admin, row as PlanPaiement, now);
+    if (result.success) finalized += 1;
+    else {
+      errors += 1;
+      console.error('[cloture-auto] plan', row.id, result.error);
+    }
+  }
+  return { finalized, errors };
+}

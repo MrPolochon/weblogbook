@@ -207,7 +207,7 @@ export default async function SiaviPlanPage({ params }: { params: Promise<{ id: 
                   Reprendre la mission
                 </Link>
               )}
-              <PlanVolCloturerButton planId={plan.id} statut={plan.statut} isMedevac={!!plan.siavi_avion_id} />
+              <PlanVolCloturerButton planId={plan.id} statut={plan.statut} isMedevac={!!plan.siavi_avion_id} automonitoring={!!plan.automonitoring} />
               <PlanVolAnnulerButton planId={plan.id} statut={plan.statut} />
             </div>
           </div>

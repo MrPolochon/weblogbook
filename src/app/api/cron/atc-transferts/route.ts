@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { finaliserCloturesEnAttenteSansControleur } from '@/lib/plans-vol/closure';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,7 +27,8 @@ async function run() {
     .lt('pending_transfer_at', cutoff)
     .select('id');
   if (error) throw error;
-  return { expired: data?.length ?? 0 };
+  const pending = await finaliserCloturesEnAttenteSansControleur(admin);
+  return { expired: data?.length ?? 0, clotures_auto: pending };
 }
 
 export async function GET(request: NextRequest) {

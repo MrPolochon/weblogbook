@@ -8,9 +8,9 @@ import { CheckCircle2, X, Plane, FileText } from 'lucide-react';
 
 const STATUTS_OUVERTS = ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
-type Props = { planId: string; statut: string; isMedevac?: boolean };
+type Props = { planId: string; statut: string; isMedevac?: boolean; automonitoring?: boolean };
 
-export default function PlanVolCloturerButton({ planId, statut, isMedevac }: Props) {
+export default function PlanVolCloturerButton({ planId, statut, isMedevac, automonitoring }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
@@ -24,7 +24,7 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac }: Pro
   const peutCloturer = STATUTS_OUVERTS.includes(statut);
   const enAttenteConfirmation = statut === 'en_attente_cloture';
 
-  if (enAttenteConfirmation) {
+  if (enAttenteConfirmation && !automonitoring) {
     return <span className="text-amber-400 text-sm">En attente de confirmation ATC</span>;
   }
   if (!peutCloturer) return null;

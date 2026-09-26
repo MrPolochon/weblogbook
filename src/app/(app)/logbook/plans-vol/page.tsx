@@ -354,7 +354,7 @@ export default async function MesPlansVolPage() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-3">
-                          <PlanVolCloturerButton planId={p.id} statut={p.statut} isMedevac={!!p.siavi_avion_id} />
+                          <PlanVolCloturerButton planId={p.id} statut={p.statut} isMedevac={!!p.siavi_avion_id} automonitoring={!!p.automonitoring} />
                           <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
                         </div>
                       )}

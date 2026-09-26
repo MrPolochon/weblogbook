@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 import { calculerUsureVol } from '@/lib/compagnie-utils';
-import { envoyerChequesVol, finaliserCloturePlan, parseStripATD } from '@/lib/plans-vol/closure';
+import { envoyerChequesVol, finaliserCloturePlan, finaliserCloturesEnAttenteSansControleur, parseStripATD } from '@/lib/plans-vol/closure';
 import { heureDepartToIso } from '@/lib/heure-depart';
 import { assignGateArrival, maybeAssignArrivalGate } from '@/lib/ground/gate-assignment';
 
@@ -585,6 +585,9 @@ export async function PATCH(
           strip_zone: null,
         }).eq('id', id);
         if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+        if (plan.statut === 'en_attente_cloture') {
+          await finaliserCloturesEnAttenteSansControleur(admin);
+        }
         return NextResponse.json({ ok: true });
       }
 
