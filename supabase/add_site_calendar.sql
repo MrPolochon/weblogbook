@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS public.site_calendar_events (
   announce_channel_id TEXT,
   announce_role_id TEXT,
   announced_at TIMESTAMPTZ,
+  announce_sent_at TIMESTAMPTZ,
   announce_message_id TEXT,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_via TEXT NOT NULL DEFAULT 'site' CHECK (created_via IN ('site', 'discord')),
@@ -26,6 +27,9 @@ CREATE TABLE IF NOT EXISTS public.site_calendar_events (
 
 CREATE INDEX IF NOT EXISTS idx_site_calendar_starts ON public.site_calendar_events (starts_at);
 CREATE INDEX IF NOT EXISTS idx_site_calendar_created ON public.site_calendar_events (created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_site_calendar_announce_due
+  ON public.site_calendar_events (starts_at)
+  WHERE announce_channel_id IS NOT NULL AND announce_sent_at IS NULL;
 
 ALTER TABLE public.site_calendar_events ENABLE ROW LEVEL SECURITY;
 

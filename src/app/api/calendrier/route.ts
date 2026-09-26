@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSiteAdmin } from '@/lib/calendrier/staff';
 import { persistCalendarEvent, sanitizeCalendarInput } from '@/lib/calendrier/create';
-import type { CalendarEvent, CalendarEventInput } from '@/lib/calendrier/types';
+import { CALENDAR_EVENT_SELECT, type CalendarEvent, type CalendarEventInput } from '@/lib/calendrier/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -11,8 +11,7 @@ export const dynamic = 'force-dynamic';
 const PUBLIC_SELECT =
   'id, title, description, location, starts_at, ends_at, created_via, created_at';
 
-const STAFF_SELECT =
-  'id, title, description, location, starts_at, ends_at, announce_discord, announce_channel_id, announce_role_id, announced_at, created_by, created_via, created_at';
+const STAFF_SELECT = CALENDAR_EVENT_SELECT;
 
 export async function GET() {
   let staff = null;

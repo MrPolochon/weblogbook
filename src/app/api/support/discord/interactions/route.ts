@@ -20,8 +20,13 @@ import { discordSendMessage } from '@/lib/support/discord-api';
 import { IA_RESUMED_NOTICE } from '@/lib/support/staff-takeover';
 import { createSiteAccountFromDiscord } from '@/lib/auth/create-discord-account';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
-import { attachCalendarAnnounceFromDiscord, createCalendarEventFromDiscord } from '@/lib/calendrier/create';
-import { formatEventDateTimeDiscord } from '@/lib/calendrier/time';
+import {
+  calendarAnnouncePickText,
+  calendarAnnounceScheduledText,
+  calendarCreatedChoiceText,
+  calendarCreatedPlainText,
+} from '@/lib/calendrier/announce';
+import { attachCalendarAnnounceFromDiscord, createCalendarEventFromDiscord, loadCalendarEventFromDiscord } from '@/lib/calendrier/create';
 import { WEBSTAFF_HINT } from '@/lib/calendrier/types';
 
 const PING = 1;
@@ -45,11 +50,14 @@ const CAL_TITLE = 'cal_title';
 const CAL_DESC = 'cal_desc';
 const CAL_START = 'cal_start';
 const CAL_END = 'cal_end';
-const CAL_ANNOUNCE = 'cal_announce';
+const CAL_LOCATION = 'cal_location';
 const CAL_PICK_CHANNEL = 'cal_ch:';
 const CAL_PICK_ROLE = 'cal_role:';
+const CAL_WANT = 'cal_want:';
+const CAL_SKIP = 'cal_skip:';
 const CHANNEL_SELECT = 8;
 const ROLE_SELECT = 6;
+const BUTTON = 2;
 
 const OPEN_TICKET_BUTTON = 'support_open_ticket';
 const REASON_MODAL = 'support_ticket_reason';
@@ -200,12 +208,12 @@ function calendarModal() {
             {
               type: 4,
               custom_id: CAL_START,
-              label: 'Début UTC (YYYY-MM-DD HH:MM)',
+              label: 'Début UTC',
               style: 1,
               required: true,
-              min_length: 15,
-              max_length: 20,
-              placeholder: '2026-09-22 19:00',
+              min_length: 2,
+              max_length: 32,
+              placeholder: '22/09/2026 19h',
             },
           ],
         },
@@ -215,11 +223,11 @@ function calendarModal() {
             {
               type: 4,
               custom_id: CAL_END,
-              label: 'Fin UTC optionnelle (YYYY-MM-DD HH:MM)',
+              label: 'Fin UTC (optionnel)',
               style: 1,
               required: false,
-              max_length: 20,
-              placeholder: '2026-09-22 21:00',
+              max_length: 32,
+              placeholder: '22/09/2026 21h',
             },
           ],
         },
@@ -228,13 +236,12 @@ function calendarModal() {
           components: [
             {
               type: 4,
-              custom_id: CAL_ANNOUNCE,
-              label: 'Annonce : non ou oui #salon @role',
+              custom_id: CAL_LOCATION,
+              label: 'Lieu',
               style: 1,
               required: false,
               max_length: 120,
-              placeholder: 'oui #annonce @Pilotes',
-              value: 'non',
+              placeholder: 'Tour de contrôle, LFPG…',
             },
           ],
         },
@@ -286,7 +293,7 @@ function calendarAnnounceSelects(eventId: string) {
         {
           type: CHANNEL_SELECT,
           custom_id: `${CAL_PICK_CHANNEL}${eventId}`,
-          placeholder: 'Salon d’annonce',
+          placeholder: 'Salon d’annonce (au début, pas maintenant)',
           min_values: 1,
           max_values: 1,
           channel_types: [0, 5],
@@ -308,13 +315,26 @@ function calendarAnnounceSelects(eventId: string) {
   ];
 }
 
-function calendarCreatedMessage(ev: { title: string; starts_at: string; announce_discord?: boolean; announced_at?: string | null }) {
-  const announced = ev.announce_discord
-    ? ev.announced_at
-      ? ' Annonce Discord envoyée.'
-      : ' Annonce Discord demandée mais non envoyée.'
-    : '';
-  return `Événement créé : **${ev.title}** — ${formatEventDateTimeDiscord(ev.starts_at)}.${announced}\n${OFFICIAL_SITE_URL.replace(/\/$/, '')}/calendrier`;
+function calendarAnnounceChoiceButtons(eventId: string) {
+  return [
+    {
+      type: 1,
+      components: [
+        {
+          type: BUTTON,
+          style: 1,
+          custom_id: `${CAL_WANT}${eventId}`,
+          label: 'Annoncer au début',
+        },
+        {
+          type: BUTTON,
+          style: 2,
+          custom_id: `${CAL_SKIP}${eventId}`,
+          label: 'Sans annonce',
+        },
+      ],
+    },
+  ];
 }
 
 async function followupEphemeral(interaction: DiscordInteraction, content: string) {
@@ -401,28 +421,16 @@ async function finishCalendrierCreate(interaction: DiscordInteraction) {
       description: modalValue(interaction, CAL_DESC),
       startRaw: modalValue(interaction, CAL_START),
       endRaw: modalValue(interaction, CAL_END),
-      announceRaw: modalValue(interaction, CAL_ANNOUNCE),
+      location: modalValue(interaction, CAL_LOCATION),
     });
     if (!result.ok) {
       await patchOriginal(interaction, result.status === 403 ? WEBSTAFF_HINT : result.error);
       return;
     }
-    if (result.pickTargets) {
-      try {
-        await patchOriginalPayload(interaction, {
-          content: 'Choisis un salon Discord pour l’annonce.',
-          components: calendarAnnounceSelects(result.event.id),
-        });
-      } catch (selectErr) {
-        console.error('[support-interactions] calendrier selects', selectErr);
-        await patchOriginalPayload(interaction, {
-          content: 'Choisis un salon Discord pour l’annonce.',
-          components: calendarAnnounceSelects(result.event.id).slice(0, 1),
-        });
-      }
-      return;
-    }
-    await patchOriginal(interaction, calendarCreatedMessage(result.event));
+    await patchOriginalPayload(interaction, {
+      content: calendarCreatedChoiceText(result.event),
+      components: calendarAnnounceChoiceButtons(result.event.id),
+    });
   } catch (e) {
     console.error('[support-interactions] calendrier', e);
     try {
@@ -462,6 +470,50 @@ async function finishTicketDel(interaction: DiscordInteraction) {
   }
 }
 
+async function finishCalendrierChoice(interaction: DiscordInteraction, customId: string) {
+  try {
+    const user = interactionUser(interaction);
+    if (!user?.id) {
+      await followupEphemeral(interaction, 'Identité Discord introuvable.');
+      return;
+    }
+    const want = customId.startsWith(CAL_WANT);
+    const eventId = customId.slice(want ? CAL_WANT.length : CAL_SKIP.length);
+    const result = await loadCalendarEventFromDiscord({
+      discordId: String(user.id),
+      eventId,
+    });
+    if (!result.ok) {
+      await followupEphemeral(interaction, result.status === 403 ? WEBSTAFF_HINT : result.error);
+      return;
+    }
+    if (!want) {
+      await patchOriginalPayload(interaction, {
+        content: calendarCreatedPlainText(result.event),
+        components: [],
+      });
+      return;
+    }
+    try {
+      await patchOriginalPayload(interaction, {
+        content: calendarAnnouncePickText(result.event),
+        components: calendarAnnounceSelects(result.event.id),
+      });
+    } catch (selectErr) {
+      console.error('[support-interactions] calendrier selects', selectErr);
+      await patchOriginalPayload(interaction, {
+        content: calendarAnnouncePickText(result.event),
+        components: calendarAnnounceSelects(result.event.id).slice(0, 1),
+      });
+    }
+  } catch (e) {
+    console.error('[support-interactions] calendrier choice', e);
+    try {
+      await followupEphemeral(interaction, 'Impossible d’enregistrer le choix (erreur serveur).');
+    } catch { /* ignore */ }
+  }
+}
+
 async function finishCalendrierTargetPick(interaction: DiscordInteraction, customId: string) {
   try {
     const user = interactionUser(interaction);
@@ -488,16 +540,20 @@ async function finishCalendrierTargetPick(interaction: DiscordInteraction, custo
     }
     if (isChannel) {
       await patchOriginalPayload(interaction, {
-        content: calendarCreatedMessage(result.event),
-        components: [],
+        content: calendarAnnounceScheduledText(result.event),
+        components: calendarAnnounceSelects(eventId).slice(1),
       });
       return;
     }
-    if (result.event.announced_at) {
+    if (result.event.announce_sent_at) {
       await followupEphemeral(interaction, 'Rôle enregistré. L’annonce a déjà été envoyée.');
       return;
     }
-    await followupEphemeral(interaction, 'Rôle enregistré. Choisis encore un salon pour envoyer l’annonce.');
+    if (result.event.announce_channel_id) {
+      await followupEphemeral(interaction, 'Rôle enregistré. L’annonce partira au début de l’événement, pas maintenant.');
+      return;
+    }
+    await followupEphemeral(interaction, 'Rôle enregistré. Choisis encore un salon pour l’annonce au début.');
   } catch (e) {
     console.error('[support-interactions] calendrier target', e);
     try {
@@ -658,6 +714,14 @@ export async function POST(req: Request) {
   if (interaction.type === MODAL_SUBMIT && customId === CALENDRIER_MODAL) {
     waitUntil(finishCalendrierCreate(interaction));
     return json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
+  }
+
+  if (
+    interaction.type === MESSAGE_COMPONENT &&
+    (customId.startsWith(CAL_WANT) || customId.startsWith(CAL_SKIP))
+  ) {
+    waitUntil(finishCalendrierChoice(interaction, customId));
+    return json({ type: DEFERRED_UPDATE });
   }
 
   if (

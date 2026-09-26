@@ -2,13 +2,9 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSiteAdmin } from '@/lib/calendrier/staff';
-import { announceCalendarEvent } from '@/lib/calendrier/announce';
-import type { CalendarEvent, CalendarEventInput } from '@/lib/calendrier/types';
+import { CALENDAR_EVENT_SELECT, type CalendarEvent, type CalendarEventInput } from '@/lib/calendrier/types';
 
 export const dynamic = 'force-dynamic';
-
-const SELECT =
-  'id, title, description, location, starts_at, ends_at, announce_discord, announce_channel_id, announce_role_id, announced_at, created_by, created_via, created_at';
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -40,38 +36,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       patch.ends_at = d.toISOString();
     }
   }
-  if (body.announce_discord !== undefined) patch.announce_discord = Boolean(body.announce_discord);
-  if (body.announce_channel_id !== undefined) patch.announce_channel_id = body.announce_channel_id || null;
-  if (body.announce_role_id !== undefined) patch.announce_role_id = body.announce_role_id || null;
+  if (body.announce_discord !== undefined) {
+    const announce = Boolean(body.announce_discord);
+    patch.announce_discord = announce;
+    if (!announce) {
+      patch.announce_channel_id = null;
+      patch.announce_role_id = null;
+    }
+  }
+  if (body.announce_channel_id !== undefined && patch.announce_discord !== false) {
+    patch.announce_channel_id = body.announce_channel_id || null;
+  }
+  if (body.announce_role_id !== undefined && patch.announce_discord !== false) {
+    patch.announce_role_id = body.announce_role_id || null;
+  }
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from('site_calendar_events')
     .update(patch)
     .eq('id', id)
-    .select(SELECT)
+    .select(CALENDAR_EVENT_SELECT)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   if (!data) return NextResponse.json({ error: 'Événement introuvable' }, { status: 404 });
-
-  const event = data as CalendarEvent;
-  if (event.announce_discord && !event.announced_at && event.announce_channel_id) {
-    try {
-      const msgId = await announceCalendarEvent(event);
-      if (msgId) {
-        const now = new Date().toISOString();
-        await admin
-          .from('site_calendar_events')
-          .update({ announced_at: now, announce_message_id: msgId, updated_at: now })
-          .eq('id', event.id);
-        event.announced_at = now;
-      }
-    } catch (e) {
-      console.error('[calendrier] announce', e);
-    }
-  }
-
-  return NextResponse.json({ event });
+  return NextResponse.json({ event: data as CalendarEvent });
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {

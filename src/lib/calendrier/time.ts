@@ -22,14 +22,69 @@ export function utcInputToUtcIso(input: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-/** Parse « YYYY-MM-DD HH:MM » ou « YYYY-MM-DDTHH:MM » comme UTC (saisie Discord). */
-export function parseUtcDateTime(raw: string): string | null {
-  const t = String(raw || '').trim().replace('T', ' ').replace('/', '-');
-  const m = t.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})$/);
+/** Heure UTC : `19h`, `19H`, `19h30`, `19:00`. Minutes optionnelles (= 00). */
+function parseUtcClock(raw: string): { hour: number; minute: number } | null {
+  const m = String(raw || '').trim().match(/^(\d{1,2})\s*(?:[:hH]\s*(\d{2})?)?$/);
   if (!m) return null;
-  const iso = `${m[1]}-${m[2]}-${m[3]}T${m[4].padStart(2, '0')}:${m[5]}:00.000Z`;
+  const hour = Number(m[1]);
+  const minute = m[2] != null ? Number(m[2]) : 0;
+  if (hour > 23 || minute > 59) return null;
+  return { hour, minute };
+}
+
+function utcFromParts(year: number, month: number, day: number, hour: number, minute: number): string | null {
+  const d = new Date(Date.UTC(year, month - 1, day, hour, minute, 0, 0));
+  if (
+    Number.isNaN(d.getTime()) ||
+    d.getUTCFullYear() !== year ||
+    d.getUTCMonth() !== month - 1 ||
+    d.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return d.toISOString();
+}
+
+/**
+ * Saisie Discord / humaine, toujours interprétée en UTC.
+ * `22/09/2026 19:00`, `22/09/2026 19h`, `22/09 19h`, `19h`, `2026-09-22 19:00`.
+ */
+export function parseUtcDateTime(raw: string, now = new Date()): string | null {
+  const t = String(raw || '').trim().replace(/\s+/g, ' ');
+  if (!t) return null;
+
+  const timeOnly = parseUtcClock(t);
+  if (timeOnly) {
+    return utcFromParts(now.getUTCFullYear(), now.getUTCMonth() + 1, now.getUTCDate(), timeOnly.hour, timeOnly.minute);
+  }
+
+  const fr = t.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\s+(.+)$/);
+  if (fr) {
+    const day = Number(fr[1]);
+    const month = Number(fr[2]);
+    let year = fr[3] != null ? Number(fr[3]) : now.getUTCFullYear();
+    if (year < 100) year += 2000;
+    const clock = parseUtcClock(fr[4]);
+    if (!clock || month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return utcFromParts(year, month, day, clock.hour, clock.minute);
+  }
+
+  const iso = t.replace('T', ' ').match(/^(\d{4})-(\d{2})-(\d{2}) (.+)$/);
+  if (iso) {
+    const clock = parseUtcClock(iso[4]);
+    if (!clock) return null;
+    return utcFromParts(Number(iso[1]), Number(iso[2]), Number(iso[3]), clock.hour, clock.minute);
+  }
+
+  return null;
+}
+
+/** `20/10/2026 0H UTC` */
+export function formatEventUtcStamp(iso: string): string {
   const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  if (Number.isNaN(d.getTime())) return '—';
+  const date = `${pad2(d.getUTCDate())}/${pad2(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
+  return `${date} ${formatUtcClock(iso)} UTC`;
 }
 
 /** `19H` ou `19H30` (UTC, 24 h). */

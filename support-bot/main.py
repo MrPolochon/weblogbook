@@ -427,30 +427,29 @@ class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
         custom_id="cal_desc",
     )
     debut = discord.ui.TextInput(
-        label="Début UTC (YYYY-MM-DD HH:MM)",
+        label="Début UTC",
         style=discord.TextStyle.short,
-        min_length=15,
-        max_length=20,
+        min_length=2,
+        max_length=32,
         required=True,
         custom_id="cal_start",
-        placeholder="2026-09-22 19:00",
+        placeholder="22/09/2026 19h",
     )
     fin = discord.ui.TextInput(
-        label="Fin UTC optionnelle (YYYY-MM-DD HH:MM)",
+        label="Fin UTC (optionnel)",
         style=discord.TextStyle.short,
-        max_length=20,
+        max_length=32,
         required=False,
         custom_id="cal_end",
-        placeholder="2026-09-22 21:00",
+        placeholder="22/09/2026 21h",
     )
-    announce = discord.ui.TextInput(
-        label="Annonce : non ou oui #salon @role",
+    lieu = discord.ui.TextInput(
+        label="Lieu",
         style=discord.TextStyle.short,
         max_length=120,
         required=False,
-        custom_id="cal_announce",
-        placeholder="oui #annonce @Pilotes",
-        default="non",
+        custom_id="cal_location",
+        placeholder="Tour de contrôle, LFPG…",
     )
 
     def __init__(self) -> None:
@@ -469,7 +468,7 @@ class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
                     "description": str(self.description.value or ""),
                     "start": str(self.debut.value),
                     "end": str(self.fin.value or ""),
-                    "announce": str(self.announce.value or "non"),
+                    "location": str(self.lieu.value or ""),
                 },
             )
         except Exception:
@@ -480,26 +479,90 @@ class CalendarModal(discord.ui.Modal, title="Nouvel événement"):
             await interaction.followup.send(data.get("error") or WEBSTAFF_HINT, ephemeral=True)
             return
         event = data.get("event") or {}
-        title = event.get("title") or self.titre.value
         event_id = str(event.get("id") or "").strip()
-        if data.get("pick_targets") and event_id:
+        message = data.get("message") or f"Événement créé : **{event.get('title') or self.titre.value}**."
+        if event_id:
             await interaction.followup.send(
-                "Choisis un salon Discord pour l'annonce.",
-                view=CalendarAnnounceView(event_id),
+                message,
+                view=CalendarChoiceView(event_id),
                 ephemeral=True,
             )
             return
-        await interaction.followup.send(f"Événement créé : **{title}**.", ephemeral=True)
+        await interaction.followup.send(message, ephemeral=True)
+
+
+class CalendarChoiceView(discord.ui.View):
+    """Après création : annoncer au début, ou pas."""
+
+    def __init__(self, event_id: str) -> None:
+        super().__init__(timeout=900)
+        self.event_id = event_id
+        want = discord.ui.Button(
+            label="Annoncer au début",
+            style=discord.ButtonStyle.primary,
+            custom_id=f"cal_want:{event_id}",
+        )
+        skip = discord.ui.Button(
+            label="Sans annonce",
+            style=discord.ButtonStyle.secondary,
+            custom_id=f"cal_skip:{event_id}",
+        )
+        want.callback = self._on_want
+        skip.callback = self._on_skip
+        self.add_item(want)
+        self.add_item(skip)
+
+    async def _choice(self, interaction: discord.Interaction, *, want: bool) -> dict:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        try:
+            status, data = await api_post(
+                "/api/support/bot/calendrier",
+                {
+                    "action": "choice",
+                    "discord_id": str(interaction.user.id),
+                    "event_id": self.event_id,
+                    "choice": "announce" if want else "skip",
+                },
+            )
+        except Exception:
+            log.exception("API /api/support/bot/calendrier choice a échoué")
+            await interaction.followup.send("Impossible d'enregistrer le choix (erreur serveur).", ephemeral=True)
+            return {}
+        if status >= 400:
+            await interaction.followup.send(data.get("error") or WEBSTAFF_HINT, ephemeral=True)
+            return {}
+        return data
+
+    async def _on_want(self, interaction: discord.Interaction) -> None:
+        data = await self._choice(interaction, want=True)
+        if not data:
+            return
+        message = data.get("message") or "L'annonce partira au début de l'événement, pas maintenant."
+        try:
+            await interaction.edit_original_response(content=message, view=CalendarAnnounceView(self.event_id))
+        except discord.HTTPException:
+            await interaction.followup.send(message, view=CalendarAnnounceView(self.event_id), ephemeral=True)
+
+    async def _on_skip(self, interaction: discord.Interaction) -> None:
+        data = await self._choice(interaction, want=False)
+        if not data:
+            return
+        message = data.get("message") or "Événement créé. Pas d'annonce Discord."
+        try:
+            await interaction.edit_original_response(content=message, view=None)
+        except discord.HTTPException:
+            await interaction.followup.send(message, ephemeral=True)
 
 
 class CalendarAnnounceView(discord.ui.View):
-    """Sélecteurs Discord (salon + rôle) — le bot ne lit pas un message de chat."""
+    """Sélecteurs Discord (salon + rôle) — l'annonce part au début, pas maintenant."""
 
     def __init__(self, event_id: str) -> None:
         super().__init__(timeout=900)
         self.event_id = event_id
         channel = discord.ui.ChannelSelect(
-            placeholder="Salon d'annonce",
+            placeholder="Salon d'annonce (au début, pas maintenant)",
             channel_types=[discord.ChannelType.text, discord.ChannelType.news],
             min_values=1,
             max_values=1,
@@ -551,16 +614,14 @@ class CalendarAnnounceView(discord.ui.View):
         data = await self._announce(interaction, channel_id=channel_id or None, role_id=None)
         if not data:
             return
-        event = data.get("event") or {}
-        title = event.get("title") or "événement"
-        announced = " Annonce Discord envoyée." if event.get("announced_at") else ""
+        message = data.get("message") or "Événement créé. Annonce Discord au début, pas maintenant."
         try:
             await interaction.edit_original_response(
-                content=f"Événement créé : **{title}**.{announced}",
-                view=None,
+                content=message,
+                view=CalendarAnnounceRoleView(self.event_id),
             )
         except discord.HTTPException:
-            await interaction.followup.send(f"Événement créé : **{title}**.{announced}", ephemeral=True)
+            await interaction.followup.send(message, ephemeral=True)
 
     async def _on_role(self, interaction: discord.Interaction) -> None:
         role_id = self._selected_id(interaction)
@@ -568,13 +629,74 @@ class CalendarAnnounceView(discord.ui.View):
         if not data:
             return
         event = data.get("event") or {}
-        if event.get("announced_at"):
+        if event.get("announce_sent_at"):
             await interaction.followup.send("Rôle enregistré. L'annonce a déjà été envoyée.", ephemeral=True)
             return
+        if event.get("announce_channel_id"):
+            await interaction.followup.send(
+                "Rôle enregistré. L'annonce partira au début de l'événement, pas maintenant.",
+                ephemeral=True,
+            )
+            return
         await interaction.followup.send(
-            "Rôle enregistré. Choisis encore un salon pour envoyer l'annonce.",
+            "Rôle enregistré. Choisis encore un salon pour l'annonce au début.",
             ephemeral=True,
         )
+
+
+class CalendarAnnounceRoleView(discord.ui.View):
+    """Rôle optionnel après le salon."""
+
+    def __init__(self, event_id: str) -> None:
+        super().__init__(timeout=900)
+        self.event_id = event_id
+        role = discord.ui.RoleSelect(
+            placeholder="Rôle à ping (optionnel)",
+            min_values=0,
+            max_values=1,
+            custom_id=f"cal_role:{event_id}",
+        )
+        role.callback = self._on_role
+        self.add_item(role)
+
+    def _selected_id(self, interaction: discord.Interaction) -> str:
+        data = interaction.data
+        values = data.get("values") if isinstance(data, dict) else None
+        if values:
+            return str(values[0])
+        return ""
+
+    async def _on_role(self, interaction: discord.Interaction) -> None:
+        role_id = self._selected_id(interaction)
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        try:
+            status, data = await api_post(
+                "/api/support/bot/calendrier",
+                {
+                    "action": "announce",
+                    "discord_id": str(interaction.user.id),
+                    "event_id": self.event_id,
+                    "role_id": role_id or None,
+                },
+            )
+        except Exception:
+            log.exception("API /api/support/bot/calendrier role a échoué")
+            await interaction.followup.send("Impossible d'enregistrer le rôle (erreur serveur).", ephemeral=True)
+            return
+        if status >= 400:
+            await interaction.followup.send(data.get("error") or WEBSTAFF_HINT, ephemeral=True)
+            return
+        event = data.get("event") or {}
+        if event.get("announce_sent_at"):
+            msg = "Rôle enregistré. L'annonce a déjà été envoyée."
+        else:
+            msg = "Rôle enregistré. L'annonce partira au début de l'événement, pas maintenant."
+        try:
+            await interaction.edit_original_response(view=None)
+        except discord.HTTPException:
+            pass
+        await interaction.followup.send(msg, ephemeral=True)
 
 
 async def handle_calendrier(interaction: discord.Interaction) -> None:

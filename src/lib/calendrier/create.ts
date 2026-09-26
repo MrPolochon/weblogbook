@@ -1,13 +1,9 @@
 import { createAdminClient } from '@/lib/supabase/admin';
-import { announceCalendarEvent } from '@/lib/calendrier/announce';
-import { parseAnnounceField } from '@/lib/calendrier/discord-parse';
-import { listDiscordCalendarTargets } from '@/lib/calendrier/discord-targets';
 import { findSiteAdminByDiscordId } from '@/lib/calendrier/staff';
 import { parseUtcDateTime } from '@/lib/calendrier/time';
-import type { CalendarEvent, CalendarEventInput } from '@/lib/calendrier/types';
+import { CALENDAR_EVENT_SELECT, type CalendarEvent, type CalendarEventInput } from '@/lib/calendrier/types';
 
-const SELECT =
-  'id, title, description, location, starts_at, ends_at, announce_discord, announce_channel_id, announce_role_id, announced_at, created_by, created_via, created_at';
+const DATE_HINT = 'Ex. : 22/09/2026 19h, 22/09 19h, 19h';
 
 export function sanitizeCalendarInput(
   body: CalendarEventInput,
@@ -36,7 +32,7 @@ export function sanitizeCalendarInput(
       ends_at: endsAt,
       announce_discord: announce,
       announce_channel_id: channelId,
-      announce_role_id: String(body.announce_role_id || '').trim() || null,
+      announce_role_id: announce ? String(body.announce_role_id || '').trim() || null : null,
     },
   };
 }
@@ -54,31 +50,14 @@ export async function persistCalendarEvent(opts: {
       created_by: opts.createdBy,
       created_via: opts.createdVia,
     })
-    .select(SELECT)
+    .select(CALENDAR_EVENT_SELECT)
     .single();
   if (error || !data) return { ok: false, error: error?.message || 'Création impossible' };
-
-  const event = data as CalendarEvent;
-  if (event.announce_discord && !event.announced_at) {
-    try {
-      const msgId = await announceCalendarEvent(event);
-      if (msgId) {
-        const now = new Date().toISOString();
-        await admin
-          .from('site_calendar_events')
-          .update({ announced_at: now, announce_message_id: msgId, updated_at: now })
-          .eq('id', event.id);
-        event.announced_at = now;
-      }
-    } catch (e) {
-      console.error('[calendrier] announce', e);
-    }
-  }
-  return { ok: true, event };
+  return { ok: true, event: data as CalendarEvent };
 }
 
 export type DiscordCalendarCreateResult =
-  | { ok: true; event: CalendarEvent; pickTargets?: boolean }
+  | { ok: true; event: CalendarEvent; pickChoice?: boolean }
   | { ok: false; error: string; status: number };
 
 export async function createCalendarEventFromDiscord(opts: {
@@ -87,7 +66,7 @@ export async function createCalendarEventFromDiscord(opts: {
   description: string;
   startRaw: string;
   endRaw: string;
-  announceRaw: string;
+  location?: string;
 }): Promise<DiscordCalendarCreateResult> {
   const staff = await findSiteAdminByDiscordId(opts.discordId);
   if (!staff) {
@@ -96,26 +75,23 @@ export async function createCalendarEventFromDiscord(opts: {
 
   const startsAt = parseUtcDateTime(opts.startRaw);
   if (!startsAt) {
-    return { ok: false, error: 'Début UTC invalide. Format : YYYY-MM-DD HH:MM', status: 400 };
+    return { ok: false, error: `Début UTC invalide. ${DATE_HINT}`, status: 400 };
   }
   const endTrim = String(opts.endRaw || '').trim();
   const endsAt = endTrim ? parseUtcDateTime(endTrim) : null;
   if (endTrim && !endsAt) {
-    return { ok: false, error: 'Fin UTC invalide. Format : YYYY-MM-DD HH:MM', status: 400 };
+    return { ok: false, error: `Fin UTC invalide. ${DATE_HINT}`, status: 400 };
   }
-
-  const targets = await listDiscordCalendarTargets();
-  const announce = parseAnnounceField(opts.announceRaw, targets.channels, targets.roles);
-  const needsChannelPick = announce.announce && !announce.channelId;
 
   const parsed = sanitizeCalendarInput({
     title: opts.title,
     description: opts.description,
+    location: opts.location || null,
     starts_at: startsAt,
     ends_at: endsAt,
-    announce_discord: announce.announce && !needsChannelPick,
-    announce_channel_id: announce.channelId,
-    announce_role_id: announce.roleId,
+    announce_discord: false,
+    announce_channel_id: null,
+    announce_role_id: null,
   });
   if (!parsed.ok) return { ok: false, error: parsed.error, status: 400 };
 
@@ -125,14 +101,12 @@ export async function createCalendarEventFromDiscord(opts: {
     createdVia: 'discord',
   });
   if (!saved.ok) return { ok: false, error: saved.error, status: 500 };
-  return { ok: true, event: saved.event, pickTargets: needsChannelPick || undefined };
+  return { ok: true, event: saved.event, pickChoice: true };
 }
 
-export async function attachCalendarAnnounceFromDiscord(opts: {
+async function loadOwnedCalendarEvent(opts: {
   discordId: string;
   eventId: string;
-  channelId?: string | null;
-  roleId?: string | null;
 }): Promise<DiscordCalendarCreateResult> {
   const staff = await findSiteAdminByDiscordId(opts.discordId);
   if (!staff) {
@@ -143,12 +117,30 @@ export async function attachCalendarAnnounceFromDiscord(opts: {
   if (!eventId) return { ok: false, error: 'Événement introuvable.', status: 404 };
 
   const admin = createAdminClient();
-  const { data: existing } = await admin.from('site_calendar_events').select(SELECT).eq('id', eventId).maybeSingle();
+  const { data: existing } = await admin.from('site_calendar_events').select(CALENDAR_EVENT_SELECT).eq('id', eventId).maybeSingle();
   if (!existing) return { ok: false, error: 'Événement introuvable.', status: 404 };
   const current = existing as CalendarEvent;
   if (current.created_by && current.created_by !== staff.id) {
     return { ok: false, error: 'Cet événement ne t’appartient pas.', status: 403 };
   }
+  return { ok: true, event: current };
+}
+
+export async function loadCalendarEventFromDiscord(opts: {
+  discordId: string;
+  eventId: string;
+}): Promise<DiscordCalendarCreateResult> {
+  return loadOwnedCalendarEvent(opts);
+}
+
+export async function attachCalendarAnnounceFromDiscord(opts: {
+  discordId: string;
+  eventId: string;
+  channelId?: string | null;
+  roleId?: string | null;
+}): Promise<DiscordCalendarCreateResult> {
+  const loaded = await loadOwnedCalendarEvent(opts);
+  if (!loaded.ok) return loaded;
 
   const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
   if (opts.channelId) {
@@ -159,29 +151,13 @@ export async function attachCalendarAnnounceFromDiscord(opts: {
     patch.announce_role_id = opts.roleId ? String(opts.roleId) : null;
   }
 
+  const admin = createAdminClient();
   const { data, error } = await admin
     .from('site_calendar_events')
     .update(patch)
-    .eq('id', eventId)
-    .select(SELECT)
+    .eq('id', loaded.event.id)
+    .select(CALENDAR_EVENT_SELECT)
     .maybeSingle();
   if (error || !data) return { ok: false, error: error?.message || 'Mise à jour impossible', status: 500 };
-
-  const event = data as CalendarEvent;
-  if (event.announce_discord && !event.announced_at && event.announce_channel_id) {
-    try {
-      const msgId = await announceCalendarEvent(event);
-      if (msgId) {
-        const now = new Date().toISOString();
-        await admin
-          .from('site_calendar_events')
-          .update({ announced_at: now, announce_message_id: msgId, updated_at: now })
-          .eq('id', event.id);
-        event.announced_at = now;
-      }
-    } catch (e) {
-      console.error('[calendrier] announce', e);
-    }
-  }
-  return { ok: true, event };
+  return { ok: true, event: data as CalendarEvent };
 }

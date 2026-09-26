@@ -357,7 +357,7 @@ export default function SiteCalendar({
                     {e.announce_discord && canEdit && (
                       <p className={`text-xs mt-2 flex items-center gap-1 ${muted}`}>
                         <Megaphone className="h-3 w-3" />
-                        Annonce Discord {e.announced_at ? 'envoyée' : 'prévue'}
+                        Annonce Discord {e.announce_sent_at ? 'envoyée' : 'prévue au début'}
                       </p>
                     )}
                   </div>
@@ -407,8 +407,13 @@ export default function SiteCalendar({
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.announce_discord} onChange={(e) => setForm({ ...form, announce_discord: e.target.checked })} />
-              Avertir via une annonce Discord
+              Annonce Discord au début de l’événement
             </label>
+            {form.announce_discord && (
+              <p className="text-xs text-slate-400 -mt-1">
+                Envoyée à l’heure de début UTC, pas à l’enregistrement.
+              </p>
+            )}
             {form.announce_discord && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <label className="text-xs text-slate-400">Salon
