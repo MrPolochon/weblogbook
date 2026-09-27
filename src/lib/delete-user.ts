@@ -24,6 +24,42 @@ async function purgeUserStorageFolder(
   }
 }
 
+/**
+ * incidents_vol.signale_par_id est NOT NULL et sans ON DELETE : un ATC qui a
+ * signalé un crash ne peut pas être supprimé. L'identifiant est déjà copié
+ * dans signale_par_identifiant, on détache donc le compte.
+ * Tant que la migration n'a pas rendu la colonne nullable, on supprime ces
+ * incidents (et on débloque l'avion lié) pour que la suppression aboutisse.
+ */
+export async function detachIncidentsSignalesPar(
+  admin: ReturnType<typeof createAdminClient>,
+  userId: string
+): Promise<void> {
+  const { error } = await admin
+    .from('incidents_vol')
+    .update({ signale_par_id: null })
+    .eq('signale_par_id', userId);
+
+  if (!error) return;
+
+  console.error('[delete-user] détachement incidents_vol.signale_par_id impossible, suppression des incidents :', error);
+
+  const { data: incidents } = await admin
+    .from('incidents_vol')
+    .select('id')
+    .eq('signale_par_id', userId);
+
+  const ids = (incidents ?? []).map((row) => row.id).filter(Boolean);
+  if (ids.length === 0) return;
+
+  await admin
+    .from('compagnie_avions')
+    .update({ bloque_incident: false, incident_id: null })
+    .in('incident_id', ids);
+
+  await admin.from('incidents_vol').delete().in('id', ids);
+}
+
 export async function deleteUserAccount(userId: string) {
   const admin = createAdminClient();
 
@@ -125,6 +161,8 @@ export async function deleteUserAccount(userId: string) {
   // (photos de carte d'identite, eventuels logos uploades pour son compte).
   // Le dossier `cartes-identite/<userId>/` regroupe ses uploads personnels.
   await purgeUserStorageFolder(admin, 'cartes-identite', userId);
+
+  await detachIncidentsSignalesPar(admin, userId);
 
   await admin.from('profiles').delete().eq('id', userId);
   await admin.auth.admin.deleteUser(userId);

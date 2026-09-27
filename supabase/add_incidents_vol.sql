@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS incidents_vol (
   compagnie_id UUID REFERENCES compagnies(id) ON DELETE SET NULL,
 
   -- ATC qui signale
-  signale_par_id UUID NOT NULL REFERENCES profiles(id),
+  signale_par_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   signale_par_identifiant TEXT,
   position_atc TEXT, -- Position ATC au moment du signalement
 

@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { identifiantToEmail } from '@/lib/constants';
+import { detachIncidentsSignalesPar } from '@/lib/delete-user';
 
 export async function PATCH(
   request: Request,
@@ -363,6 +364,9 @@ export async function DELETE(
 
     // Rapports MEDEVAC rédigés par ce compte (FK created_by → profiles sans CASCADE)
     await admin.from('siavi_rapports_medevac').delete().eq('created_by', id);
+
+    // incidents_vol.signale_par_id est NOT NULL sans ON DELETE
+    await detachIncidentsSignalesPar(admin, id);
 
     // Supprimer le profil puis l'utilisateur Auth (ordre important : le profil référence auth)
     const { error: delProfileErr } = await admin.from('profiles').delete().eq('id', id);
