@@ -25,16 +25,20 @@ import {
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import {
+  APPROACH_TYPES,
   RUNWAY_CONDITIONS,
   atisKindForPosition,
   buildAtisPatchBody,
-  defaultTmaDraft,
   firDisplayName,
   firOf,
   isAtisDraftReady,
+  mergeTmaDraft,
+  runwaysOf,
+  tmaAirportsFor,
   tmaIntroPreview,
   type AtisEntitlement,
   type AtisKind,
+  type TmaAirportCatalog,
   type TmaAirportDraft,
 } from '@/lib/atis-priority';
 import { ATC_NAV_BTN, atcNavIdle, atcNavOpen } from '@/lib/atc-ui';
@@ -164,36 +168,16 @@ function atisFingerprint(data: AtisData | null, tma: TmaAirportDraft[], kind: At
             included: a.included,
             runways: a.runways,
             condition: a.condition,
+            approach: a.approach ?? '',
           }))
         : [],
   });
 }
 
-function applyPendingEdits(
-  data: AtisData | null,
-  editing: string | null,
-  editValues: Record<string, string>
-): AtisData {
-  const next: AtisData = { ...(data ?? {}) };
-  if (editing === 'runway') {
-    next.runway = editValues.runway || undefined;
-    next.expected_approach = editValues.expected_approach || undefined;
-    next.expected_runway = editValues.expected_runway || undefined;
-    next.runway_condition = editValues.runway_condition || undefined;
-  }
-  if (editing === 'weather') {
-    next.wind = editValues.wind || undefined;
-    next.visibility = editValues.visibility || undefined;
-    next.sky_condition = editValues.sky_condition || undefined;
-    next.temperature = editValues.temperature || undefined;
-    next.dewpoint = editValues.dewpoint || undefined;
-  }
-  if (editing === 'qnh') {
-    next.qnh = editValues.qnh || undefined;
-    next.transition_level = editValues.transition_level || undefined;
-  }
-  if (editing === 'remarks') next.remarks = editValues.remarks || undefined;
-  return next;
+function toggleToken(current: string, token: string): string {
+  const parts = current.split(/[\s,/]+/).filter(Boolean);
+  const next = parts.includes(token) ? parts.filter((p) => p !== token) : [...parts, token];
+  return next.join(' ');
 }
 
 export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisButtonProps) {
@@ -213,7 +197,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     const place = () => {
       const r = triggerRef.current?.getBoundingClientRect();
       if (!r) return;
-      const width = Math.min(480, window.innerWidth - 16);
+          const width = Math.min(520, window.innerWidth - 16);
       setAnchor({
         left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
         top: r.bottom + 6,
@@ -235,8 +219,6 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   // Donnees ATIS detaillees (uniquement chargees onglet "data")
   const [atisData, setAtisData] = useState<AtisData | null>(null);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [editValues, setEditValues] = useState<Record<string, string>>({});
 
   // Configuration Discord (par instance)
   const [configInstanceId, setConfigInstanceId] = useState<number>(1);
@@ -249,7 +231,6 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   // Demarrage : choix du bot cible (auto par defaut)
   const [startTargetInstance, setStartTargetInstance] = useState<number | 'auto'>('auto');
   const [tmaDraft, setTmaDraft] = useState<TmaAirportDraft[]>([]);
-  const tmaInitRef = useRef(false);
   const [draftHydrated, setDraftHydrated] = useState(false);
   const [publishedKey, setPublishedKey] = useState<string | null>(null);
   const snapshotInitRef = useRef(false);
@@ -278,10 +259,8 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const priority = overview?.priority ?? null;
   const canConfigure = priority?.can_configure ?? true;
   const myFir = priority?.fir ?? firOf(aeroportCode);
-  const localRunways = useMemo(
-    () => priority?.tma_airports?.find((a) => a.icao === aeroportCode)?.runways ?? [],
-    [priority?.tma_airports, aeroportCode]
-  );
+  const tmaCatalog = useMemo(() => tmaAirportsFor(aeroportCode, myFir), [aeroportCode, myFir]);
+  const localRunways = useMemo(() => runwaysOf(aeroportCode), [aeroportCode]);
   /** Bots en conflit réel pour CE type d'ATIS (aéroport et TMA peuvent coexister). */
   const liveBotsOnThisAirport = useMemo(() => {
     return instances.filter((i) => {
@@ -323,9 +302,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     [atisData, tmaDraft, atisKind]
   );
   const atisDirty = Boolean(
-    broadcasting &&
-      myInstance?.is_mine &&
-      (editing !== null || (publishedKey !== null && draftFingerprint !== publishedKey))
+    broadcasting && myInstance?.is_mine && publishedKey !== null && draftFingerprint !== publishedKey
   );
   const canStart =
     !broadcasting &&
@@ -387,10 +364,28 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       const res = await fetch('/api/atc/atis/atis-data');
       const data = await res.json();
       if (res.ok && !data?.error) {
+        let nextTma = tmaDraft;
+        if (Array.isArray(data.tma_airports) && data.tma_airports.length) {
+          const hasLocalRunways = tmaDraft.some((a) => a.included && a.runways.trim());
+          if (!hasLocalRunways) {
+            const fromBot: TmaAirportDraft[] = data.tma_airports.map(
+              (a: { icao?: string; name?: string; runways?: string; condition?: string; approach?: string }) => ({
+                icao: String(a.icao ?? '').toUpperCase(),
+                nom: String(a.name ?? a.icao ?? ''),
+                included: true,
+                runways: String(a.runways ?? ''),
+                condition: String(a.condition ?? 'dry'),
+                approach: String(a.approach ?? ''),
+              })
+            );
+            nextTma = mergeTmaDraft(fromBot, tmaCatalog, true);
+            setTmaDraft(nextTma);
+          }
+        }
         setAtisData(data);
         if (!snapshotInitRef.current) {
           snapshotInitRef.current = true;
-          setPublishedKey(atisFingerprint(data, tmaDraft, atisKind));
+          setPublishedKey(atisFingerprint(data, nextTma, atisKind));
         }
         return data as AtisData;
       }
@@ -398,7 +393,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
       /* ignore */
     }
     return null;
-  }, [tmaDraft, atisKind]);
+  }, [tmaDraft, tmaCatalog, atisKind]);
 
   // ---------------------------------------------------------------------------
   // Polling
@@ -433,8 +428,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         const parsed = JSON.parse(raw) as { atis?: AtisData; tma?: TmaAirportDraft[] };
         if (parsed.atis) setAtisData((prev) => ({ ...prev, ...parsed.atis }));
         if (parsed.tma?.length) {
-          setTmaDraft(parsed.tma);
-          tmaInitRef.current = true;
+          setTmaDraft(
+            parsed.tma.map((a) => ({
+              ...a,
+              condition: a.condition || 'dry',
+              approach: a.approach ?? '',
+            }))
+          );
         }
       }
     } catch {
@@ -444,11 +444,12 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   }, [userId, aeroportCode, position]);
 
   useEffect(() => {
-    if (!tmaInitRef.current && draftHydrated && priority?.tma_airports?.length) {
-      setTmaDraft(defaultTmaDraft(aeroportCode, priority.tma_airports));
-      tmaInitRef.current = true;
-    }
-  }, [priority?.tma_airports, aeroportCode, draftHydrated]);
+    if (!draftHydrated) return;
+    setTmaDraft((prev) => {
+      const next = mergeTmaDraft(prev, tmaCatalog);
+      return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+    });
+  }, [draftHydrated, tmaCatalog]);
 
   useEffect(() => {
     if (!draftHydrated) return;
@@ -549,26 +550,15 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     setAtisData((prev) => ({ ...prev, ...updates, ...data?.data }));
   };
 
-  const handlePatch = async (updates: Record<string, unknown>) => {
+  const updateDraft = (updates: Partial<AtisData>) => {
     setAtisData((prev) => ({ ...prev, ...updates }));
-    setEditing(null);
-    if (broadcasting && myInstance?.is_mine) return;
-    try {
-      await pushLivePatch(updates);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
-    }
   };
 
   const handleApplyAtis = async () => {
     if (actionLoading || !broadcasting || !myInstance?.is_mine) return;
     setActionLoading(true);
     try {
-      const pending = applyPendingEdits(atisData, editing, editValues);
-      if (editing) {
-        setAtisData(pending);
-        setEditing(null);
-      }
+      const pending: AtisData = { ...(atisData ?? {}) };
       const payload = buildAtisPatchBody({
         aeroport: aeroportCode,
         kind: atisKind,
@@ -646,38 +636,6 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     } finally {
       setSavingConfig(false);
     }
-  };
-
-  const startEdit = (field: string, values: Record<string, string>) => {
-    setEditing(field);
-    setEditValues(values);
-  };
-
-  const saveEdit = () => {
-    if (editing === 'runway') {
-      handlePatch({
-        runway: editValues.runway || undefined,
-        expected_approach: editValues.expected_approach || undefined,
-        expected_runway: editValues.expected_runway || undefined,
-        runway_condition: editValues.runway_condition || undefined,
-      });
-    }
-    if (editing === 'weather') {
-      handlePatch({
-        wind: editValues.wind || undefined,
-        visibility: editValues.visibility || undefined,
-        sky_condition: editValues.sky_condition || undefined,
-        temperature: editValues.temperature || undefined,
-        dewpoint: editValues.dewpoint || undefined,
-      });
-    }
-    if (editing === 'qnh') {
-      handlePatch({
-        qnh: editValues.qnh || undefined,
-        transition_level: editValues.transition_level || undefined,
-      });
-    }
-    if (editing === 'remarks') handlePatch({ remarks: editValues.remarks || undefined });
   };
 
   // ---------------------------------------------------------------------------
@@ -835,7 +793,6 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   // Panneau ouvert
   // ---------------------------------------------------------------------------
   const d = atisData;
-  const val = (v: string | null | undefined) => v ?? '—';
 
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
     { id: 'config', label: 'Bots', icon: <Settings2 className="h-4 w-4" /> },
@@ -896,7 +853,6 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
             onClick={() => {
               setIsOpen(false);
               setError(null);
-              setEditing(null);
             }}
             className={`p-1.5 rounded-lg ${isDark ? 'text-slate-400 hover:bg-slate-800 hover:text-slate-100' : 'hover:bg-slate-600 text-slate-200'}`}
           >
@@ -1240,12 +1196,11 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
             <div className={`rounded-lg px-3 py-2 text-xs ${cardCl}`}>
               {atisKind === 'tma' ? (
                 <p>
-                  <span className="font-semibold">ATIS TMA</span> — les pistes des terrains de la{' '}
-                  {firDisplayName(myFir) || 'FIR'} sont lues dans l&apos;intro. Le reste du message (vent, QNH, remarques) ne change pas.
+                  <span className="font-semibold">ATIS TMA</span> — cochez les terrains réellement desservis, saisissez leurs pistes, puis la météo TMA (un bulletin pour toute la TMA).
                 </p>
               ) : (
                 <p>
-                  <span className="font-semibold">ATIS aéroport</span> — préparez pistes et météo avant de diffuser. Un seul contrôleur par terrain (TWR {'>'} Sol {'>'} DEL).
+                  <span className="font-semibold">ATIS aéroport</span> — tous les champs ci-dessous sont éditables. Un seul contrôleur par terrain (TWR {'>'} Sol {'>'} DEL).
                 </p>
               )}
             </div>
@@ -1298,14 +1253,14 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                   if (atisKind === 'tma') {
                     return `${firDisplayName(myFir) || code} TMA`;
                   }
-                  return apt ? `${apt.code} — ${apt.nom}` : (code || val(d?.airport_name || d?.airport) || '—');
+                  return apt ? `${apt.code} — ${apt.nom}` : (code || d?.airport_name || d?.airport || '—');
                 })()}
               </Row>
 
               {atisKind === 'tma' && (
                 <TmaAirportsEditor
                   airports={tmaDraft}
-                  catalog={priority?.tma_airports ?? []}
+                  catalog={tmaCatalog}
                   primaryIcao={aeroportCode}
                   canEdit={canEditAtis}
                   isDark={isDark}
@@ -1322,7 +1277,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 />
               )}
 
-              <Row label="Code" textMuted={textMuted} textValue={textValue}>
+              <Field label="Code information" textMuted={textMuted}>
                 <div className="flex items-center gap-2">
                   <select
                     value={d?.information_code || 'A'}
@@ -1336,6 +1291,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                   </select>
                   {canEditAtis && (
                     <button
+                      type="button"
                       onClick={handleToggleAutoRotate}
                       title={atisCodeAutoRotate ? 'Mode auto activé' : 'Activer la rotation auto'}
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium ${
@@ -1351,145 +1307,150 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                     </button>
                   )}
                 </div>
-              </Row>
+              </Field>
 
               {atisKind !== 'tma' && (
-              <EditableRow
-                label="Piste"
-                editing={editing === 'runway'}
-                onEdit={() =>
-                  startEdit('runway', {
-                    runway: d?.runway ?? '',
-                    expected_approach: d?.expected_approach ?? '',
-                    expected_runway: d?.expected_runway ?? '',
-                    runway_condition: d?.runway_condition ?? '',
-                  })
-                }
-                onCancel={() => setEditing(null)}
-                onSave={saveEdit}
-                inputCl={inputCl}
-                btnCl={btnCl}
-                isDark={isDark}
-                textMuted={textMuted}
-                textValue={textValue}
-                canEdit={canEditAtis}
-                display={`${val(d?.runway)} | ${val(d?.expected_approach)} ${
-                  d?.expected_runway ? `RWY ${d.expected_runway}` : ''
-                } (${val(d?.runway_condition)})`}
-              >
-                {localRunways.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {localRunways.map((rwy) => {
-                      const selected = (editValues.runway ?? '').split(/[\s,/]+/).filter(Boolean).includes(rwy);
-                      return (
-                        <button
-                          key={rwy}
-                          type="button"
-                          onClick={() => {
-                            const parts = (editValues.runway ?? '').split(/[\s,/]+/).filter(Boolean);
-                            const next = parts.includes(rwy) ? parts.filter((p) => p !== rwy) : [...parts, rwy];
-                            setEditValues((v) => ({ ...v, runway: next.join(' ') }));
-                          }}
-                          className={`px-2 py-1 rounded-md text-xs font-semibold ${
-                            selected ? 'bg-sky-600 text-white' : isDark ? 'bg-slate-800 border border-slate-700 text-slate-200' : 'bg-slate-600 text-white'
-                          }`}
-                        >
-                          {rwy}
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="ex: 25L 25R" value={editValues.runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, runway: e.target.value }))} />
-                <select
-                  className={`px-3 py-2 rounded-lg border ${inputCl}`}
-                  value={editValues.runway_condition ?? 'dry'}
-                  onChange={(e) => setEditValues((v) => ({ ...v, runway_condition: e.target.value }))}
-                >
-                  {RUNWAY_CONDITIONS.map((c) => (
-                    <option key={c.id} value={c.id}>{c.fr} ({c.en})</option>
-                  ))}
-                </select>
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Approche prévue (anglais, ex: ILS)" value={editValues.expected_approach ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, expected_approach: e.target.value }))} />
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Piste prévue (anglais, ex: 25)" value={editValues.expected_runway ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, expected_runway: e.target.value }))} />
-              </EditableRow>
-              )}
-
-              <EditableRow
-                label="Vent"
-                editing={editing === 'weather'}
-                onEdit={() =>
-                  startEdit('weather', {
-                    wind: d?.wind ?? '',
-                    visibility: d?.visibility ?? '',
-                    sky_condition: d?.sky_condition ?? '',
-                    temperature: d?.temperature ?? '',
-                    dewpoint: d?.dewpoint ?? '',
-                  })
-                }
-                onCancel={() => setEditing(null)}
-                onSave={saveEdit}
-                inputCl={inputCl}
-                btnCl={btnCl}
-                isDark={isDark}
-                textMuted={textMuted}
-                textValue={textValue}
-                canEdit={canEditAtis}
-                display={val(d?.wind)}
-              >
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Vent" value={editValues.wind ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, wind: e.target.value }))} />
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Visibilité" value={editValues.visibility ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, visibility: e.target.value }))} />
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} placeholder="Ciel" value={editValues.sky_condition ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, sky_condition: e.target.value }))} />
-                <div className="flex gap-2">
-                  <input className={`px-3 py-2 rounded-lg border w-20 ${inputCl}`} placeholder="Temp" value={editValues.temperature ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, temperature: e.target.value }))} />
-                  <input className={`px-3 py-2 rounded-lg border w-20 ${inputCl}`} placeholder="Rosée" value={editValues.dewpoint ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, dewpoint: e.target.value }))} />
-                </div>
-              </EditableRow>
-
-              {!editing && (
                 <>
-                  <Row label="Visibilité" textMuted={textMuted} textValue={textValue}>{val(d?.visibility)}</Row>
-                  <Row label="Ciel" textMuted={textMuted} textValue={textValue}>{val(d?.sky_condition)}</Row>
-                  <Row label="Temp/Rosée" textMuted={textMuted} textValue={textValue}>
-                    {val(d?.temperature)}°C / {val(d?.dewpoint)}°C
-                  </Row>
+                  <Field label="Pistes en service" textMuted={textMuted}>
+                    {localRunways.length > 0 && (
+                      <ChipRow
+                        options={localRunways}
+                        selected={d?.runway ?? ''}
+                        disabled={!canEditAtis}
+                        isDark={isDark}
+                        onToggle={(rwy) => updateDraft({ runway: toggleToken(d?.runway ?? '', rwy) })}
+                      />
+                    )}
+                    <input
+                      className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                      placeholder="ex: 25L 25R"
+                      disabled={!canEditAtis}
+                      value={d?.runway ?? ''}
+                      onChange={(e) => updateDraft({ runway: e.target.value })}
+                    />
+                  </Field>
+                  <Field label="État des pistes" textMuted={textMuted}>
+                    <select
+                      className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                      disabled={!canEditAtis}
+                      value={d?.runway_condition ?? 'dry'}
+                      onChange={(e) => updateDraft({ runway_condition: e.target.value })}
+                    >
+                      {RUNWAY_CONDITIONS.map((c) => (
+                        <option key={c.id} value={c.id}>{c.fr} ({c.en})</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Piste prévue" textMuted={textMuted}>
+                    <input
+                      className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                      placeholder="ex: 25L"
+                      disabled={!canEditAtis}
+                      value={d?.expected_runway ?? ''}
+                      onChange={(e) => updateDraft({ expected_runway: e.target.value })}
+                    />
+                  </Field>
                 </>
               )}
 
-              <EditableRow
-                label="QNH"
-                editing={editing === 'qnh'}
-                onEdit={() => startEdit('qnh', { qnh: d?.qnh ?? '', transition_level: d?.transition_level ?? '' })}
-                onCancel={() => setEditing(null)}
-                onSave={saveEdit}
-                inputCl={inputCl}
-                btnCl={btnCl}
-                isDark={isDark}
-                textMuted={textMuted}
-                textValue={textValue}
-                canEdit={canEditAtis}
-                display={`${val(d?.qnh)} | TL ${val(d?.transition_level)}`}
-              >
-                <input className={`px-3 py-2 rounded-lg border w-24 ${inputCl}`} value={editValues.qnh ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, qnh: e.target.value }))} placeholder="1013" />
-                <input className={`px-3 py-2 rounded-lg border ${inputCl}`} value={editValues.transition_level ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, transition_level: e.target.value }))} placeholder="TL (ex: 100 ou FL100)" />
-              </EditableRow>
+              <Field label="Approche prévue" textMuted={textMuted}>
+                <ChipRow
+                  options={[...APPROACH_TYPES]}
+                  selected={d?.expected_approach ?? ''}
+                  disabled={!canEditAtis}
+                  isDark={isDark}
+                  exclusive
+                  onToggle={(type) =>
+                    updateDraft({
+                      expected_approach: (d?.expected_approach ?? '') === type ? '' : type,
+                    })
+                  }
+                />
+                <input
+                  className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                  placeholder="ex: ILS"
+                  disabled={!canEditAtis}
+                  value={d?.expected_approach ?? ''}
+                  onChange={(e) => updateDraft({ expected_approach: e.target.value })}
+                />
+              </Field>
 
-              <EditableRow
-                label="Remarques"
-                editing={editing === 'remarks'}
-                onEdit={() => startEdit('remarks', { remarks: d?.remarks ?? '' })}
-                onCancel={() => setEditing(null)}
-                onSave={saveEdit}
-                inputCl={inputCl}
-                btnCl={btnCl}
-                isDark={isDark}
-                textMuted={textMuted}
-                textValue={textValue}
-                canEdit={canEditAtis}
-                display={val(d?.remarks)}
-              >
-                <textarea className={`px-3 py-2 rounded-lg border w-full min-h-14 ${inputCl}`} value={editValues.remarks ?? ''} onChange={(e) => setEditValues((v) => ({ ...v, remarks: e.target.value }))} placeholder="Remarques" />
-              </EditableRow>
+              <Field label="Vent" textMuted={textMuted}>
+                <input
+                  className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                  placeholder="ex: 220/12KT"
+                  disabled={!canEditAtis}
+                  value={d?.wind ?? ''}
+                  onChange={(e) => updateDraft({ wind: e.target.value })}
+                />
+              </Field>
+              <Field label="Visibilité" textMuted={textMuted}>
+                <input
+                  className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                  placeholder="ex: 10KM ou 9999"
+                  disabled={!canEditAtis || Boolean(d?.cavok)}
+                  value={d?.cavok ? 'CAVOK' : (d?.visibility ?? '')}
+                  onChange={(e) => updateDraft({ visibility: e.target.value })}
+                />
+              </Field>
+              <Field label="Ciel" textMuted={textMuted}>
+                <input
+                  className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                  placeholder="ex: FEW020 SCT040"
+                  disabled={!canEditAtis || Boolean(d?.cavok)}
+                  value={d?.cavok ? 'CAVOK' : (d?.sky_condition ?? '')}
+                  onChange={(e) => updateDraft({ sky_condition: e.target.value })}
+                />
+              </Field>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Température" textMuted={textMuted}>
+                  <input
+                    className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                    placeholder="°C"
+                    disabled={!canEditAtis}
+                    value={d?.temperature ?? ''}
+                    onChange={(e) => updateDraft({ temperature: e.target.value })}
+                  />
+                </Field>
+                <Field label="Point de rosée" textMuted={textMuted}>
+                  <input
+                    className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                    placeholder="°C"
+                    disabled={!canEditAtis}
+                    value={d?.dewpoint ?? ''}
+                    onChange={(e) => updateDraft({ dewpoint: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="QNH" textMuted={textMuted}>
+                  <input
+                    className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                    placeholder="1013"
+                    disabled={!canEditAtis}
+                    value={d?.qnh ?? ''}
+                    onChange={(e) => updateDraft({ qnh: e.target.value })}
+                  />
+                </Field>
+                <Field label="Niveau de transition" textMuted={textMuted}>
+                  <input
+                    className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
+                    placeholder="ex: 100 ou FL100"
+                    disabled={!canEditAtis}
+                    value={d?.transition_level ?? ''}
+                    onChange={(e) => updateDraft({ transition_level: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <Field label="Remarques" textMuted={textMuted}>
+                <textarea
+                  className={`w-full px-3 py-2 rounded-lg border min-h-16 ${inputCl} disabled:opacity-50`}
+                  placeholder="Remarques ATIS"
+                  disabled={!canEditAtis}
+                  value={d?.remarks ?? ''}
+                  onChange={(e) => updateDraft({ remarks: e.target.value })}
+                />
+              </Field>
             </div>
 
             {canEditAtis && (
@@ -1568,7 +1529,7 @@ function TmaAirportsEditor({
   onChange,
 }: {
   airports: TmaAirportDraft[];
-  catalog: { icao: string; nom: string; runways: string[] }[];
+  catalog: TmaAirportCatalog[];
   primaryIcao: string;
   canEdit: boolean;
   isDark: boolean;
@@ -1583,67 +1544,54 @@ function TmaAirportsEditor({
   const update = (icao: string, patch: Partial<TmaAirportDraft>) => {
     onChange(airports.map((a) => (a.icao === icao ? { ...a, ...patch } : a)));
   };
-  const toggleRwy = (icao: string, rwy: string, current: string) => {
-    const parts = current.split(/[\s,/]+/).filter(Boolean);
-    const next = parts.includes(rwy) ? parts.filter((p) => p !== rwy) : [...parts, rwy];
-    update(icao, { runways: next.join(' ') });
-  };
 
   return (
     <div className={`rounded-xl ${cardCl} p-3 space-y-2`}>
-      <p className={`text-sm font-semibold ${textValue}`}>Pistes en service (TMA)</p>
+      <p className={`text-sm font-semibold ${textValue}`}>Terrains TMA</p>
+      <p className={`text-[11px] ${textMuted}`}>
+        Terrains principaux cochés par défaut. Les satellites (Barth, bases, etc.) sont optionnels. Décochez tout terrain inutilisé.
+      </p>
       {airports.map((a) => {
-        const options = catalog.find((c) => c.icao === a.icao)?.runways ?? [];
-        const locked = a.icao === primaryIcao;
+        const meta = catalog.find((c) => c.icao === a.icao);
+        const options = meta?.runways ?? runwaysOf(a.icao);
+        const isPrimary = a.icao === primaryIcao;
         return (
-          <div key={a.icao} className={`rounded-lg px-2 py-2 space-y-1.5 ${isDark ? 'bg-slate-900/70' : 'bg-slate-800/50'}`}>
+          <div key={a.icao} className={`rounded-lg px-2 py-2 space-y-1.5 ${isDark ? 'bg-slate-900' : 'bg-slate-800'}`}>
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"
                 checked={a.included}
-                disabled={!canEdit || locked}
+                disabled={!canEdit}
                 onChange={(e) => update(a.icao, { included: e.target.checked })}
               />
               <span className={textValue}>
                 {a.icao} — {a.nom}
-                {locked && <span className={`ml-1 text-[10px] ${textMuted}`}>(poste)</span>}
+              </span>
+              <span className={`text-[10px] uppercase tracking-wide ${textMuted}`}>
+                {meta?.core ? 'TMA' : 'satellite'}
+                {isPrimary ? ' · poste' : ''}
               </span>
             </label>
             {a.included && (
               <>
                 {options.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {options.map((rwy) => {
-                      const selected = a.runways.split(/[\s,/]+/).filter(Boolean).includes(rwy);
-                      return (
-                        <button
-                          key={rwy}
-                          type="button"
-                          disabled={!canEdit}
-                          onClick={() => toggleRwy(a.icao, rwy, a.runways)}
-                          className={`px-2 py-0.5 rounded-md text-[11px] font-semibold disabled:opacity-50 ${
-                            selected
-                              ? 'bg-sky-600 text-white'
-                              : isDark
-                                ? 'bg-slate-800 border border-slate-700 text-slate-200'
-                                : 'bg-slate-600 text-white'
-                          }`}
-                        >
-                          {rwy}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  <ChipRow
+                    options={options}
+                    selected={a.runways}
+                    disabled={!canEdit}
+                    isDark={isDark}
+                    onToggle={(rwy) => update(a.icao, { runways: toggleToken(a.runways, rwy) })}
+                  />
                 )}
                 <input
-                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl}`}
+                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl} disabled:opacity-50`}
                   placeholder="Pistes (ex: 25L 25R)"
                   disabled={!canEdit}
                   value={a.runways}
                   onChange={(e) => update(a.icao, { runways: e.target.value })}
                 />
                 <select
-                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl}`}
+                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl} disabled:opacity-50`}
                   disabled={!canEdit}
                   value={a.condition}
                   onChange={(e) => update(a.icao, { condition: e.target.value })}
@@ -1654,12 +1602,88 @@ function TmaAirportsEditor({
                     </option>
                   ))}
                 </select>
+                <ChipRow
+                  options={[...APPROACH_TYPES]}
+                  selected={a.approach ?? ''}
+                  disabled={!canEdit}
+                  isDark={isDark}
+                  exclusive
+                  onToggle={(type) => update(a.icao, { approach: a.approach === type ? '' : type })}
+                />
+                <input
+                  className={`w-full px-2 py-1.5 rounded-md border text-sm ${inputCl} disabled:opacity-50`}
+                  placeholder="Approche (optionnel, ex: ILS)"
+                  disabled={!canEdit}
+                  value={a.approach ?? ''}
+                  onChange={(e) => update(a.icao, { approach: e.target.value })}
+                />
               </>
             )}
           </div>
         );
       })}
       <p className={`text-[11px] leading-relaxed ${textMuted}`}>{preview}</p>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  children,
+  textMuted,
+}: {
+  label: string;
+  children: React.ReactNode;
+  textMuted: string;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <span className={`text-xs font-semibold uppercase tracking-wide ${textMuted}`}>{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function ChipRow({
+  options,
+  selected,
+  disabled,
+  isDark,
+  onToggle,
+  exclusive = false,
+}: {
+  options: string[];
+  selected: string;
+  disabled: boolean;
+  isDark: boolean;
+  onToggle: (value: string) => void;
+  exclusive?: boolean;
+}) {
+  const tokens = exclusive
+    ? new Set(selected.trim() ? [selected.trim()] : [])
+    : new Set(selected.split(/[\s,/]+/).filter(Boolean));
+  return (
+    <div className="flex flex-wrap gap-1">
+      {options.map((opt) => {
+        const active = tokens.has(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            disabled={disabled}
+            onClick={() => onToggle(opt)}
+            className={`px-2 py-1 rounded-md text-[11px] font-semibold disabled:opacity-50 ${
+              active
+                ? 'bg-sky-600 text-white'
+                : isDark
+                  ? 'bg-slate-800 border border-slate-700 text-slate-200'
+                  : 'bg-slate-600 text-white'
+            }`}
+          >
+            {opt}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1679,70 +1703,6 @@ function Row({
     <div className="flex justify-between items-center gap-3">
       <span className={`text-sm font-medium min-w-[80px] ${textMuted}`}>{label}</span>
       <span className={`text-right ${textValue}`}>{children}</span>
-    </div>
-  );
-}
-
-function EditableRow({
-  label,
-  editing,
-  onEdit,
-  onCancel,
-  onSave,
-  inputCl,
-  btnCl,
-  isDark,
-  textMuted,
-  textValue,
-  canEdit,
-  display,
-  children,
-}: {
-  label: string;
-  editing: boolean;
-  onEdit: () => void;
-  onCancel: () => void;
-  onSave: () => void;
-  inputCl: string;
-  btnCl: string;
-  isDark: boolean;
-  textMuted: string;
-  textValue: string;
-  canEdit: boolean;
-  display: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex justify-between items-start gap-3">
-      <span className={`text-sm font-medium min-w-[80px] pt-0.5 ${textMuted}`}>{label}</span>
-      {editing ? (
-        <div className="flex flex-col gap-2 flex-1 min-w-0">
-          {children}
-          <div className="flex gap-2">
-            <button onClick={onSave} className={`px-3 py-2 rounded-lg text-sm font-medium ${btnCl}`}>OK</button>
-            <button
-              onClick={onCancel}
-              className={`px-3 py-2 rounded-lg text-sm font-medium ${
-                isDark
-                  ? 'border border-slate-700 bg-slate-800 text-slate-100 hover:bg-slate-700'
-                  : 'bg-slate-500 text-white'
-              }`}
-            >
-              Annuler
-            </button>
-          </div>
-        </div>
-      ) : canEdit ? (
-        <button
-          onClick={onEdit}
-          className={`flex items-center gap-2 hover:underline text-right max-w-[230px] truncate ${textValue}`}
-        >
-          <span className="truncate">{display}</span>
-          <Pencil className="h-4 w-4 shrink-0" />
-        </button>
-      ) : (
-        <span className={`text-right ${textValue} max-w-[230px] truncate`}>{display}</span>
-      )}
     </div>
   );
 }

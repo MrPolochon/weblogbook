@@ -31,7 +31,7 @@ export type AtisEntitlement = {
   reason: string | null;
   blocked_by: { position: string; aeroport: string; identifiant: string } | null;
   fir: string | null;
-  tma_airports: { icao: string; nom: string; runways: string[] }[];
+  tma_airports: TmaAirportCatalog[];
 };
 
 export function atisKindForPosition(position: string): AtisKind {
@@ -46,19 +46,76 @@ export function firOf(icao: string): string | null {
   return AIRPORT_TO_FIR[icao.toUpperCase()] ?? null;
 }
 
+/** Terrains réellement desservis par l'ATIS TMA de chaque FIR (pas toute la FIR). */
+export const TMA_CORE_BY_FIR: Record<string, readonly string[]> = {
+  ROCKFORD: ['IRFD', 'IMLR'],
+  TOKYO: ['ITKO'],
+  PERTH: ['IPPH'],
+  KEFLAVIK: ['IKFL', 'ITEY'],
+  SAUTHEMP: ['ISAU'],
+  IZOLIRAN: ['IZOL', 'IJAF'],
+  'CYPRUS F': ['ILAR', 'IPAP'],
+};
+
+/** Terrains optionnels, géographiquement dans la TMA mais hors paires principales. */
+export const TMA_SATELLITES_BY_FIR: Record<string, readonly string[]> = {
+  ROCKFORD: ['IBTH', 'IBLT', 'IGAR', 'ITRC'],
+  IZOLIRAN: ['ISKP'],
+};
+
+export type TmaAirportCatalog = {
+  icao: string;
+  nom: string;
+  runways: string[];
+  core: boolean;
+};
+
+export function runwaysOf(icao: string): string[] {
+  return (airportData.find((a) => a.icao === icao.toUpperCase())?.runways ?? []).map((r) => r.name);
+}
+
+export function shortAirportName(nom: string): string {
+  return nom.replace(/\s+Intl\.?$/i, '').replace(/^Greater\s+/i, '');
+}
+
+function airportCatalogEntry(icao: string, core: boolean): TmaAirportCatalog {
+  const code = icao.toUpperCase();
+  const apt = AEROPORTS_PTFS.find((a) => a.code === code);
+  return {
+    icao: code,
+    nom: apt?.nom ?? getAeroportNom(code) ?? code,
+    runways: runwaysOf(code),
+    core,
+  };
+}
+
 export function airportsInFir(fir: string): { icao: string; nom: string; runways: string[] }[] {
   return Object.entries(AIRPORT_TO_FIR)
     .filter(([, f]) => f === fir)
-    .map(([icao]) => {
-      const apt = AEROPORTS_PTFS.find((a) => a.code === icao);
-      const perf = airportData.find((a) => a.icao === icao);
-      return {
-        icao,
-        nom: apt?.nom ?? getAeroportNom(icao) ?? icao,
-        runways: (perf?.runways ?? []).map((r) => r.name),
-      };
-    })
+    .map(([icao]) => airportCatalogEntry(icao, false))
     .sort((a, b) => a.icao.localeCompare(b.icao));
+}
+
+/** Catalogue TMA : paires principales + satellites, jamais les terrains hors zone. */
+export function tmaAirportsFor(icao: string, fir: string | null): TmaAirportCatalog[] {
+  const primary = icao.toUpperCase();
+  if (!fir) return [airportCatalogEntry(primary, true)];
+  const core = TMA_CORE_BY_FIR[fir] ?? [];
+  const sats = TMA_SATELLITES_BY_FIR[fir] ?? [];
+  const listed = new Set<string>();
+  const out: TmaAirportCatalog[] = [];
+  for (const code of core) {
+    if (listed.has(code)) continue;
+    listed.add(code);
+    out.push(airportCatalogEntry(code, true));
+  }
+  for (const code of sats) {
+    if (listed.has(code)) continue;
+    listed.add(code);
+    out.push(airportCatalogEntry(code, false));
+  }
+  if (!listed.has(primary)) out.push(airportCatalogEntry(primary, core.length === 0));
+  return out;
 }
 
 export function resolveAtisEntitlement(
@@ -71,7 +128,7 @@ export function resolveAtisEntitlement(
   const kind = atisKindForPosition(position);
   const myRank = atisRank(position);
   const fir = firOf(icao);
-  const tmaAirports = fir ? airportsInFir(fir) : [{ icao, nom: getAeroportNom(icao), runways: airportData.find((a) => a.icao === icao)?.runways.map((r) => r.name) ?? [] }];
+  const tmaAirports = tmaAirportsFor(icao, fir);
 
   if (kind === 'airport') {
     const rivals = sessions.filter(
@@ -146,45 +203,66 @@ export const RUNWAY_CONDITIONS = [
   { id: 'damp', fr: 'humides', en: 'damp' },
 ] as const;
 
+export const APPROACH_TYPES = ['ILS', 'ILS Z', 'ILS Y', 'RNAV', 'RNP', 'VOR', 'NDB', 'Visual'] as const;
+
 export type TmaAirportDraft = {
   icao: string;
   nom: string;
   included: boolean;
   runways: string;
   condition: string;
+  approach?: string;
 };
 
-export function defaultTmaDraft(primaryIcao: string, airports: { icao: string; nom: string; runways: string[] }[]): TmaAirportDraft[] {
-  const primary = primaryIcao.toUpperCase();
+export function defaultTmaDraft(airports: TmaAirportCatalog[]): TmaAirportDraft[] {
   return airports.map((a) => ({
     icao: a.icao,
-    nom: a.nom.replace(/\s+Intl\.?$/i, '').replace(/^Greater\s+/i, ''),
-    included:
-      a.icao === primary ||
-      (a.icao === 'IMLR' && primary === 'IRFD') ||
-      (a.icao === 'IRFD' && primary === 'IMLR'),
+    nom: shortAirportName(a.nom),
+    included: a.core,
     runways: '',
     condition: 'dry',
+    approach: '',
   }));
+}
+
+export function mergeTmaDraft(
+  existing: TmaAirportDraft[],
+  catalog: TmaAirportCatalog[],
+  fromPublished = false,
+): TmaAirportDraft[] {
+  const prev = new Map(existing.map((a) => [a.icao, a]));
+  return catalog.map((c) => {
+    const old = prev.get(c.icao);
+    return {
+      icao: c.icao,
+      nom: shortAirportName(c.nom),
+      included: old?.included ?? (fromPublished ? false : c.core),
+      runways: old?.runways ?? '',
+      condition: old?.condition ?? 'dry',
+      approach: old?.approach ?? '',
+    };
+  });
+}
+
+function tmaRunwayPhrase(a: TmaAirportDraft, lang: 'en' | 'fr'): string {
+  const cond = RUNWAY_CONDITIONS.find((c) => c.id === a.condition)?.[lang] ?? a.condition;
+  const bits = [a.runways.trim(), cond];
+  if (a.approach?.trim()) bits.push(a.approach.trim());
+  const loc = lang === 'fr' ? `en service à ${a.nom}` : `in service at ${a.nom}`;
+  return `${bits.join(', ')}, ${loc}`;
 }
 
 export function composeTmaRunwayEn(airports: TmaAirportDraft[]): string {
   return airports
     .filter((a) => a.included && a.runways.trim())
-    .map((a) => {
-      const cond = RUNWAY_CONDITIONS.find((c) => c.id === a.condition)?.en ?? a.condition;
-      return `${a.runways.trim()}, ${cond}, in service at ${a.nom}`;
-    })
+    .map((a) => tmaRunwayPhrase(a, 'en'))
     .join('. ');
 }
 
 export function composeTmaRunwayFr(airports: TmaAirportDraft[]): string {
   return airports
     .filter((a) => a.included && a.runways.trim())
-    .map((a) => {
-      const cond = RUNWAY_CONDITIONS.find((c) => c.id === a.condition)?.fr ?? a.condition;
-      return `${a.runways.trim()}, ${cond}, en service à ${a.nom}`;
-    })
+    .map((a) => tmaRunwayPhrase(a, 'fr'))
     .join('. ');
 }
 
@@ -193,8 +271,10 @@ export function tmaIntroPreview(code: string, airports: TmaAirportDraft[]): stri
   const now = new Date();
   const hh = String(now.getUTCHours()).padStart(2, '0');
   const mm = String(now.getUTCMinutes()).padStart(2, '0');
+  const included = airports.filter((a) => a.included && a.runways.trim());
   const pistes = composeTmaRunwayFr(airports) || 'pistes à renseigner';
-  return `Bonjour, TMA ATIS information, information ${letter}, enregistré à ${hh}h${mm} zoulou/UTC, piste ${pistes}.`;
+  const word = included.length > 1 ? 'pistes' : 'piste';
+  return `Bonjour, TMA ATIS information, information ${letter}, enregistré à ${hh}h${mm} zoulou/UTC, ${word} ${pistes}.`;
 }
 
 export function firDisplayName(fir: string | null): string {
@@ -270,6 +350,7 @@ export function buildAtisPatchBody(opts: {
         name: a.nom,
         runways: a.runways.trim(),
         condition: a.condition,
+        approach: a.approach?.trim() || undefined,
       })),
       runway: composeTmaRunwayEn(opts.tmaAirports),
       runway_fr: composeTmaRunwayFr(opts.tmaAirports),
