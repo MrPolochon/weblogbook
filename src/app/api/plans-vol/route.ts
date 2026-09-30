@@ -7,6 +7,8 @@ import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import { heureDepartToIso } from '@/lib/heure-depart';
 import { getMissionById, getMissionCooldownForUser } from '@/lib/armee';
 import { rateLimit } from '@/lib/rate-limit';
+import { STATUTS_PLAN_OCCUPES, hasOccupiedPlan, isCompanyMember } from '@/lib/plans-vol/crew';
+import { notifyUser } from '@/lib/notifications';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -54,7 +56,8 @@ export async function POST(request: Request) {
       vol_commercial, compagnie_id, nature_transport, inventaire_avion_id,
       compagnie_avion_id,
       nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
-      vol_sans_atc, vol_ferry, bria_conversation
+      vol_sans_atc, vol_ferry, bria_conversation,
+      copilote_id: copiloteIdRaw,
     } = body;
     const heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
     if (!heureDepartIso) {
@@ -138,7 +141,7 @@ export async function POST(request: Request) {
         .from('plans_vol')
         .select('*', { count: 'exact', head: true })
         .eq('armee_avion_id', armeeAvionId)
-        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+        .in('statut', [...STATUTS_PLAN_OCCUPES]);
 
       if (plansArmee && plansArmee > 0) {
         return NextResponse.json({ error: 'Cet appareil militaire a déjà un plan de vol en cours.' }, { status: 400 });
@@ -518,7 +521,7 @@ export async function POST(request: Request) {
         .from('plans_vol')
         .select('*', { count: 'exact', head: true })
         .eq('compagnie_avion_id', compagnie_avion_id)
-        .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture']);
+        .in('statut', [...STATUTS_PLAN_OCCUPES]);
       
       if (plansEnCours && plansEnCours > 0) {
         return NextResponse.json({ 
@@ -554,6 +557,118 @@ export async function POST(request: Request) {
           error: `L'avion ${avionIndiv.immatriculation} a un vol ferry en cours. Attendez sa clôture.` 
         }, { status: 400 });
       }
+    }
+
+    const copiloteId =
+      typeof copiloteIdRaw === 'string' && copiloteIdRaw.trim()
+        ? copiloteIdRaw.trim()
+        : null;
+    if (copiloteId) {
+      if (isMilitaryPlan) {
+        return NextResponse.json({ error: 'Le copilote n’est pas disponible sur un plan militaire.' }, { status: 400 });
+      }
+      if (!compagnie_id) {
+        return NextResponse.json({ error: 'Un vol avec copilote doit être rattaché à une compagnie.' }, { status: 400 });
+      }
+      if (copiloteId === user.id) {
+        return NextResponse.json({ error: 'Vous ne pouvez pas vous désigner comme copilote.' }, { status: 400 });
+      }
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(copiloteId)) {
+        return NextResponse.json({ error: 'Copilote invalide.' }, { status: 400 });
+      }
+      const [picMember, copiloteMember, copiloteBusy] = await Promise.all([
+        isCompanyMember(admin, user.id, compagnie_id),
+        isCompanyMember(admin, copiloteId, compagnie_id),
+        hasOccupiedPlan(admin, copiloteId),
+      ]);
+      if (!picMember || !copiloteMember) {
+        return NextResponse.json({ error: 'Le copilote doit appartenir à la même compagnie.' }, { status: 400 });
+      }
+      if (copiloteBusy) {
+        return NextResponse.json({ error: 'Ce copilote a déjà un plan de vol en cours.' }, { status: 400 });
+      }
+    }
+
+    const locationFieldsEarly = compagnie_avion_id && compagnie_id
+      ? await admin.from('compagnie_locations')
+          .select('*')
+          .eq('avion_id', compagnie_avion_id)
+          .eq('locataire_compagnie_id', compagnie_id)
+          .eq('statut', 'active')
+          .lte('start_at', new Date().toISOString())
+          .gte('end_at', new Date().toISOString())
+          .maybeSingle()
+      : { data: null };
+
+    const planBaseFields = {
+      pilote_id: user.id,
+      aeroport_depart: ad,
+      aeroport_arrivee: aa,
+      numero_vol: numeroVolFinal,
+      porte: (porte != null && String(porte).trim() !== '') ? String(porte).trim() : null,
+      temps_prev_min: t,
+      heure_depart_estimee: heureDepartIso,
+      type_vol: String(type_vol),
+      intentions_vol: type_vol === 'VFR' ? String(intentions_vol).trim() : null,
+      sid_depart: type_vol === 'IFR' ? String(sid_depart).trim() : null,
+      star_arrivee: type_vol === 'IFR' ? String(star_arrivee).trim() : null,
+      route_ifr: (type_vol === 'IFR' && route_ifr) ? String(route_ifr).trim() : null,
+      strip_sid_atc: type_vol === 'IFR' && sid_depart ? String(sid_depart).trim() : null,
+      strip_star: type_vol === 'IFR' && star_arrivee ? String(star_arrivee).trim() : null,
+      strip_route: strip_route && String(strip_route).trim() ? String(strip_route).trim() : null,
+      strip_fl: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
+      strip_fl_unit: 'FL',
+      niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
+      vol_commercial: Boolean(vol_commercial) && !vol_ferry,
+      compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
+      nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
+      inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
+      compagnie_avion_id: compagnie_avion_id || null,
+      nb_pax_genere: vol_commercial ? nbPaxFinal : null,
+      cargo_kg_genere: vol_commercial ? cargoGenereFinal : null,
+      type_cargaison: vol_commercial && (nature_transport === 'cargo' || (nature_transport === 'passagers' && cargoGenereFinal > 0)) ? typeCargaisonFinal : null,
+      type_cargaison_libelle: typeCargaisonLibelleFinal,
+      revenue_brut: vol_commercial ? revenuBrutFinal : null,
+      salaire_pilote: vol_commercial ? salaireFinal : null,
+      prix_billet_utilise: vol_commercial ? prixBilletFinal : null,
+      vol_ferry: Boolean(vol_ferry),
+      location_id: locationFieldsEarly.data?.id || null,
+      location_loueur_compagnie_id: locationFieldsEarly.data?.loueur_compagnie_id || null,
+      location_pourcentage_revenu_loueur: locationFieldsEarly.data?.pourcentage_revenu_loueur || null,
+      location_prix_journalier: locationFieldsEarly.data?.prix_journalier || null,
+      bria_conversation: bria_conversation || null,
+      armee_avion_id: armeeAvionId,
+      armee_mission_id: armeeMissionId,
+      copilote_id: copiloteId,
+    };
+
+    if (copiloteId) {
+      const { data, error } = await admin.from('plans_vol').insert({
+        ...planBaseFields,
+        note_atc: note_atc ? String(note_atc).trim() : null,
+        statut: 'en_attente_copilote',
+        current_holder_user_id: null,
+        current_holder_position: null,
+        current_holder_aeroport: null,
+        vol_sans_atc: false,
+        automonitoring: false,
+        copilote_vol_sans_atc: Boolean(vol_sans_atc),
+      }).select('id').single();
+
+      if (error) {
+        console.error('plans-vol POST INSERT (copilote):', JSON.stringify(error));
+        return NextResponse.json({ error: `Erreur lors de la création : ${error.message || error.code || 'erreur base de données'}` }, { status: 400 });
+      }
+
+      const { data: picProfile } = await admin.from('profiles').select('identifiant').eq('id', user.id).maybeSingle();
+      await notifyUser(copiloteId, {
+        type: 'plan_copilote',
+        title: `Plan ${numeroVolFinal} à valider`,
+        body: `${picProfile?.identifiant || 'Un pilote'} vous a désigné copilote sur ${numeroVolFinal} (${ad} → ${aa}). Validez le plan pour l’envoyer à l’ATC ou confirmer le vol sans ATC.`,
+        link: '/logbook/plans-vol',
+      });
+
+      return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente_copilote' });
     }
     
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance

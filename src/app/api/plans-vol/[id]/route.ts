@@ -8,6 +8,9 @@ import { calculerUsureVol } from '@/lib/compagnie-utils';
 import { envoyerChequesVol, finaliserCloturePlan, finaliserCloturesEnAttenteSansControleur, parseStripATD } from '@/lib/plans-vol/closure';
 import { heureDepartToIso } from '@/lib/heure-depart';
 import { assignGateArrival, maybeAssignArrivalGate } from '@/lib/ground/gate-assignment';
+import { isPlanCrew } from '@/lib/plans-vol/crew';
+import { dispatchAfterCopiloteValidation, notifyCrewAfterDispatch } from '@/lib/plans-vol/copilote-dispatch';
+import { notifyUser } from '@/lib/notifications';
 
 function queueArrivalGate(planId: string, opts?: { aeroportHint?: string | null; stripZone?: string | null }) {
   void maybeAssignArrivalGate(planId, opts).catch((e) => console.warn('[gate-arrival]', e));
@@ -55,7 +58,7 @@ export async function PATCH(
     const admin = createAdminClient();
 
     const { data: plan, error: planError } = await admin.from('plans_vol')
-      .select('id, pilote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
+      .select('id, pilote_id, copilote_id, copilote_vol_sans_atc, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
       .eq('id', id)
       .single();
     if (planError) {
@@ -65,10 +68,87 @@ export async function PATCH(
     }
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
 
+    if (action === 'valider_copilote') {
+      if (plan.copilote_id !== user.id) {
+        return NextResponse.json({ error: 'Seul le copilote désigné peut valider ce plan.' }, { status: 403 });
+      }
+      if (plan.statut !== 'en_attente_copilote') {
+        return NextResponse.json({ error: 'Ce plan n’est plus en attente de validation copilote.' }, { status: 400 });
+      }
+      try {
+        const result = await dispatchAfterCopiloteValidation(admin, {
+          id: plan.id,
+          pilote_id: plan.pilote_id,
+          copilote_id: plan.copilote_id,
+          numero_vol: plan.numero_vol,
+          aeroport_depart: plan.aeroport_depart,
+          aeroport_arrivee: plan.aeroport_arrivee,
+          vol_commercial: plan.vol_commercial,
+          vol_ferry: plan.vol_ferry,
+          nature_transport: plan.nature_transport,
+          nb_pax_genere: plan.nb_pax_genere,
+          cargo_kg_genere: plan.cargo_kg_genere,
+          compagnie_avion_id: plan.compagnie_avion_id,
+          copilote_vol_sans_atc: plan.copilote_vol_sans_atc,
+        });
+        await notifyCrewAfterDispatch({
+          id: plan.id,
+          pilote_id: plan.pilote_id,
+          copilote_id: plan.copilote_id,
+          numero_vol: plan.numero_vol,
+          aeroport_depart: plan.aeroport_depart,
+          aeroport_arrivee: plan.aeroport_arrivee,
+          vol_commercial: plan.vol_commercial,
+          vol_ferry: plan.vol_ferry,
+          nature_transport: plan.nature_transport,
+          nb_pax_genere: plan.nb_pax_genere,
+          cargo_kg_genere: plan.cargo_kg_genere,
+          compagnie_avion_id: plan.compagnie_avion_id,
+          copilote_vol_sans_atc: plan.copilote_vol_sans_atc,
+        }, result);
+        return NextResponse.json({
+          ok: true,
+          statut: result.kind === 'sans_atc' ? 'accepte' : 'en_attente',
+          vol_sans_atc: result.kind === 'sans_atc',
+          atc_contact: result.kind === 'atc' ? result.atc_contact : undefined,
+        });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : 'Validation copilote impossible.';
+        return NextResponse.json({ error: message }, { status: 400 });
+      }
+    }
+
+    if (action === 'refuser_copilote') {
+      if (plan.copilote_id !== user.id) {
+        return NextResponse.json({ error: 'Seul le copilote désigné peut refuser ce plan.' }, { status: 403 });
+      }
+      if (plan.statut !== 'en_attente_copilote') {
+        return NextResponse.json({ error: 'Ce plan n’est plus en attente de validation copilote.' }, { status: 400 });
+      }
+      const { data: refused, error: refuseErr } = await admin.from('plans_vol')
+        .update({
+          statut: 'annule',
+          cloture_at: new Date().toISOString(),
+        })
+        .eq('id', id)
+        .eq('statut', 'en_attente_copilote')
+        .select('id');
+      if (refuseErr || !refused?.length) {
+        return NextResponse.json({ error: 'Ce plan n’est plus en attente de validation copilote.' }, { status: 409 });
+      }
+      await notifyUser(plan.pilote_id, {
+        type: 'plan_copilote',
+        title: `Plan ${plan.numero_vol || ''} refusé par le copilote`,
+        body: `Le copilote a refusé ${plan.numero_vol || 'le plan'} (${plan.aeroport_depart} → ${plan.aeroport_arrivee ?? '?'}). Le plan a été annulé.`,
+        link: '/logbook/plans-vol',
+      });
+      return NextResponse.json({ ok: true, statut: 'annule' });
+    }
+
     if (action === 'cloture') {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role === 'atc') return NextResponse.json({ error: 'Cloture reservee au pilote.' }, { status: 403 });
-      if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
+      if (!isPlanCrew(plan, user.id)) return NextResponse.json({ error: 'Ce plan de vol ne vous appartient pas.' }, { status: 403 });
       if (plan.statut === 'refuse' || plan.statut === 'cloture') return NextResponse.json({ error: 'Ce plan ne peut pas etre cloture.' }, { status: 400 });
       if (!STATUTS_OUVERTS.includes(plan.statut)) return NextResponse.json({ error: 'Statut invalide pour cloture.' }, { status: 400 });
 
@@ -309,7 +389,7 @@ export async function PATCH(
       const isAtc = profile?.role === 'atc' || Boolean(profile?.atc);
       const isManualStrip = Boolean(plan.created_by_atc) && !plan.pilote_id;
       const isHolder = plan.current_holder_user_id === user.id;
-      const isPiloteOwner = plan.pilote_id === user.id;
+      const isPiloteOwner = isPlanCrew(plan, user.id);
 
       if (plan.statut === 'cloture') return NextResponse.json({ error: 'Un plan de vol cloture ne peut pas etre annule.' }, { status: 400 });
 
@@ -363,9 +443,13 @@ export async function PATCH(
           .in('statut', ['planifie_suivant', 'en_pause']);
       };
 
+      const paxDejaConsommes = plan.statut !== 'en_attente_copilote';
+
       if (isAdmin || isAtc) {
-        await rembourserPaxEtCargo();
-        await remettreAvionAuSol();
+        if (paxDejaConsommes) {
+          await rembourserPaxEtCargo();
+          await remettreAvionAuSol();
+        }
         await annulerCascadeMedevac();
         const { error } = await admin.from('plans_vol').update({
           statut: 'annule',
@@ -398,8 +482,10 @@ export async function PATCH(
       }
       if (isPiloteOwner && plan.statut !== 'annule') {
         const holderId = plan.current_holder_user_id;
-        await rembourserPaxEtCargo();
-        await remettreAvionAuSol();
+        if (paxDejaConsommes) {
+          await rembourserPaxEtCargo();
+          await remettreAvionAuSol();
+        }
         await annulerCascadeMedevac();
         const { error: err } = await admin.from('plans_vol').update({
           statut: 'annule',
@@ -417,9 +503,18 @@ export async function PATCH(
         if (holderId) {
           await admin.from('messages').insert({
             destinataire_id: holderId,
-            titre: `✈️ Vol ${plan.numero_vol || id.slice(0, 8)} annulé par le pilote`,
-            contenu: `Le pilote a annulé le vol ${plan.numero_vol || ''} (${plan.aeroport_depart || '?'} → ${plan.aeroport_arrivee || '?'}).\n\nLe strip a été retiré de votre board.`,
+            titre: `✈️ Vol ${plan.numero_vol || id.slice(0, 8)} annulé par l'équipage`,
+            contenu: `L'équipage a annulé le vol ${plan.numero_vol || ''} (${plan.aeroport_depart || '?'} → ${plan.aeroport_arrivee || '?'}).\n\nLe strip a été retiré de votre board.`,
             type_message: 'systeme',
+          });
+        }
+        const otherCrewId = plan.pilote_id === user.id ? plan.copilote_id : plan.pilote_id;
+        if (otherCrewId) {
+          await notifyUser(otherCrewId, {
+            type: 'plan_copilote',
+            title: `Vol ${plan.numero_vol || ''} annulé`,
+            body: `Le plan ${plan.numero_vol || ''} (${plan.aeroport_depart || '?'} → ${plan.aeroport_arrivee || '?'}) a été annulé par l'équipage.`,
+            link: '/logbook/plans-vol',
           });
         }
         return NextResponse.json({ ok: true });

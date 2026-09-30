@@ -63,9 +63,10 @@ export default async function AppLayout({
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).eq('statut', 'en_attente_confirmation_pilote'),
       supabase.from('vols').select('*', { count: 'exact', head: true }).eq('copilote_id', uid).eq('statut', 'en_attente_confirmation_copilote'),
       admin.from('vols').select('*', { count: 'exact', head: true }).eq('instructeur_id', uid).eq('statut', 'en_attente_confirmation_instructeur'),
-      supabase.from('plans_vol').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant']),
+      admin.from('plans_vol').select('*', { count: 'exact', head: true }).or(`pilote_id.eq.${uid},copilote_id.eq.${uid}`).in('statut', ['depose', 'en_attente', 'en_attente_copilote', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant']),
       admin.from('messages').select('*', { count: 'exact', head: true }).eq('destinataire_id', uid).eq('lu', false),
       admin.from('compagnie_invitations').select('*', { count: 'exact', head: true }).eq('pilote_id', uid).eq('statut', 'en_attente'),
+      admin.from('plans_vol').select('*', { count: 'exact', head: true }).eq('copilote_id', uid).eq('statut', 'en_attente_copilote'),
     ]),
 
     // 3) Admin-only counts (skip entirely for non-admins)
@@ -106,7 +107,7 @@ export default async function AppLayout({
   };
 
   const uc = userCountsResult as PromiseSettledResult<{ count?: number | null; error?: unknown }>[];
-  const volsAConfirmerCount = safeCount(uc[0]) + safeCount(uc[1]) + safeCount(uc[2]);
+  const volsAConfirmerCount = safeCount(uc[0]) + safeCount(uc[1]) + safeCount(uc[2]) + safeCount(uc[6]);
   const plansNonCloturesCount = safeCount(uc[3]);
   const messagesNonLusCount = safeCount(uc[4]);
   const invitationsCount = safeCount(uc[5]);

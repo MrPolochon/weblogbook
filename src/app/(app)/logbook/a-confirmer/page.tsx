@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDateMediumUTC } from '@/lib/date-utils';
 import { ArrowLeft, ChevronRight } from 'lucide-react';
+import PlanVolCopiloteActions from '../plans-vol/PlanVolCopiloteActions';
 
 export default async function LogbookAConfirmerPage() {
   const supabase = await createClient();
@@ -11,13 +12,14 @@ export default async function LogbookAConfirmerPage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const [{ data: volsPilote }, { data: volsCopilote }, { data: volsInstructeur }] = await Promise.all([
+  const [{ data: volsPilote }, { data: volsCopilote }, { data: volsInstructeur }, { data: plansCopilote }] = await Promise.all([
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, duree_minutes, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, duree_minutes, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
     admin.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, duree_minutes, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('instructeur_id', user.id).eq('statut', 'en_attente_confirmation_instructeur').order('depart_utc', { ascending: false }),
+    admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee, temps_prev_min, created_at, pilote:profiles!plans_vol_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_copilote').order('created_at', { ascending: false }),
   ]);
 
-  const hasAny = (volsPilote?.length ?? 0) > 0 || (volsCopilote?.length ?? 0) > 0 || (volsInstructeur?.length ?? 0) > 0;
+  const hasAny = (volsPilote?.length ?? 0) > 0 || (volsCopilote?.length ?? 0) > 0 || (volsInstructeur?.length ?? 0) > 0 || (plansCopilote?.length ?? 0) > 0;
 
   return (
     <div className="space-y-6">
@@ -29,7 +31,7 @@ export default async function LogbookAConfirmerPage() {
       </div>
 
       <p className="text-slate-400 text-sm">
-        Un co-pilote ou un pilote vous a indiqué sur ces vols, ou un pilote a saisi un vol d&apos;instruction avec vous comme instructeur. Ouvrez chacun, vérifiez (ou corrigez pour co-pilote/pilote), puis confirmez. Les vols d&apos;instruction sont validés directement par vous sans passer par les admins.
+        Un co-pilote ou un pilote vous a indiqué sur ces vols, un pilote a saisi un vol d&apos;instruction avec vous comme instructeur, ou un plan de vol attend votre validation copilote. Ouvrez chacun, vérifiez, puis confirmez.
       </p>
 
       {!hasAny && (
@@ -60,6 +62,26 @@ export default async function LogbookAConfirmerPage() {
         </div>
       )}
 
+      {plansCopilote && plansCopilote.length > 0 && (
+        <div className="card border-violet-500/30">
+          <h2 className="text-lg font-medium text-slate-200 mb-2">Plans de vol à valider comme copilote</h2>
+          <p className="text-sm text-slate-500 mb-3">Après validation, le plan est envoyé à l&apos;ATC ou confirmé sans ATC.</p>
+          <ul className="divide-y divide-slate-700/50">
+            {plansCopilote.map((p) => {
+              const identifiantPilote = (Array.isArray(p.pilote) ? p.pilote[0] : p.pilote)?.identifiant ?? '—';
+              return (
+                <li key={p.id} className="py-4 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-slate-200">{p.numero_vol} — {p.aeroport_depart || '—'} → {p.aeroport_arrivee || '—'}</p>
+                    <p className="text-sm text-slate-500">{identifiantPilote} vous a désigné copilote · {p.temps_prev_min} min</p>
+                  </div>
+                  <PlanVolCopiloteActions planId={p.id} statut="en_attente_copilote" isCopilote />
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       {volsCopilote && volsCopilote.length > 0 && (
         <div className="card">
           <h2 className="text-lg font-medium text-slate-200 mb-2">Un pilote vous a indiqué comme co-pilote</h2>

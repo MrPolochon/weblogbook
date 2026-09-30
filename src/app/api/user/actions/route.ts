@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
 
 export interface ActionItem {
   id: string;
-  kind: 'plan_refuse' | 'plan_cloture' | 'attente_pilote' | 'attente_copilote' | 'attente_instructeur' | 'refuse_copilote';
+  kind: 'plan_refuse' | 'plan_cloture' | 'attente_pilote' | 'attente_copilote' | 'attente_instructeur' | 'refuse_copilote' | 'plan_attente_copilote';
   title: string;
   body: string;
   link: string;
@@ -39,6 +39,7 @@ export async function GET() {
       { data: attenteConfCopilote },
       { data: attenteConfInstructeur },
       { data: refuseParCopilote },
+      { data: plansAttenteCopilote },
     ] = await Promise.all([
       admin.from('plans_vol').select('id').eq('pilote_id', uid).eq('statut', 'refuse'),
       admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', uid).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null),
@@ -46,6 +47,7 @@ export async function GET() {
       supabase.from('vols').select('id').eq('pilote_id', uid).eq('statut', 'en_attente_confirmation_copilote'),
       admin.from('vols').select('id').eq('pilote_id', uid).eq('statut', 'en_attente_confirmation_instructeur'),
       supabase.from('vols').select('id').eq('pilote_id', uid).eq('statut', 'refuse_par_copilote'),
+      admin.from('plans_vol').select('id, numero_vol').eq('copilote_id', uid).eq('statut', 'en_attente_copilote'),
     ]);
 
     const actions: ActionItem[] = [];
@@ -124,6 +126,16 @@ export async function GET() {
       body: 'Modifiez ou retirez le co-pilote pour renvoyer le vol.',
       link: `/logbook/vol/${refuseParCopilote![0].id}`,
       count: n6,
+    });
+
+    const n7 = plansAttenteCopilote?.length ?? 0;
+    if (n7 > 0) actions.push({
+      id: 'plan_attente_copilote',
+      kind: 'plan_attente_copilote',
+      title: `${n7} plan${n7 > 1 ? 's' : ''} de vol à valider comme copilote`,
+      body: 'Validez pour envoyer le plan à l’ATC ou confirmer le vol sans ATC.',
+      link: '/logbook/a-confirmer',
+      count: n7,
     });
 
     return NextResponse.json({ actions, total: actions.reduce((s, a) => s + a.count, 0) });

@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { createPortal } from 'react-dom';
 
-const STATUTS_ANNULABLES = ['depose', 'en_attente', 'refuse', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
+const STATUTS_ANNULABLES = ['depose', 'en_attente', 'en_attente_copilote', 'refuse', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
 type Props = { planId: string; statut: string };
 

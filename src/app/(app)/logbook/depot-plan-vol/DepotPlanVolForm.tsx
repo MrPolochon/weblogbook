@@ -138,6 +138,10 @@ export default function DepotPlanVolForm({
   /** Mission armée liée au plan (enregistrée en `plans_vol.armee_mission_id` avec la flotte armée). */
   const [armee_mission_id, setArmeeMissionId] = useState('');
   const [compagnie_avion_id, setCompagnieAvionId] = useState('');
+  const [withCopilote, setWithCopilote] = useState(false);
+  const [copilote_id, setCopiloteId] = useState('');
+  const [copilotes, setCopilotes] = useState<{ id: string; identifiant: string }[]>([]);
+  const [copilotesLoading, setCopilotesLoading] = useState(false);
   
   // Calculated values - stockés séparément pour éviter la triche
   const [generatedPax, setGeneratedPax] = useState(0);
@@ -219,6 +223,38 @@ export default function DepotPlanVolForm({
   useEffect(() => {
     if (vol_commercial || vol_ferry) setArmeeMissionId('');
   }, [vol_commercial, vol_ferry]);
+
+  useEffect(() => {
+    if (!vol_commercial && !vol_ferry) {
+      setWithCopilote(false);
+      setCopiloteId('');
+    }
+  }, [vol_commercial, vol_ferry]);
+
+  useEffect(() => {
+    setCopiloteId('');
+  }, [selectedCompagnieId]);
+
+  useEffect(() => {
+    if (!withCopilote || !selectedCompagnieId) {
+      setCopilotes([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    setCopilotesLoading(true);
+    fetch(`/api/plans-vol/copilotes?compagnie_id=${selectedCompagnieId}`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((d) => {
+        setCopilotes(Array.isArray(d.copilotes) ? d.copilotes : []);
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setCopilotes([]);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setCopilotesLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [withCopilote, selectedCompagnieId]);
 
   useEffect(() => {
     if (armeeAvions.length > 0 && initialMissionId) {
@@ -646,6 +682,7 @@ export default function DepotPlanVolForm({
       salaire_pilote: vol_commercial ? salairePilote : undefined,
       prix_billet_utilise: vol_commercial ? prixBilletLiaison : undefined,
       vol_sans_atc: volSansAtc,
+      copilote_id: withCopilote && copilote_id ? copilote_id : undefined,
     };
   }
 
@@ -672,6 +709,7 @@ export default function DepotPlanVolForm({
 
     if ((vol_commercial || vol_ferry) && !selectedCompagnieId) errs.compagnie = 'Sélectionnez une compagnie.';
     if ((vol_commercial || vol_ferry) && !compagnie_avion_id) errs.compagnie_avion_id = vol_ferry ? 'Sélectionnez un avion à déplacer.' : 'Sélectionnez un avion de la flotte.';
+    if (withCopilote && !copilote_id) errs.copilote_id = 'Sélectionnez un copilote de la même compagnie.';
 
     const missionErr = missionArmeeValidationError();
     if (missionErr) errs.armee_mission = missionErr;
@@ -1092,6 +1130,60 @@ export default function DepotPlanVolForm({
                 </p>
               )}
             </div>
+
+          {(vol_commercial || vol_ferry) && selectedCompagnie && (
+            <div className="rounded-xl border border-slate-700/60 bg-slate-900/40 p-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={withCopilote}
+                  onChange={(e) => {
+                    setWithCopilote(e.target.checked);
+                    if (!e.target.checked) setCopiloteId('');
+                    setFieldErrors((p) => ({ ...p, copilote_id: '' }));
+                  }}
+                />
+                <span>
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-200">
+                    <Users className="h-4 w-4 text-sky-400" />
+                    Vol avec copilote
+                  </span>
+                  <span className="block text-xs text-slate-500 mt-0.5">
+                    Le copilote (même compagnie) doit valider le plan avant envoi à l’ATC ou confirmation sans ATC.
+                  </span>
+                </span>
+              </label>
+              {withCopilote && (
+                <div className="mt-3">
+                  <select
+                    className={`input w-full ${fieldErrors.copilote_id ? 'border-red-500/60 focus:border-red-500' : ''}`}
+                    value={copilote_id}
+                    onChange={(e) => {
+                      setCopiloteId(e.target.value);
+                      setFieldErrors((p) => ({ ...p, copilote_id: '' }));
+                    }}
+                  >
+                    <option value="">{copilotesLoading ? 'Chargement…' : '— Choisir le copilote —'}</option>
+                    {copilotes.map((c) => (
+                      <option key={c.id} value={c.id}>{c.identifiant}</option>
+                    ))}
+                  </select>
+                  {!copilotesLoading && copilotes.length === 0 && (
+                    <p className="text-amber-400 text-sm mt-2">
+                      Aucun copilote disponible dans cette compagnie (occupé ou seul membre).
+                    </p>
+                  )}
+                  {fieldErrors.copilote_id && (
+                    <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
+                      <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
+                      {fieldErrors.copilote_id}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           
           {/* Type de transport - masqué pour vols ferry — segmented control */}
           {!vol_ferry && (

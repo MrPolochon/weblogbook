@@ -143,7 +143,7 @@ export interface BoardingStatus {
 export type VolStatut = 'en_attente' | 'validé' | 'refusé';
 export type TypeVol = 'IFR' | 'VFR';
 export type RolePilote = 'Pilote' | 'Co-pilote';
-export type PlanStatut = 'depose' | 'en_attente' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture' | 'annule' | 'planifie_suivant' | 'en_pause';
+export type PlanStatut = 'depose' | 'en_attente' | 'en_attente_copilote' | 'accepte' | 'refuse' | 'en_cours' | 'automonitoring' | 'en_attente_cloture' | 'cloture' | 'annule' | 'planifie_suivant' | 'en_pause';
 export type NatureTransport = 'passagers' | 'cargo' | 'mixte';
 export type TypeCargaison = 'generale' | 'dangereuse' | 'perissable' | 'vivante' | 'urgente';
 

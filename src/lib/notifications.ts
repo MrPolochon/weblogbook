@@ -28,7 +28,8 @@ export type NotificationType =
   | 'formation_done_eleve'
   | 'formation_done_admin'
   | 'pilot_training_accepted'
-  | 'pilot_training_started';
+  | 'pilot_training_started'
+  | 'plan_copilote';
 
 export interface NotifyUserOptions {
   type: NotificationType;

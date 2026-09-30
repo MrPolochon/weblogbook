@@ -6,6 +6,7 @@ import { formatDateHourUTC } from '@/lib/date-utils';
 import { ArrowLeft, FileText, AlertCircle, Bell, Plane, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
+import PlanVolCopiloteActions from './PlanVolCopiloteActions';
 import NePasEnregistrerPlanButton from '../NePasEnregistrerPlanButton';
 import TranspondeurInterface from './TranspondeurInterface';
 import MedevacPauseBanner from './MedevacPauseBanner';
@@ -16,6 +17,7 @@ import { ARME_MISSIONS } from '@/lib/armee-missions';
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   depose: { label: 'Déposé', color: 'text-slate-300', bgColor: 'bg-slate-500/20' },
   en_attente: { label: 'En attente ATC', color: 'text-amber-400', bgColor: 'bg-amber-500/20' },
+  en_attente_copilote: { label: 'En attente copilote', color: 'text-violet-300', bgColor: 'bg-violet-500/20' },
   accepte: { label: 'Accepté', color: 'text-emerald-400', bgColor: 'bg-emerald-500/20' },
   refuse: { label: 'Refusé', color: 'text-red-400', bgColor: 'bg-red-500/20' },
   en_cours: { label: 'En cours', color: 'text-sky-400', bgColor: 'bg-sky-500/20' },
@@ -36,10 +38,10 @@ export default async function MesPlansVolPage() {
   // Profile and plans in parallel
   const [{ data: profile }, { data: raw }, { data: plansClotures }] = await Promise.all([
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
-    supabase
+    admin
       .from('plans_vol')
-      .select('id, pilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte')
-      .eq('pilote_id', user.id)
+      .select('id, pilote_id, copilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte, copilote:profiles!plans_vol_copilote_id_fkey(identifiant)')
+      .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`)
       .order('created_at', { ascending: false }),
     // Plans civils clôturés à enregistrer (pas encore transformés en vol)
     admin.from('plans_vol')
@@ -76,7 +78,7 @@ export default async function MesPlansVolPage() {
     }
   }
 
-  const hasActivePlan = !!planActif || !!medevacPause;
+  const hasActivePlan = !!planActif || !!medevacPause || plans.some((p) => p.statut === 'en_attente_copilote');
 
   let controleurIdentifiant: string | null = null;
   if (planActif?.current_holder_user_id) {
@@ -323,6 +325,13 @@ export default async function MesPlansVolPage() {
                               Mission&nbsp;: {ARME_MISSIONS.find((m) => m.id === p.armee_mission_id)?.titre || p.armee_mission_id}
                             </span>
                           ) : null}
+                          {p.copilote_id && (
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide border border-sky-500/40 bg-sky-500/10 text-sky-300">
+                              {p.copilote_id === user.id
+                                ? 'Vous êtes copilote'
+                                : `Copilote : ${(Array.isArray(p.copilote) ? p.copilote[0] : p.copilote)?.identifiant || '—'}`}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 text-sm">
                           <span className="font-mono text-xs px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-400">{p.aeroport_depart}</span>
@@ -354,6 +363,7 @@ export default async function MesPlansVolPage() {
                         </div>
                       ) : (
                         <div className="flex items-center gap-3">
+                          <PlanVolCopiloteActions planId={p.id} statut={p.statut} isCopilote={p.copilote_id === user.id} />
                           <PlanVolCloturerButton planId={p.id} statut={p.statut} isMedevac={!!p.siavi_avion_id} automonitoring={!!p.automonitoring} />
                           <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
                         </div>

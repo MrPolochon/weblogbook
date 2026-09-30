@@ -26,6 +26,7 @@ const ACTION_ICONS: Record<ActionItem['kind'], React.ReactNode> = {
   attente_copilote: <Timer className="h-3.5 w-3.5" />,
   attente_instructeur: <Timer className="h-3.5 w-3.5" />,
   refuse_copilote: <XCircle className="h-3.5 w-3.5" />,
+  plan_attente_copilote: <Timer className="h-3.5 w-3.5" />,
 };
 const ACTION_COLORS: Record<ActionItem['kind'], string> = {
   plan_refuse: 'text-red-400 bg-red-500/15',
@@ -34,6 +35,7 @@ const ACTION_COLORS: Record<ActionItem['kind'], string> = {
   attente_copilote: 'text-amber-400 bg-amber-500/15',
   attente_instructeur: 'text-sky-400 bg-sky-500/15',
   refuse_copilote: 'text-red-400 bg-red-500/15',
+  plan_attente_copilote: 'text-violet-300 bg-violet-500/15',
 };
 const ACTION_TEXT: Record<ActionItem['kind'], string> = {
   plan_refuse: 'text-red-200',
@@ -42,6 +44,7 @@ const ACTION_TEXT: Record<ActionItem['kind'], string> = {
   attente_copilote: 'text-amber-200',
   attente_instructeur: 'text-sky-200',
   refuse_copilote: 'text-red-200',
+  plan_attente_copilote: 'text-violet-200',
 };
 
 export default function NotificationBell({ className }: { className?: string }) {

@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
+import { isPlanCrew } from '@/lib/plans-vol/crew';
 
 // Validation du code transpondeur (0-7 uniquement, 4 chiffres)
 function validateTransponderCode(code: string): boolean {
@@ -47,7 +48,7 @@ export async function PATCH(
     // Vérifier que le plan existe et appartient à l'utilisateur
     const { data: plan, error: planError } = await admin
       .from('plans_vol')
-      .select('pilote_id, statut, siavi_avion_id, compagnie_avion_id, inventaire_avion_id')
+      .select('pilote_id, copilote_id, statut, siavi_avion_id, compagnie_avion_id, inventaire_avion_id')
       .eq('id', id)
       .single();
 
@@ -56,9 +57,9 @@ export async function PATCH(
     }
 
     // Vérifier que c'est bien le pilote du vol
-    if (plan.pilote_id !== user.id) {
+    if (!isPlanCrew(plan, user.id)) {
       return NextResponse.json(
-        { error: 'Vous n\'êtes pas le pilote de ce vol' },
+        { error: 'Vous n\'êtes pas membre de l\'équipage de ce vol' },
         { status: 403 }
       );
     }
@@ -151,7 +152,7 @@ export async function GET(
 
     const { data: plan, error } = await admin
       .from('plans_vol')
-      .select('code_transpondeur, mode_transpondeur, pilote_id, statut, current_holder_user_id, automonitoring')
+      .select('code_transpondeur, mode_transpondeur, pilote_id, copilote_id, statut, current_holder_user_id, automonitoring')
       .eq('id', id)
       .single();
 
@@ -165,7 +166,7 @@ export async function GET(
     // - admin
     // Un ATC en service mais qui ne contrôle pas ce plan ne doit PAS pouvoir
     // lire les codes transpondeur de tous les vols.
-    if (plan.pilote_id !== user.id && plan.current_holder_user_id !== user.id) {
+    if (plan.pilote_id !== user.id && plan.copilote_id !== user.id && plan.current_holder_user_id !== user.id) {
       const { data: profile } = await admin.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role !== 'admin') {
         return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
