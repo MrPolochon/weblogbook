@@ -163,6 +163,21 @@ export default function SupportBotAdminClient() {
   }>>([]);
   const [loading, setLoading] = useState(false);
   const [tokenMismatch, setTokenMismatch] = useState(false);
+  const [updateReset, setUpdateReset] = useState<{
+    status: string; total?: number; completed?: number; dm_unavailable?: number; retrying?: number;
+  } | null>(null);
+
+  async function refreshTickets() {
+    try {
+      const response = await fetch('/api/support/tickets', { credentials: 'include' });
+      if (!response.ok) throw new Error('Chargement impossible');
+      const data = await response.json();
+      setTickets(data.tickets || []);
+      setUpdateReset(data.update_reset || null);
+    } catch {
+      setUpdateReset({ status: 'unavailable' });
+    }
+  }
 
   useEffect(() => {
     fetch('/api/support/config', { credentials: 'include' })
@@ -199,10 +214,7 @@ export default function SupportBotAdminClient() {
         setRoles(d.roles || []);
       })
       .catch(() => setErr('Impossible de lister Discord.'));
-    fetch('/api/support/tickets', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((d) => setTickets(d.tickets || []))
-      .catch(() => {});
+    void refreshTickets();
   }, []);
 
   function toggleMotif(id: string) {
@@ -395,6 +407,23 @@ export default function SupportBotAdminClient() {
           Réparer /register (tickets)
         </button>
       </div>
+      {updateReset && (
+        <div className="space-y-2 pt-4 border-t border-slate-700/50 text-sm text-slate-300" aria-live="polite">
+          <h3 className="font-semibold">Réinitialisation des anciens tickets</h3>
+          {updateReset.status === 'ready' ? (
+            <>
+              <p>{updateReset.completed} / {updateReset.total} tickets traités. Les nouveaux tickets sont conservés.</p>
+              {!!updateReset.retrying && <p className="text-amber-300">{updateReset.retrying} ticket(s) en attente d’une nouvelle tentative.</p>}
+              {!!updateReset.dm_unavailable && <p className="text-amber-300">{updateReset.dm_unavailable} demandeur(s) n’ont pas pu recevoir de message privé. Leurs tickets ont été supprimés ; ils doivent en rouvrir un.</p>}
+            </>
+          ) : (
+            <p className="text-amber-300">{updateReset.status === 'migration_required'
+              ? 'La réinitialisation attend la mise à jour de la base de données.'
+              : 'Le suivi est momentanément indisponible.'}</p>
+          )}
+          <button type="button" className="btn-secondary" onClick={() => void refreshTickets()}>Actualiser le suivi</button>
+        </div>
+      )}
       {tickets.length > 0 && (
         <div className="space-y-2 pt-4 border-t border-slate-700/50">
           <h3 className="text-sm font-semibold text-slate-200">Derniers tickets (logs site)</h3>

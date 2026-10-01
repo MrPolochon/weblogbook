@@ -110,3 +110,35 @@ les mentions @everyone/@here ne sont pas autorisées dans les messages du bot.
 Simulation locale sans connexion Discord : `python support-bot/test_channel_filter.py`.
 Elle couvre les salons hors tickets, les tickets fermés, les autres serveurs,
 les messages privés et les différents rôles administrateurs/staff/instructeur.
+
+## Remise à zéro des tickets après la mise à jour du 1er octobre 2026
+
+1. Appliquer `supabase/reset_support_tickets_october_2026.sql` dans le projet
+   Supabase du site. Il prépare la liste des tickets ouverts créés au plus tard
+   le **1er octobre 2026 à 22:06:31 UTC** (instant de préparation de cette demande).
+2. Déployer le site Vercel et redémarrer le bot Railway avec cette version.
+   Le bot traite un ticket par minute via l’API protégée par `SUPPORT_BOT_SECRET`.
+3. Consulter **Admin → Bot assistance Discord → Réinitialisation des anciens
+   tickets**, puis **Actualiser le suivi** pour voir l’avancement et les MP refusés.
+
+Pour chaque ticket ciblé, le bot conserve le transcript (jusqu’aux 400 derniers
+messages, comme à la fermeture habituelle), supprime son salon puis envoie au
+demandeur un MP expliquant la mise à jour et lui demandant de rouvrir un ticket,
+avec le lien du panel. Une panne de lecture/archivage empêche la suppression.
+Si le salon était déjà supprimé, la conversation conservée sur le site sert
+de transcript. Le panel, les logs, les catégories et les nouveaux tickets sont
+exclus. Aucun salon n’est ciblé à partir de son nom.
+
+La file conserve les étapes réussies et un verrou par ticket : redémarrages et
+réexécution du SQL ne relancent pas les éléments terminés. Les erreurs
+temporaires sont réessayées après cinq minutes. Les MP refusés par Discord
+(code 50007) sont marqués comme impossibles, sans prétendre avoir averti le membre.
+Un nonce stable réduit aussi le risque de double MP si Discord a accepté l’envoi
+juste avant une panne ; la déduplication de Discord n’est valable que quelques
+minutes ([documentation Discord](https://docs.discord.com/developers/resources/message#create-message)).
+
+Sans ce SQL, aucune réinitialisation ne démarre. Ce mécanisme est propre à cette
+demande et ne supprime pas automatiquement les tickets aux mises à jour suivantes.
+
+Simulation des pannes et reprises sans accès Discord :
+`node scripts/test-support-update-reset.cjs`.

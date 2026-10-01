@@ -17,5 +17,19 @@ export async function GET() {
     .order('created_at', { ascending: false })
     .limit(100);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ tickets: data ?? [] });
+  const table = 'support_ticket_update_resets';
+  const counts = await Promise.all([
+    admin.from(table).select('ticket_id', { count: 'exact', head: true }),
+    admin.from(table).select('ticket_id', { count: 'exact', head: true }).not('completed_at', 'is', null),
+    admin.from(table).select('ticket_id', { count: 'exact', head: true }).eq('dm_status', 'unavailable'),
+    admin.from(table).select('ticket_id', { count: 'exact', head: true }).is('completed_at', null).not('last_error', 'is', null),
+  ]);
+  const resetError = counts.find((r) => r.error)?.error;
+  const updateReset = resetError
+    ? { status: ['42P01', 'PGRST205'].includes(resetError.code) ? 'migration_required' : 'unavailable' }
+    : {
+      status: 'ready', total: counts[0].count ?? 0, completed: counts[1].count ?? 0,
+      dm_unavailable: counts[2].count ?? 0, retrying: counts[3].count ?? 0,
+    };
+  return NextResponse.json({ tickets: data ?? [], update_reset: updateReset });
 }

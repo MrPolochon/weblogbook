@@ -850,9 +850,20 @@ class TicketActions(discord.ui.View):
 
 @tasks.loop(minutes=1)
 async def runtime_loop() -> None:
-    await refresh_runtime()
+    try:
+        await refresh_runtime()
+    except Exception:
+        log.exception('Configuration indisponible, nouvelle tentative au prochain passage')
     if _slash_client is not None and _slash_client.is_ready():
         await register_guild_commands(_slash_client)
+        try:
+            status, result = await api_post('/api/support/bot/update-reset', {})
+            if status >= 400 or result.get('status') in ('retry', 'migration_required'):
+                log.warning('Réinitialisation mise à jour: %s', result)
+            elif result.get('status') == 'processed':
+                log.info('Ancien ticket traité après mise à jour: %s', result)
+        except Exception:
+            log.exception('Réinitialisation indisponible, nouvelle tentative au prochain passage')
 
 
 async def _notify_channel(channel: discord.abc.Messageable, text: str) -> None:

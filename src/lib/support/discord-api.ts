@@ -8,10 +8,11 @@ function botToken(): string {
   return t;
 }
 
-export type DiscordApiError = Error & { status?: number; retryAfterMs?: number };
+export type DiscordApiError = Error & { status?: number; code?: number; retryAfterMs?: number };
 
 export async function discordFetch(path: string, init?: RequestInit) {
   const res = await fetch(`${DISCORD_API}${path}`, {
+    signal: AbortSignal.timeout(10_000),
     ...init,
     headers: {
       Authorization: `Bot ${botToken()}`,
@@ -26,6 +27,7 @@ export async function discordFetch(path: string, init?: RequestInit) {
       typeof json.message === 'string' ? json.message : `Discord HTTP ${res.status}`
     ) as DiscordApiError;
     err.status = res.status;
+    if (typeof json.code === 'number') err.code = json.code;
     const retryAfter = Number(json.retry_after ?? res.headers.get('retry-after'));
     if (res.status === 429 && Number.isFinite(retryAfter) && retryAfter > 0) {
       err.retryAfterMs = retryAfter < 100 ? retryAfter * 1000 : retryAfter;

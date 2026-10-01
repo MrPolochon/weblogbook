@@ -20,7 +20,12 @@ import {
   type TranscriptMessage,
 } from '@/lib/support/transcript';
 
-export async function closeSupportTicket(args: { channelId: string; closedBy: string }) {
+export async function closeSupportTicket(args: {
+  channelId: string;
+  closedBy: string;
+  deleteChannel?: boolean;
+  requireDiscordHistory?: boolean;
+}) {
   const admin = createAdminClient();
   const { data: ticket } = await admin
     .from('support_tickets')
@@ -34,7 +39,10 @@ export async function closeSupportTicket(args: { channelId: string; closedBy: st
   try {
     const raw = await discordGetMessages(args.channelId, 400);
     messages = parseDiscordMessages(raw);
-  } catch {
+  } catch (error) {
+    // Pour la remise à zéro, une panne de lecture ne doit pas faire perdre l'historique.
+    // Un salon déjà supprimé (404) utilise la conversation conservée par le site.
+    if (args.requireDiscordHistory && (error as { status?: number }).status !== 404) throw error;
     messages = [];
   }
   if (messages.length === 0) {
@@ -166,9 +174,11 @@ export async function closeSupportTicket(args: { channelId: string; closedBy: st
     }
   }
 
-  try {
-    await discordDeleteChannel(args.channelId);
-  } catch { /* ignore */ }
+  if (args.deleteChannel !== false) {
+    try {
+      await discordDeleteChannel(args.channelId);
+    } catch { /* ignore */ }
+  }
 
   return { ok: true as const, already: false };
 }

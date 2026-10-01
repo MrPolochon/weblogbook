@@ -102,6 +102,7 @@ export function participantsOf(messages: TranscriptMessage[]): TranscriptPartici
 export function formatClosedBy(closedBy: string, openerId: string): { label: string; mention: string } {
   const raw = String(closedBy || '').trim();
   if (raw === 'inactivite') return { label: 'inactivité', mention: 'fermeture automatique' };
+  if (raw === 'mise_a_jour_bot') return { label: 'mise à jour du bot', mention: 'mise à jour de PTFR Assistance' };
   const staff = raw.match(/^staff:(.+)$/);
   if (staff) return { label: staff[1], mention: `<@${staff[1]}>` };
   const user = raw.match(/^user:(.+)$/);
