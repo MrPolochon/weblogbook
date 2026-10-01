@@ -56,7 +56,7 @@ function trimBase(url: string): string {
 
 /**
  * Ordre des essais : tous les modèles du fournisseur principal, puis ceux du
- * second. Les doublons sont écartés — réessayer le même couple ne sert à rien.
+ * second. Les doublons fournisseur / clé / modèle sont écartés.
  */
 export function buildAttempts(env: NodeJS.ProcessEnv = process.env): Attempt[] {
   const primaryKey = env.SUPPORT_LLM_API_KEY || env.GROQ_API_KEY || env.OPENAI_API_KEY || '';
@@ -76,7 +76,7 @@ export function buildAttempts(env: NodeJS.ProcessEnv = process.env): Attempt[] {
   const seen = new Set<string>();
   const push = (base: string, key: string, model: string) => {
     if (!base || !key || !model) return;
-    const id = `${base}|${model}`;
+    const id = `${base}|${key}|${model}`;
     if (seen.has(id)) return;
     seen.add(id);
     attempts.push({ base, key, model });
@@ -96,10 +96,10 @@ export function buildAttempts(env: NodeJS.ProcessEnv = process.env): Attempt[] {
  * atteint (compté par modèle), modèle retiré du catalogue, panne côté serveur.
  */
 function worthRetryingElsewhere(status: number, data: unknown): boolean {
-  if (status === 429 || status >= 500) return true;
+  if (status === 200 || status === 408 || status === 429 || status >= 500) return true;
   if (status !== 404 && status !== 400) return false;
   const blob = JSON.stringify(data ?? {});
-  return /model_not_found|model_decommissioned|does not exist|decommissioned|not found/i.test(blob);
+  return /model_not_found|model_decommissioned|does not exist|decommissioned|not found/i.test(blob) || isBadParamError(status, data);
 }
 
 function isBadParamError(status: number, data: unknown): boolean {
@@ -135,11 +135,12 @@ function modelExtras(model: string, budget: number | undefined, withExtras: bool
 async function callLlm(
   attempt: Attempt,
   messages: LlmMessage[],
+  deadline: number,
   budget?: number,
   withExtras = true
 ): Promise<{ text: string | null; status: number; data: unknown }> {
   const res = await fetch(`${attempt.base}/chat/completions`, {
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(Math.max(1, Math.min(10_000, deadline - Date.now()))),
     method: 'POST',
     headers: { Authorization: `Bearer ${attempt.key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -155,11 +156,12 @@ async function callLlm(
       '[support-llm] HTTP',
       res.status,
       attempt.model,
-      JSON.stringify(data).slice(0, 600)
+      // Ne pas journaliser la réponse fournisseur : elle peut recopier le dossier privé.
+      'échec fournisseur'
     );
-    if (withExtras && isBadParamError(res.status, data)) {
+    if (withExtras && !/compound/i.test(attempt.model) && isBadParamError(res.status, data) && Date.now() < deadline) {
       console.warn('[support-llm] paramètre refusé, nouvel essai sans options', attempt.model);
-      return callLlm(attempt, messages, budget, false);
+      return callLlm(attempt, messages, deadline, budget, false);
     }
     return { text: null, status: res.status, data };
   }
@@ -171,14 +173,22 @@ async function callLlm(
     if (truncated) {
       console.warn('[support-llm] réponse plafonnée par max_tokens, recoupe propre', attempt.model);
     }
-    return { text: finalizeReply(content, truncated), status: res.status, data };
+    // Le formatage peut retirer la fin : conserver un transfert humain explicite,
+    // mais jamais un signal de résolution après une réponse incomplète.
+    const staffRequested = /\[\[\s*STAFF\s*\]\]/i.test(content);
+    let text = finalizeReply(content.replace(/\[\[\s*STAFF\s*\]\]/gi, ''), truncated);
+    if (truncated) text = text.replace(/\[\[\s*RESOLU\s*\]\]/gi, '').trim();
+    if (staffRequested && text) text += ' [[STAFF]]';
+    // Les seuls marqueurs d'action ne constituent pas une réponse au membre.
+    const visible = text.replace(/\[\[\s*(?:RESOLU|STAFF|PING_IFSA)\s*\]\]/gi, '').trim();
+    return { text: visible ? text : null, status: res.status, data };
   }
   console.error(
     '[support-llm] 200 sans contenu',
     attempt.model,
     'finish_reason=',
     choice?.finish_reason,
-    JSON.stringify(data).slice(0, 600)
+    'aucune réponse visible'
   );
   return { text: null, status: res.status, data };
 }
@@ -187,7 +197,9 @@ async function callLlm(
  * `budget` : plafond de tokens de sortie imposé par l'appelant (le second
  * passage documentaire se contente d'une réponse plus courte).
  */
-export async function llmReply(messages: LlmMessage[], budget?: number): Promise<LlmResult> {
+export async function llmReply(
+  messages: LlmMessage[], budget?: number, options: { deadline?: number } = {},
+): Promise<LlmResult> {
   const attempts = buildAttempts();
   if (attempts.length === 0) {
     console.error('[support-llm] aucune clé LLM (GROQ_API_KEY / SUPPORT_LLM_API_KEY / OPENAI_API_KEY)');
@@ -195,13 +207,16 @@ export async function llmReply(messages: LlmMessage[], budget?: number): Promise
   }
 
   let reason = 'unknown';
+  const deadline = Math.min(options.deadline ?? Infinity, Date.now() + 24_000);
   // Un 401 ou une clé révoquée condamne tous les modèles du même fournisseur :
   // inutile de les essayer un par un, on saute au fournisseur suivant.
-  const deadBases = new Set<string>();
+  const deadCredentials = new Set<string>();
   for (const [index, attempt] of attempts.entries()) {
-    if (deadBases.has(attempt.base)) continue;
+    const credentials = `${attempt.base}|${attempt.key}`;
+    if (deadCredentials.has(credentials)) continue;
+    if (Date.now() >= deadline) return { ok: false, reason: 'timeout' };
     try {
-      const { text, status, data } = await callLlm(attempt, messages, budget);
+      const { text, status, data } = await callLlm(attempt, messages, deadline, budget);
       if (text) {
         if (index > 0) {
           console.warn('[support-llm] modèle de secours utilisé', attempt.model, `(essai ${index + 1})`);
@@ -209,11 +224,11 @@ export async function llmReply(messages: LlmMessage[], budget?: number): Promise
         return { ok: true, text };
       }
       reason = `http_${status}`;
-      if (!worthRetryingElsewhere(status, data)) deadBases.add(attempt.base);
+      if (!worthRetryingElsewhere(status, data)) deadCredentials.add(credentials);
     } catch (e) {
-      console.error('[support-llm] fetch', attempt.model, e);
+      console.error('[support-llm] fetch', attempt.model, e instanceof Error ? e.name : 'Error');
       reason = 'fetch_error';
-      deadBases.add(attempt.base);
+      // Un modèle lent n'empêche pas d'essayer le suivant avec la même clé.
     }
   }
   return { ok: false, reason };

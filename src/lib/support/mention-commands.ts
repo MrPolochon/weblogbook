@@ -108,7 +108,7 @@ export async function runMentionCommand(args: {
   }
 
   if (intent.id === 'staff') {
-    await escalateTicketToStaff(channelId, 'Le membre demande un staff.');
+    await escalateTicketToStaff(channelId, 'Une prise en charge humaine est demandée.', { instructor: intent.instructor });
     return { escalated: true, posted: true, action: 'staff' };
   }
 

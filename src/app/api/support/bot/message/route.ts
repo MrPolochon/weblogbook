@@ -30,7 +30,6 @@ import {
   isGroundCrewTopic,
   isSiaviRecruitmentTopic,
   isSiaviTopic,
-  isTrainingRequest,
   ticketChannelName,
   type SupportStatus,
 } from '@/lib/support/motifs';
@@ -58,7 +57,9 @@ import {
   writeRegisterState,
 } from '@/lib/support/register-conversation';
 import { llmReply, type LlmResult } from '@/lib/support/llm';
-import { buildRequesterContext } from '@/lib/support/requester-context';
+import { buildRequesterContext, resolveRequesterAccount, UNAVAILABLE_ACCOUNT_CONTEXT } from '@/lib/support/requester-context';
+import { buildSiteContext } from '@/lib/support/site-context';
+import { isSiteWorkflowTopic } from '@/lib/support/site-knowledge';
 import {
   isAffirmativeResolutionAnswer,
   isNegativeResolutionAnswer,
@@ -72,8 +73,10 @@ import {
   withResolutionOfferedNote,
 } from '@/lib/support/ticket-actions';
 import { closeSupportTicket } from '@/lib/support/close-ticket';
-import { escalateTicketToStaff, staffPingLine } from '@/lib/support/escalate';
+import { claimStaffAlert, escalateTicketToStaff, releaseStaffAlert, staffPingLine } from '@/lib/support/escalate';
+import { explicitlyRequestsStaff, memberNeedsStaff, needsInstructorHandoff, staffHandoffPending } from '@/lib/support/staff-policy';
 import { isChatter } from '@/lib/support/message-intent';
+import { isAnswerToBotQuestion, replyRequestsStaff, stripStaffMarker, supportTopic } from '@/lib/support/conversation-context';
 import {
   authoritativeSupportReply,
   CLARIFICATION_ONBOARDING,
@@ -112,25 +115,6 @@ const LLM_SOFT_FALLBACK =
 /** 2e échec consécutif : là, le staff est légitime. */
 const LLM_HARD_FALLBACK =
   'Je n’arrive toujours pas à te répondre correctement. Je passe la main à un staff.';
-
-/**
- * Sujets réservés au staff. Évalué UNIQUEMENT sur le message du membre : évaluer
- * aussi la réponse IA faisait escalader un refus poli (« je ne peux pas parler de
- * l’hébergement ») ou le texte de repli du bot lui-même.
- */
-function memberNeedsStaff(text: string): boolean {
-  const t = text.toLowerCase();
-  if (/virement|solde d.un autre|(mot de passe|compte|sanction)s? d.un autre/.test(t)) return true;
-  if (/h[ée]berg|github|supabase|vercel|code source|nom de domaine|dns/.test(t)) return true;
-  return false;
-}
-
-/** L’IA demande explicitement un staff — à n’évaluer que sur une vraie réponse du modèle. */
-function iaCallsStaff(iaText: string): boolean {
-  return /appeler un staff|j['’]appelle un staff|un staff (va|sera) (être |etre )?(appel|contact|pr[ée]venu)|je passe la main à un staff/i.test(
-    iaText
-  );
-}
 
 /** Le tour précédent était déjà un échec LLM → on n’insiste pas une deuxième fois pour rien. */
 function lastAssistantWasLlmFailure(turns: TicketTurn[]): boolean {
@@ -361,7 +345,10 @@ export async function POST(req: NextRequest) {
       }
       await recordSilently(fromStaffRole && !requesterSpeaking ? 'staff' : 'user', {
         ...(adminOrder ? {} : IA_RESUME_PATCH),
-        ...(result.escalated || adminOrder || muted ? {} : { statut: 'waiting' }),
+        ...(result.escalated || adminOrder || muted || staffHandoffPending(ticket, resumed) ? {} : { statut: 'waiting' }),
+        ...(result.escalated
+          ? { memory_notes: writeRegisterState(withResolutionOfferedNote(memory, false), 'idle'), resolution_offered: false }
+          : {}),
         ...(result.offeredResolution
           ? { memory_notes: withResolutionOfferedNote(memory, true), resolution_offered: true }
           : {}),
@@ -381,6 +368,30 @@ export async function POST(req: NextRequest) {
   if (staffSpeaking && !mentionsBot) {
     await recordSilently('staff');
     return NextResponse.json({ ok: true, ignored: 'staff_hors_mention', reply: null });
+  }
+
+  // Une demande humaine interrompt aussi la collecte d'inscription. Aucun modèle
+  // ni dossier du site n'est nécessaire pour transmettre cet appel explicite.
+  if (explicitlyRequestsStaff(content)) {
+    await recordSilently(staffSpeaking ? 'staff' : 'user', {
+      ...IA_RESUME_PATCH,
+      statut: 'staff_needed',
+      resolution_offered: false,
+      memory_notes: writeRegisterState(withResolutionOfferedNote(memory, false), 'idle'),
+    });
+    try {
+      if (ticket.staff_pinged_at) {
+        await discordSendMessage(channelId, 'La demande est déjà transmise ; un membre de l’équipe doit encore prendre en charge ce ticket.');
+      } else {
+        await escalateTicketToStaff(channelId, 'Je transmets ta demande à l’équipe pour une prise en charge humaine.', {
+          instructor: needsInstructorHandoff(content),
+        });
+      }
+    } catch (error) {
+      console.error('[support-message] appel humain', error instanceof Error ? error.name : 'Error');
+      return NextResponse.json({ error: 'staff_alert_failed', statut: 'staff_needed', escalate: true }, { status: 502 });
+    }
+    return NextResponse.json({ ok: true, statut: 'staff_needed', escalate: true, reply: null });
   }
 
   // Création de compte dans le ticket : le serveur collecte identifiant puis
@@ -544,7 +555,7 @@ export async function POST(req: NextRequest) {
 
   // Deux réponses vagues consécutives suffisent : le serveur fournit des choix
   // concrets sans redemander au modèle de reformuler la même clarification.
-  if (requesterSpeaking && clarification.showOnboarding) {
+  if (requesterSpeaking && clarification.showOnboarding && !staffHandoffPending(ticket, resumed)) {
     const nextTurns = trimConversation([
       ...turns,
       { role: 'user', content },
@@ -606,7 +617,7 @@ export async function POST(req: NextRequest) {
   // Bavardage : « MDR », « XD », « merci », une vanne entre membres. Le bot
   // répondait par une phrase creuse suivie d'une proposition de clôture ; il se
   // tait désormais. Une mention explicite du bot passe outre : on l'a appelé.
-  if (!mentionsBot && isChatter(content)) {
+  if (!mentionsBot && isChatter(content) && !isAnswerToBotQuestion(content, turns) && !explicitlyRequestsStaff(content)) {
     console.info('[support-message] message sans demande — silence', {
       shortId: ticket.short_id,
       contentLen: content.length,
@@ -615,21 +626,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, ignored: 'hors_demande', reply: null });
   }
 
-  // Sujet du ticket = motif + demande initiale + message courant. Il pilote à la
-  // fois le choix des documents injectés et la recherche de questionnaires.
-  const topicText = `${ticket.motif || ''} ${ticket.reason_text || ''} ${content}`;
-  const hasAccount = Boolean(ticket.user_id);
-  const focusText = `${ticket.reason_text || ''} ${content}`;
+  // Une relance suit le sujet récent, une nouvelle demande remplace le motif d'ouverture.
+  const topicText = supportTopic(content, turns, ticket);
+  const account = await resolveRequesterAccount(admin, openerDiscordId);
+  const hasAccount = Boolean(account.userId);
+  // Jamais l'ancien user_id du ticket après déliaison, ni une identité fournie dans le texte.
+  const requesterId = account.userId;
+  const focusText = topicText;
+  const siteWorkflow = isSiteWorkflowTopic(focusText);
   const isGroundCrewTopicHere = isGroundCrewTopic(focusText);
-  const isAtcSubject = isAtcTopic(focusText);
+  const isAtcSubject = !siteWorkflow && isAtcTopic(focusText);
   const isIfsaTopic = isIfsaSubject(focusText);
   const isSiaviSubject = isSiaviTopic(focusText);
   const groundAmbiguous = isAmbiguousGroundTopic(content);
 
   // Le dossier vient de la base à chaque message : les licences, QCM et
   // demandes d'instruction bougent pendant la vie du ticket.
-  const [requesterContext, aeroschoolMatches, directoryLookup] = await Promise.all([
-    buildRequesterContext(admin, ticket.user_id as string | null),
+  const [requesterContext, aeroschoolMatches, directoryLookup, siteContext] = await Promise.all([
+    account.unavailable ? Promise.resolve(UNAVAILABLE_ACCOUNT_CONTEXT) : buildRequesterContext(admin, requesterId),
     isSiaviSubject || isGroundCrewTopicHere
       ? Promise.resolve([])
       : findAeroschoolForms(admin, topicText, { hasAccount }).catch((e) => {
@@ -638,14 +652,15 @@ export async function POST(req: NextRequest) {
         }),
     // Annuaire : n'interroge la base que si le message cherche vraiment à
     // identifier quelqu'un, et ne rend que ce que le demandeur a le droit de voir.
-    findDirectoryMatches(admin, content, { requesterId: ticket.user_id as string | null }),
+    findDirectoryMatches(admin, content, { requesterId }),
+    buildSiteContext(admin, topicText, hasAccount),
   ]);
 
   const hints = [
     isAtcSubject
       ? 'Sujet détecté : CONTRÔLE AÉRIEN (ATC). Réponds avec la documentation ATC, jamais avec le parcours CAT pilote.'
       : '',
-    isAtcTrainingTopic(focusText)
+    !siteWorkflow && isAtcTrainingTopic(focusText)
       ? 'Il veut progresser côté ATC : utilise son dossier puis le parcours humain « Instruction → Mon Espace → Session de training (ATC) ». Un QCM ne donne jamais automatiquement un grade.'
       : '',
     isSiaviSubject
@@ -671,7 +686,9 @@ export async function POST(req: NextRequest) {
   let prefer: DocSourceId[] = [];
   // Le bug d'origine : « training Approach » ramenait le livret CAT pilote.
   let penalize: DocSourceId[] = [];
-  if (isGroundCrewTopicHere || groundAmbiguous) {
+  if (siteWorkflow) {
+    prefer = ['site'];
+  } else if (isGroundCrewTopicHere || groundAmbiguous) {
     prefer = ['ground'];
     penalize = groundAmbiguous ? ['pilote', 'ifsa', 'siavi'] : ['pilote', 'manuel', 'atc', 'ifsa', 'siavi'];
   } else if (isIfsaTopic) {
@@ -682,14 +699,15 @@ export async function POST(req: NextRequest) {
     penalize = ['pilote', 'atc', 'manuel', 'ground', 'ifsa'];
   } else if (isAtcSubject) {
     prefer = ['atc', 'manuel'];
-    penalize = ['pilote', 'site', 'ground', 'ifsa', 'siavi'];
+    penalize = ['pilote', 'ground', 'ifsa', 'siavi'];
   } else if (isPilotCatTopic) {
     prefer = ['pilote'];
-    penalize = ['atc', 'manuel', 'site', 'ground', 'ifsa', 'siavi'];
+    penalize = ['atc', 'manuel', 'ground', 'ifsa', 'siavi'];
   }
 
   const docChunks = isAccountCreationTopic(content)
     ? chunksFromSource('site', 2)
+    : siteWorkflow ? searchDocs(topicText, { limit: 3, prefer, penalize })
     : isGroundCrewTopicHere || groundAmbiguous
       ? chunksFromSource('ground', 3)
       : isIfsaTopic
@@ -698,7 +716,7 @@ export async function POST(req: NextRequest) {
           ? chunksFromSource('siavi', 3)
           : searchDocs(topicText, { limit: 3, prefer, penalize });
 
-  const buildMessages = (chunks: DocChunk[], history: TicketTurn[] = turns) =>
+  const buildMessages = (chunks: DocChunk[], history: TicketTurn[] = turns, finalPass = false) =>
     toLlmMessages(
       SUPPORT_IA_SYSTEM_PROMPT,
       [
@@ -709,10 +727,13 @@ export async function POST(req: NextRequest) {
           memory_notes: memory,
         }),
         requesterContext,
+        siteContext,
+        staffHandoffPending(ticket, resumed) ? 'Un appel humain est déjà en attente dans ce ticket. Ne prétends pas lancer un nouvel appel et ne propose pas de clôture ; tu peux encore fournir une information utile.' : '',
         aeroschoolBlock(aeroschoolMatches, { hasAccount }),
         directoryBlock(directoryLookup),
         docsBlock(chunks),
         ...hints,
+        finalPass ? 'Recherche documentaire terminée : réponds avec les extraits disponibles. Si la réponse manque encore, indique cette limite et passe la main avec [[STAFF]]. Ne demande plus de recherche [[DOC]].' : '',
       ]
         .filter(Boolean)
         .join('\n\n'),
@@ -721,8 +742,12 @@ export async function POST(req: NextRequest) {
     );
 
   let llm: LlmResult;
+  // Les deux passages partagent un délai, pour laisser le temps d'envoyer la réponse Discord.
+  const llmDeadline = Date.now() + 35_000;
   try {
-    llm = await llmReply(buildMessages(docChunks));
+    const knownReply = authoritativeSupportReply(content, turns);
+    llm = knownReply ? { ok: true, text: knownReply }
+      : await llmReply(buildMessages(docChunks), undefined, { deadline: llmDeadline });
   } catch (e) {
     console.error('[support-message] llmReply', e);
     llm = { ok: false, reason: 'exception' };
@@ -749,7 +774,7 @@ export async function POST(req: NextRequest) {
         try {
           // Second appel volontairement compact : mêmes consignes, plus d'extraits,
           // mais historique réduit pour rester dans les 8K tokens/minute de Groq.
-          const retry = await llmReply(buildMessages([...docChunks, ...extra], turns.slice(-4)), 800);
+          const retry = await llmReply(buildMessages([...docChunks, ...extra], turns.slice(-4), true), 1100, { deadline: llmDeadline });
           // Un modèle qui redemande de la doc au second tour n'obtiendra rien de
           // plus : on bascule sur le staff plutôt que de renvoyer un marqueur.
           llm = retry.ok && !extractDocRequest(retry.text) ? retry : llm;
@@ -773,16 +798,16 @@ export async function POST(req: NextRequest) {
   let rawReply: string;
   let escalate: boolean;
   if (llm.ok) {
-    rawReply = authoritativeSupportReply(content) || llm.text;
+    rawReply = llm.text;
     // Une demande de training se planifie avec un humain : l'IA donne la marche
     // à suivre, l'instructeur prend le relais pour poser le créneau.
-    const needsInstructor = isTrainingRequest(content) && String(ticket.statut || '') !== 'staff_needed';
+    const needsInstructor = needsInstructorHandoff(content);
     const needsSiaviStaff =
       isSiaviRecruitmentTopic(focusText) && String(ticket.statut || '') !== 'staff_needed';
     escalate =
       docLookupFailed ||
       memberNeedsStaff(content) ||
-      iaCallsStaff(rawReply) ||
+      replyRequestsStaff(rawReply) ||
       needsInstructor ||
       needsSiaviStaff;
   } else {
@@ -799,13 +824,14 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  escalate = escalate || staffHandoffPending(ticket, resumed);
+
   // Appel d'un agent IFSA : le modèle a seulement posé un marqueur, c'est le
   // serveur qui choisit la personne et écrit la mention. Une seule fois par
   // ticket, et retour au ping staff s'il n'y a aucun agent joignable.
   let ifsaMention = '';
   if (llm.ok && wantsIfsaPing(rawReply)) {
-    const ticketIfsaTopic = `${ticket.motif || ''} ${ticket.reason_text || ''}`;
-    if (!shouldHonorIfsaPing(content, ticketIfsaTopic)) {
+    if (!shouldHonorIfsaPing(content, topicText)) {
       console.warn('[support-message] marqueur IFSA rejeté hors sujet', {
         shortId: ticket.short_id,
         motif: ticket.motif,
@@ -813,7 +839,7 @@ export async function POST(req: NextRequest) {
     } else if (ticketAlreadyPingedIfsa(memory)) {
       console.info('[support-message] agent IFSA déjà appelé sur ce ticket', { shortId: ticket.short_id });
     } else {
-      ifsaMention = await pickIfsaAgentMention(admin, { excludeUserId: ticket.user_id as string | null });
+      ifsaMention = await pickIfsaAgentMention(admin, { excludeUserId: requesterId });
       if (ifsaMention) memory = withIfsaPingNote(memory);
       else escalate = true;
     }
@@ -835,7 +861,7 @@ export async function POST(req: NextRequest) {
   const userSaysNotResolved = /pas r[eé]solu|n['’]est pas r[eé]solu|appeler un staff/i.test(content);
   const clearOffer = (escalate || userSaysNotResolved) && !offerPanel;
   const reply = sanitizeOfficialSiteUrl(
-    stripResolutionQuestion(stripIfsaPingMarker(stripDocMarker(stripResoluMarker(rawReply)))),
+    stripResolutionQuestion(stripStaffMarker(stripIfsaPingMarker(stripDocMarker(stripResoluMarker(rawReply))))),
   );
 
   const statut: SupportStatus = escalate ? 'staff_needed' : 'waiting';
@@ -855,21 +881,26 @@ export async function POST(req: NextRequest) {
   // Le ping staff ne part qu'une fois par situation : tant que le ticket reste
   // en attente d'un humain, on ne le réveille pas à chaque message.
   const cfg = await getSupportConfig();
-  const alreadyPinged = Boolean(ticket.staff_pinged_at);
-  const ping = escalate && !alreadyPinged ? staffPingLine(cfg, String(ticket.motif)) : '';
+  const alertClaim = escalate ? await claimStaffAlert(admin, ticket.id) : null;
+  const ping = alertClaim ? staffPingLine(cfg, siteWorkflow ? 'assistance' : String(ticket.motif), needsInstructorHandoff(content)) : '';
 
-  await updateTicketRow(admin, ticket.id, {
-    statut,
-    conversation: nextTurns,
-    memory_notes: memory,
-    last_human_at: new Date().toISOString(),
-    last_nudge_at: null,
-    inactivity_nudge: 0,
-    updated_at: new Date().toISOString(),
-    staff_pinged_at: escalate ? ticket.staff_pinged_at || new Date().toISOString() : null,
-    ...(resumed ? IA_RESUME_PATCH : {}),
-    ...(offerPanel ? { resolution_offered: true } : clearOffer ? { resolution_offered: false } : {}),
-  });
+  try {
+    await updateTicketRow(admin, ticket.id, {
+      statut,
+      conversation: nextTurns,
+      memory_notes: memory,
+      last_human_at: new Date().toISOString(),
+      last_nudge_at: null,
+      inactivity_nudge: 0,
+      updated_at: new Date().toISOString(),
+      // La réservation atomique gère staff_pinged_at ; une réponse ordinaire ne l'efface jamais.
+      ...(resumed ? IA_RESUME_PATCH : {}),
+      ...(offerPanel ? { resolution_offered: true } : clearOffer ? { resolution_offered: false } : {}),
+    });
+  } catch (error) {
+    if (alertClaim) await releaseStaffAlert(admin, ticket.id, alertClaim);
+    throw error;
+  }
 
   try {
     await discordRenameChannel(channelId, ticketChannelName(statut, ticket.short_id));
@@ -896,6 +927,7 @@ export async function POST(req: NextRequest) {
       );
     }
   } catch (e) {
+    if (alertClaim) await releaseStaffAlert(admin, ticket.id, alertClaim);
     console.error('[support-message] discordSendMessage', e);
     return NextResponse.json({ error: 'discord_send_failed', statut, escalate }, { status: 502 });
   }

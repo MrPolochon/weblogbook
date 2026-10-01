@@ -6,8 +6,8 @@ type Admin = ReturnType<typeof createAdminClient>;
 /**
  * Instantané du dossier du membre, injecté dans le prompt de SON ticket uniquement.
  *
- * Budget Groq : 8K tokens/minute pour tout l’appel. Ce bloc doit rester très court
- * (≈ 300 tokens max) : lignes `clé: valeur`, champs vides omis, listes plafonnées.
+ * Lignes compactes, listes plafonnées. Une consultation échouée n'est jamais
+ * présentée comme une absence de droits, de licences ou de demandes.
  * Aucune donnée d’un autre membre, aucun e-mail, aucun identifiant technique (UUID).
  */
 
@@ -53,26 +53,35 @@ export function workspaceGuidance(profile: {
   if (role === 'admin') {
     return 'espace de travail: ADMIN. Il peut agir dans le back-office. Ne lui dis pas d’appeler un staff pour une action qu’il peut faire lui-même.';
   }
-  if (role === 'atc' || profile.atc) {
-    return 'espace de travail: CONTRÔLEUR ATC. Réponds dans l’espace ATC (grades, positions, training, manuel contrôleur). Logbook / CAT pilote seulement s’il le demande clairement.';
-  }
-  if (role === 'siavi' || profile.siavi) {
-    return 'espace de travail: SIAVI — Service d’Incendie Aéronautique et d’Information en Vol (pompiers AFIS). Pas un pilote CAT ni un contrôleur ATC.';
-  }
-  if (role === 'ground_crew' || profile.ground_crew) {
-    return 'espace de travail: GROUND CREW (piste). Pas de test ATC, pas de CAT pilote, sauf s’il le demande. Il a déjà l’accès : n’envoie pas postuler.';
-  }
-  if (profile.ifsa) {
-    return 'espace de travail: agent IFSA. Sûreté aérienne, pas le parcours pilote.';
-  }
-  return null;
+  const spaces = [
+    role === 'atc' || profile.atc ? 'contrôleur ATC' : '',
+    role === 'siavi' || profile.siavi ? 'SIAVI (pompiers AFIS)' : '',
+    role === 'ground_crew' || profile.ground_crew ? 'Ground Crew (personnel de piste)' : '',
+    profile.ifsa ? 'IFSA' : '',
+  ].filter(Boolean);
+  return spaces.length ? `espaces déjà accessibles: ${spaces.join(', ')}. Réponds dans l’espace concerné par sa demande actuelle, sans confondre les parcours ni le renvoyer postuler pour un accès déjà détenu.` : null;
 }
 
 export const NO_LINKED_ACCOUNT_CONTEXT = [
   'Dossier du membre : ce compte Discord n’est PAS lié à un compte du site.',
   'Tu n’as donc aucune donnée sur lui : n’invente rien sur ses licences, formations ou compagnie.',
-  'Pour toute question liée à son compte, dis-lui de lier son Discord depuis « Mon compte » → « Identité & connexions ».',
+  'S’il possède un compte et peut se connecter, il peut lier son Discord depuis « Mon compte » → « Identité & connexions ». Sinon aide-le sur la connexion ou la création de compte sans exiger une page inaccessible.',
 ].join('\n');
+
+export const UNAVAILABLE_ACCOUNT_CONTEXT = 'Dossier du membre : consultation indisponible. Cela ne signifie ni compte non lié, ni absence de licences ou de droits. Ne conclus rien sur ces éléments.';
+
+/** La liaison peut changer après l'ouverture du ticket. Ne jamais réutiliser un ancien compte délié. */
+export async function resolveRequesterAccount(admin: Admin, discordId: string): Promise<{ userId: string | null; unavailable: boolean }> {
+  if (!discordId) return { userId: null, unavailable: true };
+  try {
+    const { data, error } = await admin.from('discord_links').select('user_id')
+      .eq('discord_user_id', discordId).eq('status', 'active')
+      .abortSignal(AbortSignal.timeout(4000)).maybeSingle();
+    return { userId: error ? null : data?.user_id ?? null, unavailable: Boolean(error) };
+  } catch {
+    return { userId: null, unavailable: true };
+  }
+}
 
 const AEROSCHOOL_STATUS: Record<string, string> = {
   submitted: 'en attente de correction',
@@ -117,6 +126,7 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
       invitRes,
       plansRes,
       aircraftRes,
+      copilotPlansRes,
     ] = await Promise.all([
       admin
         .from('profiles')
@@ -159,14 +169,16 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
         .eq('pilote_id', userId)
         .eq('statut', 'en_attente')
         .limit(MAX_ITEMS),
-      admin.from('plans_vol').select('numero_vol, aeroport_depart, aeroport_arrivee, statut, refusal_reason')
+      admin.from('plans_vol').select('numero_vol, aeroport_depart, aeroport_arrivee, statut, refusal_reason, created_at')
         .eq('pilote_id', userId).order('created_at', { ascending: false }).limit(MAX_ITEMS),
       admin.from('inventaire_avions').select('nom_personnalise, types_avion(nom)')
         .eq('proprietaire_id', userId).order('created_at', { ascending: false }).limit(MAX_ITEMS),
+      admin.from('plans_vol').select('numero_vol, aeroport_depart, aeroport_arrivee, statut, refusal_reason, created_at')
+        .eq('copilote_id', userId).order('created_at', { ascending: false }).limit(MAX_ITEMS),
     ]);
 
     const profile = profileRes.data;
-    if (!profile) return NO_LINKED_ACCOUNT_CONTEXT;
+    if (profileRes.error || !profile) return UNAVAILABLE_ACCOUNT_CONTEXT;
 
     const peopleIds = new Set<string>();
     if (profile.instructeur_referent_id) peopleIds.add(String(profile.instructeur_referent_id));
@@ -184,7 +196,7 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
     const [gradeRes, peopleRes, formsRes, progressionRes] = await Promise.all([
       profile.atc_grade_id
         ? admin.from('atc_grades').select('nom').eq('id', profile.atc_grade_id).maybeSingle()
-        : Promise.resolve({ data: null }),
+        : Promise.resolve({ data: null, error: null }),
       peopleIds.size
         ? admin.from('profiles').select('id, identifiant').in('id', Array.from(peopleIds))
         : Promise.resolve({ data: [] as Array<{ id: string; identifiant: string }> }),
@@ -198,7 +210,7 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
             .eq('eleve_id', userId)
             .eq('licence_code', formationLicence)
             .eq('completed', true)
-        : Promise.resolve({ data: [] as Array<{ module_code: string }> }),
+        : Promise.resolve({ data: [] as Array<{ module_code: string }>, error: null }),
     ]);
 
     const nameById = new Map(
@@ -217,6 +229,12 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
     const lines: string[] = [
       'Dossier du membre (données réelles du site, valables pour CE ticket uniquement) :',
     ];
+    const unavailable = [
+      ['licences', licencesRes], ['QCM', qcmRes], ['training ATC', atcTrainingRes],
+      ['training pilote', pilotTrainingRes], ['examens', examRes], ['compagnies', emploiRes],
+      ['invitations', invitRes],
+    ].filter(([, result]) => typeof result !== 'string' && result.error).map(([name]) => name);
+    if (unavailable.length) lines.push(`Consultation indisponible: ${unavailable.join(', ')}. Ne pas interpréter ces erreurs comme une absence.`);
 
     const head = [`identifiant: ${profile.identifiant || '?'}`, `rôle: ${profile.role || 'pilote'}`];
     if (profile.callsign) head.push(`callsign: ${profile.callsign}`);
@@ -225,7 +243,7 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
     const acces: string[] = [];
     if (profile.atc || profile.role === 'atc') {
       const grade = (gradeRes.data as { nom?: string } | null)?.nom;
-      acces.push(grade ? `ATC (grade ${grade})` : 'ATC (aucun grade attribué)');
+      acces.push(grade ? `ATC (grade ${grade})` : profile.atc_grade_id ? 'ATC (nom du grade indisponible)' : 'ATC (aucun grade attribué)');
     }
     if (profile.armee) acces.push('militaire');
     if (profile.ifsa) acces.push('IFSA');
@@ -240,14 +258,14 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
     const licences = (licencesRes.data || [])
       .map((l) => (l.langue ? `${l.type} (${l.langue})` : String(l.type)))
       .filter(Boolean);
-    lines.push(
+    if (!licencesRes.error) lines.push(
       licences.length
         ? `licences détenues: ${Array.from(new Set(licences)).join(', ')}`
         : 'licences détenues: aucune',
     );
     const atcGuidance = atcDossierGuidance(
       profile,
-      (licencesRes.data || []).map((licence) => String(licence.type)),
+      (licencesRes.error ? [] : licencesRes.data || []).map((licence) => String(licence.type)),
     );
     if (atcGuidance) lines.push(atcGuidance);
 
@@ -260,7 +278,7 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
         : null;
       lines.push(
         `formation en cours: ${program?.label || formationLicence}` +
-          (total ? ` — ${done}/${total} modules` : '') +
+          (progressionRes.error ? ' — progression indisponible' : total ? ` — ${done}/${total} modules` : '') +
           (referent ? ` — référent ${referent}` : ''),
       );
     }
@@ -308,9 +326,13 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
       .map((i) => firstRelation<{ nom?: string }>(i.compagnies)?.nom)
       .filter(Boolean) as string[];
     if (invits.length) lines.push(`invitation(s) compagnie en attente: ${invits.join(', ')}`);
-    if (plansRes.error) lines.push('Plans de vol : consultation indisponible, ne pas conclure à une absence de plans.');
-    else if (plansRes.data?.length) lines.push(`Plans récents: ${plansRes.data.map((plan) =>
-      `${plan.numero_vol}: ${plan.aeroport_depart} → ${plan.aeroport_arrivee}, ${plan.statut}` +
+    if (plansRes.error || copilotPlansRes.error) lines.push('Plans de vol : consultation partiellement indisponible, ne pas conclure à une absence de plans.');
+    const recentPlans = [
+      ...(plansRes.error ? [] : plansRes.data || []).map((plan) => ({ ...plan, crew: 'pilote' })),
+      ...(copilotPlansRes.error ? [] : copilotPlansRes.data || []).map((plan) => ({ ...plan, crew: 'copilote' })),
+    ].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))).slice(0, MAX_ITEMS);
+    if (recentPlans.length) lines.push(`Plans récents (aperçu limité à ${MAX_ITEMS}, pas une liste exhaustive): ${recentPlans.map((plan) =>
+      `${plan.numero_vol} (${plan.crew}): ${plan.aeroport_depart} → ${plan.aeroport_arrivee}, ${plan.statut}` +
       (plan.refusal_reason ? ` (motif: ${String(plan.refusal_reason).slice(0, 160)})` : '')).join(' ; ')}`);
     if (aircraftRes.error) lines.push('Avions personnels : consultation indisponible.');
     else if (aircraftRes.data?.length) lines.push(`Avions personnels récents: ${aircraftRes.data.map((aircraft) =>
@@ -322,7 +344,7 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
 
     return lines.join('\n');
   } catch (e) {
-    console.error('[support-message] dossier membre indisponible', e);
-    return 'Dossier du membre : indisponible pour le moment. Ne suppose rien sur son compte, demande-lui les informations nécessaires.';
+    console.error('[support-message] dossier membre indisponible', e instanceof Error ? e.name : 'Error');
+    return UNAVAILABLE_ACCOUNT_CONTEXT;
   }
 }

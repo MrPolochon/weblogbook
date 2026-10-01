@@ -3,6 +3,7 @@ import { CODE_DE_CONDUITE_IA, CODE_DE_CONDUITE_URL } from '@/lib/support/code-de
 import { LIVRET_PROGRESSION_IA, LIVRET_PROGRESSION_URL } from '@/lib/support/livret-progression';
 import { MANUEL_CONTROLEUR_IA, MANUEL_CONTROLEUR_URL } from '@/lib/support/manuel-controleur';
 import { SITE_PROCEDURES_IA } from '@/lib/support/site-procedures';
+import { SITE_KNOWLEDGE_CHUNKS } from '@/lib/support/site-knowledge';
 import { GROUND_CREW_IA, IFSA_IA, SIAVI_IA } from '@/lib/support/espaces-site';
 
 /**
@@ -135,9 +136,10 @@ export const DOC_CHUNKS: DocChunk[] = [
     prefix: 'site',
     source: 'site',
     sourceLabel: 'Démarches du site',
-    link: '/aeroschool',
+    link: '/',
     body: SITE_PROCEDURES_IA,
   }),
+  ...SITE_KNOWLEDGE_CHUNKS,
   ...chunksFromDocument({
     prefix: 'gc',
     source: 'ground',

@@ -37,20 +37,25 @@ export function shouldHonorIfsaPing(currentMessage: string, ticketTopic: string)
 }
 
 /** Les deux flux d'authentification ont des procédures distinctes et autoritaires. */
-export function authoritativeSupportReply(message: string): string | null {
+export function authoritativeSupportReply(message: string, turns: TicketTurn[] = []): string | null {
   const t = normalize(message);
+  // Une réponse générique déjà donnée n'aide pas au diagnostic suivant.
+  const previousAnswers = turns.filter((turn) => turn.role === 'assistant').slice(-4);
+  if (/\b(deja|toujours|encore|reessaye|ne marche pas|ne fonctionne pas)\b/.test(t) && previousAnswers.length) return null;
+  const fresh = (reply: string) => previousAnswers.some((turn) => turn.content === reply) ? null : reply;
   if (/\bmot de passe\b.{0,20}\b(?:oublie|perdu)\b|\b(?:oublie|perdu)\b.{0,20}\bmot de passe\b/.test(t)) {
-    return (
+    return fresh(
       'Sur la page de connexion, ouvre **Mot de passe oublié**, puis saisis ton identifiant ou ton e-mail. ' +
       'Le site envoie un e-mail contenant un **lien** `/login?reset=TOKEN`, valable **24 h** : ce flux n’utilise jamais de code à 6 chiffres.'
     );
   }
   if (
+    /\bcode\b/.test(t) && !/\b(lien|reset|reinitialis[a-z]*|mot de passe)\b/.test(t) &&
     /\b(?:ne )?recois pas\b.{0,45}\b(?:code|e ?mail|mail)\b|\b(?:code|e ?mail|mail)\b.{0,45}\b(?:pas recu|ne recois pas|recois pas)\b/.test(
       t,
     )
   ) {
-    return (
+    return fresh(
       'Le code à 6 chiffres concerne la vérification de connexion. Vérifie l’adresse e-mail du compte et les indésirables, puis demande un nouvel envoi depuis l’écran de connexion ; s’il n’arrive toujours pas, je passe la main à un staff.'
     );
   }

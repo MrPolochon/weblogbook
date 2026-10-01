@@ -34,4 +34,4 @@ PARCOURS RÉEL (ne cite aucune autre page) :
 5) Examen : « Mon Espace » → « Demander un examen » → licence ATC/AFIS ; un ATC FE est assigné.
 Il n’existe dans le code aucun livret de progression ATC à signer : les signatures élève/instructeur concernent uniquement le livret PILOTE CAT. N’invente ni signatures ATC, ni étapes APP/TWR/GND obligatoires.
 L’accès au menu ATC du site suppose un compte avec l’accès ATC (ouvert par le staff).
-Un training (ATC comme pilote) se planifie TOUJOURS avec un humain : donne la procédure courte ci-dessus, dis que tu ne peux pas réserver la séance, et appelle un instructeur.`;
+Un training (ATC comme pilote) se planifie avec un humain. Pour une question sur le parcours, explique la procédure sans alerte. Pour une demande effective de séance ou de créneau, précise que tu ne peux pas réserver et appelle un instructeur.`;

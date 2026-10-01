@@ -1,4 +1,5 @@
 import { SUPPORT_MOTIFS, type SupportMotifId } from '@/lib/support/motifs';
+import { explicitlyRequestsStaff } from '@/lib/support/staff-policy';
 
 /**
  * Protocole voulu par le serveur : `[mention du bot] [demande]`.
@@ -20,7 +21,7 @@ export type MentionIntent =
   /** `label` vaut `OPENER_LABEL` pour « le pseudo de celui qui a ouvert ». */
   | { id: 'rename'; label: string }
   | { id: 'move'; motif: SupportMotifId }
-  | { id: 'staff' }
+  | { id: 'staff'; instructor?: boolean }
   /** Intention reconnue mais pas assez nette : on demande confirmation. */
   | { id: 'unsure'; about: 'close' | 'rename' | 'move' };
 
@@ -66,9 +67,6 @@ const MOVE_VERB = /\b(deplace|deplacer|bouge|bouger|move|change|changer|mets|met
 const MOVE_OBJECT = /\b(section|categorie|category|salon parent|parent)\b/;
 
 // --- appel humain ------------------------------------------------------
-const STAFF_REQUEST = /\b(staff|instructeur|humain|moderateur|admin)\b/;
-const STAFF_VERB =
-  /\b(appelle|appeler|appelez|call|ping|contacte|contacter|previens|prevenir|passe la main|besoin d un|veux un|voudrais un|il me faut un)\b/;
 
 /** Au-delà, le verbe est probablement incident dans une phrase qui parle d'autre chose. */
 const MAX_ACTION_CHARS = 160;
@@ -126,9 +124,7 @@ export const MENTION_ACTIONS: ActionSpec[] = [
     id: 'staff',
     allowed: ['staff', 'requester'],
     detect: (t) => {
-      if (!STAFF_REQUEST.test(t) || !STAFF_VERB.test(t)) return null;
-      if (NEGATION.test(t)) return null;
-      return { id: 'staff' };
+      return explicitlyRequestsStaff(t) ? { id: 'staff', ...(/\binstructeur\b/.test(t) ? { instructor: true } : {}) } : null;
     },
   },
 ];

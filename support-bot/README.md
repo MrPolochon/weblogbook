@@ -142,3 +142,33 @@ demande et ne supprime pas automatiquement les tickets aux mises à jour suivant
 
 Simulation des pannes et reprises sans accès Discord :
 `node scripts/test-support-update-reset.cjs`.
+
+## Connaissances du site et relais humains
+
+L’assistant suit le dernier sujet du ticket, conserve les détails d’erreur des
+messages longs et utilise les procédures vérifiées des pages plans de vol,
+copilote, inventaire, Felitz, NOTAMs, calendrier et compte. La liaison Discord
+active est revérifiée avant chaque consultation du dossier ; un ancien compte
+délié n’est jamais réutilisé. Le dossier inclut aussi les vols comme copilote.
+Les erreurs de lecture sont signalées comme des informations indisponibles.
+
+Sur une question ciblée, le bot consulte en lecture seule un aperçu daté des
+NOTAMs de l’aéroport PTFS demandé (compte lié requis) ou du calendrier public.
+Il conserve les unités et les horaires UTC et indique les limites de l’aperçu.
+Il ne consulte pas les soldes bancaires et ne modifie aucune donnée métier.
+
+Une demande explicite d’humain interrompt les questions d’inscription et ne
+dépend pas du fournisseur IA. Les questions informatives, citations, négations
+et hypothèses ne déclenchent pas à elles seules un appel. Un litige ou une
+intervention nécessaire peut être transmis au staff ; une demande de séance
+peut également mentionner le rôle instructeur configuré. Sans rôle staff, le
+premier rôle administrateur configuré valide sert de secours.
+
+Les commandes, boutons et réponses IA partagent une réservation d’alerte :
+un seul ping pendant l’attente, même si le membre continue à discuter. Un
+échec d’envoi libère cette réservation pour permettre un nouvel essai au
+prochain message. La prise en charge par le staff garde l’IA silencieuse.
+
+Cette amélioration ne nécessite aucun nouveau SQL. Elle se déploie côté site,
+qui fournit les réponses au bot Railway. Simulations sans réseau ni message
+Discord réel : `node scripts/test-support-ai.cjs` (inclut les garde-fous existants).
