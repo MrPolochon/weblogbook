@@ -37,6 +37,7 @@ WEBLOGBOOK_URL = _site_base()
 _runtime: dict[str, Any] = {
     "guild_id": None,
     "staff_role_id": None,
+    "admin_role_ids": [],
     "instructor_role_id": None,
     "required_role_id": None,
     "category_ids": set(),
@@ -110,6 +111,7 @@ async def refresh_runtime() -> None:
     if status < 400 and data:
         _runtime["guild_id"] = data.get("guild_id")
         _runtime["staff_role_id"] = data.get("staff_role_id")
+        _runtime["admin_role_ids"] = data.get("admin_role_ids") or []
         _runtime["instructor_role_id"] = data.get("instructor_role_id")
         _runtime["required_role_id"] = data.get("required_role_id")
         cats = data.get("category_ids") or {}
@@ -199,9 +201,10 @@ async def should_handle_ticket_message(channel: discord.abc.Messageable) -> bool
 
 def is_staff_member(member: discord.Member) -> bool:
     rids = [rid for rid in (_runtime.get("staff_role_id"), _runtime.get("instructor_role_id")) if rid]
+    rids.extend(_runtime.get("admin_role_ids") or [])
     if rids and any(str(r.id) in {str(x) for x in rids} for r in member.roles):
         return True
-    return member.guild_permissions.manage_channels
+    return member.guild_permissions.administrator or member.guild_permissions.manage_channels
 
 
 def _command_name(interaction: discord.Interaction) -> str | None:

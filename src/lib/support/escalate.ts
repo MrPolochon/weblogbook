@@ -49,8 +49,9 @@ export async function escalateTicketToStaff(channelId: string, note: string): Pr
 
   const now = new Date().toISOString();
   const alreadyPinged = Boolean(ticket.staff_pinged_at);
+  if (alreadyPinged) return true;
 
-  await admin
+  const { data: claimed, error } = await admin
     .from('support_tickets')
     .update({
       statut: 'staff_needed',
@@ -59,7 +60,12 @@ export async function escalateTicketToStaff(channelId: string, note: string): Pr
       staff_pinged_at: ticket.staff_pinged_at || now,
       updated_at: now,
     })
-    .eq('id', ticket.id);
+    .eq('id', ticket.id)
+    .is('closed_at', null)
+    .is('staff_pinged_at', null)
+    .select('id');
+  if (error) throw new Error(error.message);
+  if (!claimed?.length) return true;
 
   try {
     await discordRenameChannel(channelId, ticketChannelName('staff_needed', ticket.short_id));
@@ -67,6 +73,14 @@ export async function escalateTicketToStaff(channelId: string, note: string): Pr
 
   const ping = alreadyPinged ? '' : staffPingLine(cfg, String(ticket.motif));
   const out = `${ping} ${note}`.trim();
-  if (out) await discordSendMessage(channelId, out);
+  if (out) {
+    try {
+      await discordSendMessage(channelId, out);
+    } catch (error) {
+      await admin.from('support_tickets').update({ staff_pinged_at: null })
+        .eq('id', ticket.id).eq('staff_pinged_at', now);
+      throw error;
+    }
+  }
   return true;
 }

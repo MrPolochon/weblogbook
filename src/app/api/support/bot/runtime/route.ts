@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     ok: true,
     guild_id: guildId,
     staff_role_id: cfg?.staff_role_id || null,
+    admin_role_ids: cfg?.admin_role_ids || [],
     instructor_role_id: cfg?.instructor_role_id || null,
     required_role_id: getDiscordRequiredRoleId() || null,
     category_ids: cfg?.category_ids || {},

@@ -90,3 +90,23 @@ part dès qu’on quitte le plan gratuit.
 5. Sur le site : choisir salon panel, salon logs, rôle staff, rôle instructeur (CAT / instruction) → **Créer panel + sections**.
 
 Le process Railway relit la config du site toutes les **1 minute**.
+
+## Rôles administrateurs et corrections des tickets
+
+Appliquer `supabase/add_support_admin_roles.sql` avant de configurer les nouveaux
+rôles dans Admin → Bot assistance Discord → **Rôles administrateurs reconnus**.
+Plusieurs rôles peuvent être sélectionnés. La permission Discord Administrateur
+est également reconnue. Le bouton Réparer /register ajoute les permissions des
+rôles configurés aux tickets existants.
+
+Les noms par défaut sont désormais `ticket-xxxx`, stables quel que soit l'état.
+Le bot confirme auprès du site qu'un salon correspond à un ticket ouvert du
+serveur configuré : le nom ou la catégorie seuls ne donnent jamais accès.
+
+Le dossier IA inclut les trois derniers plans de vol et avions personnels du
+demandeur, en lecture seule. Les alertes staff répétées sont dédupliquées ;
+les mentions @everyone/@here ne sont pas autorisées dans les messages du bot.
+
+Simulation locale sans connexion Discord : `python support-bot/test_channel_filter.py`.
+Elle couvre les salons hors tickets, les tickets fermés, les autres serveurs,
+les messages privés et les différents rôles administrateurs/staff/instructeur.

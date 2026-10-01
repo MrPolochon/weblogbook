@@ -67,6 +67,9 @@ export async function POST(req: NextRequest) {
   const logs_channel_id = String(body.logs_channel_id || '').trim();
   const staff_role_id = String(body.staff_role_id || '').trim();
   const instructor_role_id = String(body.instructor_role_id || '').trim() || null;
+  const admin_role_ids = Array.isArray(body.admin_role_ids)
+    ? [...new Set<string>(body.admin_role_ids.map(String).filter((id: string) => /^\d{17,20}$/.test(id)))].slice(0, 20)
+    : undefined;
   const rawMotifs = Array.isArray(body.instructor_motifs) ? body.instructor_motifs : [];
   const allowedMotifIds = new Set(SUPPORT_MOTIFS.map((m) => m.id));
   const instructor_motifs = rawMotifs
@@ -169,6 +172,7 @@ export async function POST(req: NextRequest) {
             panel_message_id,
             logs_channel_id: logs_channel_id || null,
             staff_role_id,
+            ...(admin_role_ids ? { admin_role_ids } : {}),
             instructor_role_id,
             instructor_motifs: instructorMotifsStored,
             category_ids,
@@ -198,6 +202,7 @@ export async function POST(req: NextRequest) {
         panel_channel_id,
         logs_channel_id: logs_channel_id || null,
         staff_role_id,
+        ...(admin_role_ids ? { admin_role_ids } : {}),
         instructor_role_id,
         instructor_motifs: instructorMotifsStored,
         updated_at: new Date().toISOString(),

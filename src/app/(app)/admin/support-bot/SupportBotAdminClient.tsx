@@ -9,6 +9,7 @@ type Config = {
   panel_channel_id: string | null;
   logs_channel_id: string | null;
   staff_role_id: string | null;
+  admin_role_ids: string[];
   instructor_role_id: string | null;
   instructor_motifs: string[];
   panel_message_id: string | null;
@@ -141,6 +142,7 @@ export default function SupportBotAdminClient() {
     panel_channel_id: '',
     logs_channel_id: '',
     staff_role_id: '',
+    admin_role_ids: [],
     instructor_role_id: '',
     instructor_motifs: [...DEFAULT_INSTRUCTOR_MOTIFS],
     panel_message_id: null,
@@ -176,6 +178,7 @@ export default function SupportBotAdminClient() {
             panel_channel_id: d.config.panel_channel_id || '',
             logs_channel_id: d.config.logs_channel_id || '',
             staff_role_id: d.config.staff_role_id || '',
+            admin_role_ids: d.config.admin_role_ids || [],
             instructor_role_id: d.config.instructor_role_id || '',
             instructor_motifs: motifs,
             panel_message_id: d.config.panel_message_id,
@@ -339,6 +342,20 @@ export default function SupportBotAdminClient() {
         onChange={(id) => setCfg({ ...cfg, instructor_role_id: id })}
         optional
       />
+      <div>
+        <label className="label">Rôles administrateurs reconnus dans les tickets</label>
+        <p className="text-sm text-slate-400 mb-2">Sélectionnez les rôles qui peuvent prendre la main et gérer les tickets.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {roles.filter((role) => role.id !== cfg.guild_id && !role.managed).map((role) => (
+            <label key={role.id} className="flex items-center gap-2 text-sm cursor-pointer">
+              <input type="checkbox" checked={cfg.admin_role_ids.includes(role.id)}
+                onChange={(event) => setCfg({ ...cfg, admin_role_ids: event.target.checked
+                  ? [...cfg.admin_role_ids, role.id] : cfg.admin_role_ids.filter((id) => id !== role.id) })} />
+              {role.name}
+            </label>
+          ))}
+        </div>
+      </div>
       {cfg.instructor_role_id ? (
         <div>
           <label className="label">Motifs qui appellent l’instructeur</label>

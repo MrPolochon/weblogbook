@@ -115,6 +115,8 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
       examRes,
       emploiRes,
       invitRes,
+      plansRes,
+      aircraftRes,
     ] = await Promise.all([
       admin
         .from('profiles')
@@ -157,6 +159,10 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
         .eq('pilote_id', userId)
         .eq('statut', 'en_attente')
         .limit(MAX_ITEMS),
+      admin.from('plans_vol').select('numero_vol, aeroport_depart, aeroport_arrivee, statut, refusal_reason')
+        .eq('pilote_id', userId).order('created_at', { ascending: false }).limit(MAX_ITEMS),
+      admin.from('inventaire_avions').select('nom_personnalise, types_avion(nom)')
+        .eq('proprietaire_id', userId).order('created_at', { ascending: false }).limit(MAX_ITEMS),
     ]);
 
     const profile = profileRes.data;
@@ -302,6 +308,13 @@ export async function buildRequesterContext(admin: Admin, userId: string | null 
       .map((i) => firstRelation<{ nom?: string }>(i.compagnies)?.nom)
       .filter(Boolean) as string[];
     if (invits.length) lines.push(`invitation(s) compagnie en attente: ${invits.join(', ')}`);
+    if (plansRes.error) lines.push('Plans de vol : consultation indisponible, ne pas conclure à une absence de plans.');
+    else if (plansRes.data?.length) lines.push(`Plans récents: ${plansRes.data.map((plan) =>
+      `${plan.numero_vol}: ${plan.aeroport_depart} → ${plan.aeroport_arrivee}, ${plan.statut}` +
+      (plan.refusal_reason ? ` (motif: ${String(plan.refusal_reason).slice(0, 160)})` : '')).join(' ; ')}`);
+    if (aircraftRes.error) lines.push('Avions personnels : consultation indisponible.');
+    else if (aircraftRes.data?.length) lines.push(`Avions personnels récents: ${aircraftRes.data.map((aircraft) =>
+      aircraft.nom_personnalise || firstRelation<{ nom?: string }>(aircraft.types_avion)?.nom || 'Avion').join(', ')}`);
 
     lines.push(
       'Appuie-toi sur ces faits pour répondre précisément. N’invente aucun autre fait sur lui : si une info te manque, demande-la ou passe la main.',

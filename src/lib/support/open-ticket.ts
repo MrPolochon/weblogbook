@@ -76,6 +76,9 @@ export async function openSupportTicket(args: {
     { id: everyone, type: 0, deny: '1024' },
     { id: discordUserId, type: 1, allow: DISCORD_TICKET_ALLOW },
     { id: cfg.staff_role_id, type: 0, allow: DISCORD_TICKET_ALLOW },
+    ...(Array.isArray(cfg.admin_role_ids) ? cfg.admin_role_ids : [])
+      .filter((id: string) => id !== cfg.staff_role_id && id !== cfg.instructor_role_id)
+      .map((id: string) => ({ id, type: 0, allow: DISCORD_TICKET_ALLOW })),
     ...(cfg.instructor_role_id &&
     String(cfg.instructor_role_id) !== String(cfg.staff_role_id) &&
     motifUsesInstructor(motif, cfg.instructor_motifs as string[] | null)

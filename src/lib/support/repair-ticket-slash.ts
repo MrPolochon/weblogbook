@@ -43,6 +43,11 @@ export async function repairOpenTicketSlashAccess(): Promise<{ repaired: number;
           deny: '0',
         });
       }
+      for (const roleId of cfg?.admin_role_ids || []) {
+        await discordPutChannelOverwrite(channelId, String(roleId), {
+          type: 0, allow: DISCORD_TICKET_ALLOW, deny: '0',
+        });
+      }
       repaired += 1;
     } catch (e) {
       if (isDiscordRateLimit(e)) {

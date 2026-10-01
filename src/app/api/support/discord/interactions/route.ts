@@ -116,7 +116,8 @@ function memberIsStaff(member: DiscordMember | undefined, staffRoleIds: string[]
   try {
     const perms = BigInt(member.permissions || '0');
     const manageChannels = BigInt(16);
-    return (perms & manageChannels) === manageChannels;
+    const administrator = BigInt(8);
+    return (perms & manageChannels) === manageChannels || (perms & administrator) === administrator;
   } catch {
     return false;
   }
@@ -445,7 +446,7 @@ async function finishTicketDel(interaction: DiscordInteraction) {
     const channelId = String(interaction.channel_id || '');
     const user = interactionUser(interaction);
     const cfg = await getSupportConfig();
-    const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+    const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id, ...(cfg?.admin_role_ids || [])].filter(Boolean).map(String);
     if (!memberIsStaff(interaction.member, staffIds)) {
       await patchOriginal(interaction, 'Staff uniquement.');
       return;
@@ -568,7 +569,7 @@ async function finishTicketIa(interaction: DiscordInteraction) {
   try {
     const channelId = String(interaction.channel_id || '');
     const cfg = await getSupportConfig();
-    const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+    const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id, ...(cfg?.admin_role_ids || [])].filter(Boolean).map(String);
     if (!memberIsStaff(interaction.member, staffIds)) {
       await patchOriginal(interaction, 'Staff uniquement.');
       return;
@@ -608,7 +609,7 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
     }
     if (customId === 'support_resolved' || customId === 'support_need_staff') {
       const cfg = await getSupportConfig();
-      const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+      const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id, ...(cfg?.admin_role_ids || [])].filter(Boolean).map(String);
       const { data: ticket } = await createAdminClient().from('support_tickets')
         .select('discord_user_id').eq('channel_id', channelId).is('closed_at', null).maybeSingle();
       if (!ticket || !user?.id || (String(ticket.discord_user_id) !== String(user.id) && !memberIsStaff(interaction.member, staffIds))) {
@@ -631,7 +632,7 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
     }
     if (customId === 'support_staff_close') {
       const cfg = await getSupportConfig();
-      const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+      const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id, ...(cfg?.admin_role_ids || [])].filter(Boolean).map(String);
       if (!memberIsStaff(interaction.member, staffIds)) {
         await followupEphemeral(interaction, 'Staff uniquement.');
         return;

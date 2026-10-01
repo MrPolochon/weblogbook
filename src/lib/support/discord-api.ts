@@ -163,6 +163,8 @@ export async function discordMoveChannel(channelId: string, parentId: string) {
 /** Envoie un message. `extras.components` = Action Rows Discord (type 1 + boutons type 2). */
 export async function discordSendMessage(channelId: string, content: string, extras?: Record<string, unknown>) {
   const body: Record<string, unknown> = { ...extras };
+  // Le texte du membre ou de l'IA ne doit jamais déclencher @everyone/@here.
+  if (!body.allowed_mentions) body.allowed_mentions = { parse: ['users', 'roles'], replied_user: false };
   const text = content.slice(0, 2000);
   if (text) body.content = text;
   return discordFetch(`/channels/${channelId}/messages`, {

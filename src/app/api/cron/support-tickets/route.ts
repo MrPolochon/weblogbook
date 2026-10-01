@@ -34,7 +34,7 @@ const PINGS: Array<(mention: string) => string> = [
   (mention) =>
     `${mention} Pas de nouvelle depuis **3 heures**. Tu as encore besoin d’aide ? Réponds ici quand tu veux, le ticket reste ouvert.`,
   (mention) =>
-    `${mention} Toujours aucune réponse depuis **24 heures**. Sans message de ta part, ce ticket sera traité automatiquement dans **72 heures** (fermeture, ou transmission à un staff si ta demande est restée en suspens).`,
+    `${mention} Aucune réponse depuis **24 heures**. À **72 heures d’inactivité au total**, le ticket sera fermé si aucune discussion n’a commencé, ou transmis au staff si ta demande reste en suspens.`,
 ];
 
 function cronOk(request: NextRequest): boolean {
