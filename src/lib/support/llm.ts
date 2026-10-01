@@ -139,6 +139,7 @@ async function callLlm(
   withExtras = true
 ): Promise<{ text: string | null; status: number; data: unknown }> {
   const res = await fetch(`${attempt.base}/chat/completions`, {
+    signal: AbortSignal.timeout(12_000),
     method: 'POST',
     headers: { Authorization: `Bearer ${attempt.key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

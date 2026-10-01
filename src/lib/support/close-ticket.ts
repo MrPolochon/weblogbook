@@ -70,7 +70,7 @@ export async function closeSupportTicket(args: { channelId: string; closedBy: st
     .eq('id', ticket.id);
   if (saveErr) {
     console.error('[close-ticket] save transcript', saveErr);
-    await admin
+    const { error: fallbackError } = await admin
       .from('support_tickets')
       .update({
         closed_at: nowIso,
@@ -79,6 +79,7 @@ export async function closeSupportTicket(args: { channelId: string; closedBy: st
         updated_at: nowIso,
       })
       .eq('id', ticket.id);
+    if (fallbackError) throw new Error(`Transcript non sauvegardé: ${fallbackError.message}`);
   }
 
   const cfg = await getSupportConfig();

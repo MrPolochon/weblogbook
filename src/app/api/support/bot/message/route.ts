@@ -172,10 +172,10 @@ async function claimDiscordMessage(
     .from('support_tickets')
     .update({ last_discord_message_id: id })
     .eq('id', ticketId)
-    .or(`last_discord_message_id.is.null,last_discord_message_id.neq.${id}`)
+    .or(`last_discord_message_id.is.null,last_discord_message_id.lt.${id}`)
     .select('id');
-  // Colonne absente (migration pas encore passée) : on ne bloque pas le bot.
-  if (error) return true;
+  // Une panne du verrou ne doit pas autoriser des réponses en double.
+  if (error) throw new Error(`Impossible de réserver le message Discord: ${error.message}`);
   return (data?.length ?? 0) > 0;
 }
 

@@ -38,8 +38,8 @@ export const SUPPORT_STATUSES = {
 
 export type SupportStatus = keyof typeof SUPPORT_STATUSES;
 
-export function ticketChannelName(status: SupportStatus, shortId: string): string {
-  return `${SUPPORT_STATUSES[status].emoji}-${shortId}`.slice(0, 100);
+export function ticketChannelName(_status: SupportStatus, shortId: string): string {
+  return `ticket-${shortId}`.slice(0, 100);
 }
 
 function normalize(text: string): string {

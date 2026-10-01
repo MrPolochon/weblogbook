@@ -19,8 +19,7 @@ export function slugifyChannelLabel(raw: string): string {
 }
 
 /**
- * Nom de salon d'un ticket, convention existante préservée :
- * `<emoji d'état>-<identifiant court>` auquel on ajoute un libellé optionnel.
+ * Nom stable `ticket-<identifiant court>` et libellé lisible optionnel.
  */
 export function ticketChannelNameWithLabel(
   status: SupportStatus,

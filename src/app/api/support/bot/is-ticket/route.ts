@@ -13,9 +13,9 @@ export async function GET(req: NextRequest) {
   const admin = createAdminClient();
   const { data } = await admin
     .from('support_tickets')
-    .select('id')
+    .select('id, discord_user_id')
     .eq('channel_id', channelId)
     .is('closed_at', null)
     .maybeSingle();
-  return NextResponse.json({ ok: true, is_ticket: Boolean(data) });
+  return NextResponse.json({ ok: true, is_ticket: Boolean(data), discord_user_id: data?.discord_user_id || null });
 }

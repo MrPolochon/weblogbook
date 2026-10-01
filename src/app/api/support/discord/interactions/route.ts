@@ -3,6 +3,7 @@ export const runtime = 'nodejs';
 export const maxDuration = 30;
 
 import { NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { waitUntil } from '@vercel/functions';
 import { getSupportConfig } from '@/lib/support/bot-auth';
 import { closeSupportTicket } from '@/lib/support/close-ticket';
@@ -604,6 +605,16 @@ async function finishTicketAction(interaction: DiscordInteraction, customId: str
     if (!channelId) {
       await followupEphemeral(interaction, 'Salon introuvable.');
       return;
+    }
+    if (customId === 'support_resolved' || customId === 'support_need_staff') {
+      const cfg = await getSupportConfig();
+      const staffIds = [cfg?.staff_role_id, cfg?.instructor_role_id].filter(Boolean).map(String);
+      const { data: ticket } = await createAdminClient().from('support_tickets')
+        .select('discord_user_id').eq('channel_id', channelId).is('closed_at', null).maybeSingle();
+      if (!ticket || !user?.id || (String(ticket.discord_user_id) !== String(user.id) && !memberIsStaff(interaction.member, staffIds))) {
+        await followupEphemeral(interaction, 'Action réservée au demandeur du ticket et au staff.');
+        return;
+      }
     }
     if (customId === 'support_resolved') {
       const result = await closeSupportTicket({

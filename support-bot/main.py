@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import logging
+import asyncio
+from weakref import WeakValueDictionary
 import os
 import re
 import time
@@ -50,6 +52,7 @@ _is_ticket_cache: dict[str, tuple[bool, float]] = {}
 # Idempotence locale : un même message Discord (reconnexion gateway, event
 # rejoué) ne doit pas partir deux fois vers l'API. Le site déduplique aussi.
 _handled_message_ids: set[int] = set()
+_channel_locks: WeakValueDictionary = WeakValueDictionary()
 _slash_client: discord.Client | None = None
 _commands_guild: str | None = None
 _TICKETISH_PREFIX = ("🤖", "🔴", "🟠", "🟢", "tkt-")
@@ -158,16 +161,14 @@ def looks_ticketish(name: str) -> bool:
 
 
 def is_ticket_channel(channel: discord.abc.GuildChannel) -> bool:
+    guild_id = str(_runtime.get("guild_id") or "")
+    if not guild_id or str(getattr(getattr(channel, "guild", None), "id", "")) != guild_id:
+        return False
     cid = str(getattr(channel, "id", "") or "")
     open_ids = _runtime.get("open_channel_ids") or set()
     if cid and cid in open_ids:
         return True
-    if not isinstance(channel, discord.TextChannel):
-        return False
-    cats = _runtime.get("category_ids") or set()
-    if channel.category_id and str(channel.category_id) in cats:
-        return True
-    return looks_ticketish(channel.name or "")
+    return False
 
 
 async def api_is_ticket(channel_id: str) -> bool:
@@ -188,13 +189,11 @@ async def api_is_ticket(channel_id: str) -> bool:
 async def should_handle_ticket_message(channel: discord.abc.Messageable) -> bool:
     if not isinstance(channel, discord.abc.GuildChannel):
         return False
-    if is_ticket_channel(channel):
-        return True
-    name = getattr(channel, "name", "") or ""
-    cats = _runtime.get("category_ids") or set()
-    # Config absente, ou nom de salon ticket : demander au site (évite d'ignorer un ticket).
-    if cats and not looks_ticketish(name):
+    guild_id = str(_runtime.get("guild_id") or "")
+    if not guild_id or str(channel.guild.id) != guild_id:
         return False
+    # Le nom et la catégorie ne prouvent jamais qu'un salon est notre ticket.
+    # Le site confirme également que le ticket est encore ouvert.
     return await api_is_ticket(str(channel.id))
 
 
@@ -795,10 +794,27 @@ class TicketActions(discord.ui.View):
     def __init__(self) -> None:
         super().__init__(timeout=None)
 
+    async def authorize(self, interaction: discord.Interaction) -> bool:
+        if not interaction.response.is_done():
+            await interaction.response.defer(ephemeral=True)
+        if not interaction.guild or str(interaction.guild.id) != str(_runtime.get("guild_id") or ""):
+            await interaction.followup.send("Serveur non autorisé.", ephemeral=True)
+            return False
+        status, data = await api_get(f"/api/support/bot/is-ticket?channel_id={interaction.channel_id}")
+        staff = isinstance(interaction.user, discord.Member) and is_staff_member(interaction.user)
+        if status != 200 or not data.get("is_ticket") or (str(data.get("discord_user_id")) != str(interaction.user.id) and not staff):
+            await interaction.followup.send("Action réservée au demandeur du ticket et au staff.", ephemeral=True)
+            return False
+        return True
+
     @discord.ui.button(label="C'est résolu", style=discord.ButtonStyle.success, custom_id="support_resolved")
     async def resolved(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
-        await api_post("/api/support/bot/close", {"channel_id": str(interaction.channel_id), "closed_by": f"user:{interaction.user.id}"})
+        if not await self.authorize(interaction):
+            return
+        status, data = await api_post("/api/support/bot/close", {"channel_id": str(interaction.channel_id), "closed_by": f"user:{interaction.user.id}"})
+        if status >= 400:
+            await interaction.followup.send("Impossible de fermer le ticket.", ephemeral=True)
+            return
         try:
             await interaction.followup.send("Ticket fermé. Merci !", ephemeral=True)
         except discord.HTTPException:
@@ -806,13 +822,15 @@ class TicketActions(discord.ui.View):
 
     @discord.ui.button(label="Pas résolu — staff", style=discord.ButtonStyle.danger, custom_id="support_need_staff")
     async def need_staff(self, interaction: discord.Interaction, button: discord.ui.Button) -> None:
-        await interaction.response.defer(ephemeral=True)
+        if not await self.authorize(interaction):
+            return
         await api_post(
             "/api/support/bot/message",
             {
                 "channel_id": str(interaction.channel_id),
                 "content": "L'utilisateur indique que ce n'est pas résolu. Appeler un staff.",
                 "from_staff": False,
+                "discord_user_id": str(interaction.user.id),
             },
         )
 
@@ -892,8 +910,7 @@ def attach_handlers(client: discord.Client) -> None:
         if not runtime_loop.is_running():
             runtime_loop.start()
 
-    @client.event
-    async def on_message(message: discord.Message) -> None:
+    async def process_message(message: discord.Message) -> None:
         if message.author.bot or not message.guild:
             return
         # Idempotence : une reconnexion gateway peut rejouer un event déjà traité.
@@ -984,11 +1001,23 @@ def attach_handlers(client: discord.Client) -> None:
             return
         if status >= 400:
             log.warning("API message %s: %s", status, _data)
-            if not _data.get("handed_over"):
+            if status != 404 and not _data.get("handed_over"):
                 await _notify_channel(
                     message.channel,
                     "Je n'ai pas pu répondre pour le moment. Réessaie, ou un staff va t'aider.",
                 )
+
+    @client.event
+    async def on_message(message: discord.Message) -> None:
+        if message.author.bot or not message.guild:
+            return
+        channel_id = message.channel.id
+        lock = _channel_locks.get(channel_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            _channel_locks[channel_id] = lock
+        async with lock:
+            await process_message(message)
 
 
 def _intents(*, members: bool, message_content: bool) -> discord.Intents:
