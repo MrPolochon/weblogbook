@@ -1,0 +1,13 @@
+{
+  "voitures": 5,
+  "vantaux": 60,
+  "roues": 40,
+  "objets_export": 537,
+  "animation_portes": {
+    "ferme": 1,
+    "ouvert": 65,
+    "referme": 150
+  },
+  "unite": "mètre",
+  "limites": "Reconstruction interprétée, pas une reproduction industrielle. GLB sans animation. Conduite et collisions Roblox à intégrer."
+}

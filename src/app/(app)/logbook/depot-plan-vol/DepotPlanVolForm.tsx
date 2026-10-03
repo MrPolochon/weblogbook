@@ -1317,8 +1317,15 @@ export default function DepotPlanVolForm({
                   <div className="font-mono text-base font-bold text-slate-100 tabular-nums">{revenuBrut.toLocaleString('fr-FR')} <span className="text-xs text-slate-400">F$</span></div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">Votre salaire ({selectedCompagnie.pourcentage_salaire}%)</div>
+                  <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">
+                    {withCopilote ? `Salaire équipage (${selectedCompagnie.pourcentage_salaire}%)` : `Votre salaire (${selectedCompagnie.pourcentage_salaire}%)`}
+                  </div>
                   <div className="font-mono text-base font-bold text-emerald-300 tabular-nums">{salairePilote.toLocaleString('fr-FR')} <span className="text-xs text-emerald-400/70">F$</span></div>
+                  {withCopilote && (
+                    <div className="text-[10px] text-emerald-400/80 mt-0.5">
+                      50/50 · {Math.ceil(salairePilote / 2).toLocaleString('fr-FR')} F$ commandant · {Math.floor(salairePilote / 2).toLocaleString('fr-FR')} F$ copilote
+                    </div>
+                  )}
                 </div>
               </div>
 

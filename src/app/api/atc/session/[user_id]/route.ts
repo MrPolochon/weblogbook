@@ -52,7 +52,7 @@ export async function DELETE(
     // Sécuriser les plans contrôlés par cet ATC
     const { data: plansSousControle } = await admin
       .from('plans_vol')
-      .select('id, statut, pilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, nature_transport, type_cargaison, compagnie_avion_id, location_loueur_compagnie_id, location_pourcentage_revenu_loueur')
+      .select('id, statut, pilote_id, copilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, accepted_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, nature_transport, type_cargaison, compagnie_avion_id, location_loueur_compagnie_id, location_pourcentage_revenu_loueur')
       .eq('current_holder_user_id', targetUserId)
       .in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']);
 

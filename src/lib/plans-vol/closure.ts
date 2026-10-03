@@ -13,6 +13,7 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 type PlanPaiement = {
   id: string;
   pilote_id: string;
+  copilote_id?: string | null;
   vol_commercial: boolean;
   compagnie_id: string | null;
   revenue_brut: number | null;
@@ -535,6 +536,22 @@ export async function envoyerChequesVol(
   }
   console.log(`${logRef} Compte Felitz pilote OK (id=${comptePilote.id})`);
 
+  const copiloteId =
+    plan.copilote_id && plan.copilote_id !== plan.pilote_id ? plan.copilote_id : null;
+  let compteCopilote: { id: string } | null = null;
+  if (copiloteId) {
+    compteCopilote = await ensureComptePersonnel(admin, copiloteId);
+    if (!compteCopilote) {
+      console.warn(`${logRef} Compte Felitz du copilote ${copiloteId} introuvable → abandon`);
+      return {
+        success: false,
+        message:
+          'Compte Felitz du copilote introuvable. Le salaire 50/50 ne peut pas être versé tant que le copilote n’a pas de compte.',
+      };
+    }
+    console.log(`${logRef} Compte Felitz copilote OK (id=${compteCopilote.id})`);
+  }
+
   const compteCompagnie = await ensureCompteEntreprise(admin, compagnieIdFelitz);
   if (!compteCompagnie) {
     console.warn(`${logRef} Compte Felitz de la compagnie ${compagnieIdFelitz} introuvable même après ensureCompteEntreprise → abandon`);
@@ -654,40 +671,59 @@ export async function envoyerChequesVol(
     console.warn(`${logRef} salaireEffectif=0 → pas de chèque salaire pilote`);
   }
   if (salaireEffectif > 0 || chequeSalairePonctualiteZero) {
-    let contenuSalaire = chequeSalairePonctualiteZero
-      ? `Votre vol ${numeroVol} pour ${compagnie.nom} a été clôturé, mais le coefficient de ponctualité est de 0 % : aucun salaire n'est versé.\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`
-      : `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`;
-    if (arriveePrevueAt) {
-      contenuSalaire += `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateFinVol)}\nÉcart horaire: ${ecartPonctualiteMin} min`;
-    } else {
-      contenuSalaire += `\nÉcart durée: ${ecartPonctualiteMin} min`;
+    const partPic = copiloteId && compteCopilote ? Math.ceil(salaireEffectif / 2) : salaireEffectif;
+    const partCopilote = copiloteId && compteCopilote ? salaireEffectif - partPic : 0;
+    const destinataires = [
+      { userId: plan.pilote_id, compteId: comptePilote.id, montant: partPic, roleLabel: copiloteId ? 'commandant de bord (50 %)' : 'pilote' },
+    ];
+    if (copiloteId && compteCopilote) {
+      destinataires.push({
+        userId: copiloteId,
+        compteId: compteCopilote.id,
+        montant: partCopilote,
+        roleLabel: 'copilote (50 %)',
+      });
     }
-    contenuSalaire += `\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$`;
-    if (bonusGroundSalaire > 0) {
-      contenuSalaire += `\n🛬 Bonus services au sol: +${bonusGroundSalaire.toLocaleString('fr-FR')} F$ (+10%)`;
+
+    for (const dest of destinataires) {
+      let contenuSalaire = chequeSalairePonctualiteZero
+        ? `Votre vol ${numeroVol} pour ${compagnie.nom} a été clôturé, mais le coefficient de ponctualité est de 0 % : aucun salaire n'est versé.\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`
+        : `Félicitations pour votre vol ${numeroVol} effectué pour ${compagnie.nom} !\n\nRôle : ${dest.roleLabel}\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min`;
+      if (arriveePrevueAt) {
+        contenuSalaire += `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateFinVol)}\nÉcart horaire: ${ecartPonctualiteMin} min`;
+      } else {
+        contenuSalaire += `\nÉcart durée: ${ecartPonctualiteMin} min`;
+      }
+      contenuSalaire += `\nCoefficient de ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$`;
+      if (bonusGroundSalaire > 0) {
+        contenuSalaire += `\n🛬 Bonus services au sol: +${bonusGroundSalaire.toLocaleString('fr-FR')} F$ (+10% sur le salaire équipage)`;
+      }
+      if (copiloteId) {
+        contenuSalaire += `\nRépartition équipage : 50 % commandant / 50 % copilote (total ${salaireEffectif.toLocaleString('fr-FR')} F$)`;
+      }
+      contenuSalaire += chequeSalairePonctualiteZero
+        ? `\n\nChèque de salaire : 0 F$. L'écart par rapport à l'arrivée prévue (heure de départ UTC + durée) dépasse le seuil de ponctualité.`
+        : `\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
+      if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
+        contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
+      }
+      const { data: chequeSalaireInsere, error: chequeSalaireError } = await admin.from('messages').insert({
+        destinataire_id: dest.userId,
+        expediteur_id: null,
+        titre: `Salaire vol ${numeroVol}`,
+        contenu: contenuSalaire,
+        type_message: 'cheque_salaire',
+        cheque_montant: dest.montant,
+        cheque_encaisse: false,
+        cheque_destinataire_compte_id: dest.compteId,
+        cheque_libelle: `Salaire ${dest.roleLabel} vol ${numeroVol} (coef. ${coeffPct}%)${bonusGroundSalaire > 0 ? ' · dont +10% services au sol' : ''}`,
+        cheque_numero_vol: numeroVol,
+        cheque_compagnie_nom: compagnie.nom,
+        cheque_pour_compagnie: false
+      }).select('id, cheque_montant').single();
+      if (chequeSalaireError) console.error(`${logRef} [ERREUR] Insertion chèque salaire (${dest.roleLabel}):`, chequeSalaireError);
+      else console.log(`${logRef} Chèque salaire créé: id=${chequeSalaireInsere?.id}, montant=${chequeSalaireInsere?.cheque_montant}, role=${dest.roleLabel}`);
     }
-    contenuSalaire += chequeSalairePonctualiteZero
-      ? `\n\nChèque de salaire : 0 F$. L'écart par rapport à l'arrivée prévue (heure de départ UTC + durée) dépasse le seuil de ponctualité.`
-      : `\n\nVeuillez encaisser votre chèque de salaire ci-dessous.`;
-    if (plan.type_cargaison === 'marchandise_rare' && plan.type_cargaison_libelle) {
-      contenuSalaire += `\n\n💎 Marchandise rare transportée : ${plan.type_cargaison_libelle}`;
-    }
-    const { data: chequeSalaireInsere, error: chequeSalaireError } = await admin.from('messages').insert({
-      destinataire_id: plan.pilote_id,
-      expediteur_id: null,
-      titre: `Salaire vol ${numeroVol}`,
-      contenu: contenuSalaire,
-      type_message: 'cheque_salaire',
-      cheque_montant: salaireEffectif,
-      cheque_encaisse: false,
-      cheque_destinataire_compte_id: comptePilote.id,
-      cheque_libelle: `Salaire vol ${numeroVol} (coef. ${coeffPct}%)${bonusGroundSalaire > 0 ? ' · dont +10% services au sol' : ''}`,
-      cheque_numero_vol: numeroVol,
-      cheque_compagnie_nom: compagnie.nom,
-      cheque_pour_compagnie: false
-    }).select('id, cheque_montant').single();
-    if (chequeSalaireError) console.error(`${logRef} [ERREUR] Insertion chèque salaire:`, chequeSalaireError);
-    else console.log(`${logRef} Chèque salaire créé: id=${chequeSalaireInsere?.id}, montant=${chequeSalaireInsere?.cheque_montant}`);
   }
 
   // Vérifier si la compagnie a un prêt actif
@@ -863,7 +899,7 @@ export async function envoyerChequesVol(
     } else {
       contenuMessage += `\nÉcart durée: ${ecartPonctualiteMin} min`;
     }
-    contenuMessage += `\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\nSalaire pilote: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
+    contenuMessage += `\nCoefficient ponctualité: ${coeffPct}%\nTaxes aéroportuaires: ${taxesReellementPrelevees.toLocaleString('fr-FR')} F$\nSalaire équipage${copiloteId ? ' (50/50)' : ''}: ${salaireEffectif.toLocaleString('fr-FR')} F$`;
     if (bonusGroundCompagnie > 0) {
       contenuMessage += `\n🛬 Bonus services au sol compagnie: +${bonusGroundCompagnie.toLocaleString('fr-FR')} F$ (+5%)`;
     }
@@ -1165,7 +1201,7 @@ export async function finaliserCloturePlan(
 }
 
 const PLAN_CLOTURE_SELECT =
-  'id, pilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
+  'id, pilote_id, copilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
 
 /**
  * Clôture les vols déjà demandés par le pilote, restés en attente ATC

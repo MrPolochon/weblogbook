@@ -1353,6 +1353,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 </>
               )}
 
+              {atisKind !== 'tma' && (
               <Field label="Approche prévue" textMuted={textMuted}>
                 <ChipRow
                   options={[...APPROACH_TYPES]}
@@ -1374,6 +1375,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                   onChange={(e) => updateDraft({ expected_approach: e.target.value })}
                 />
               </Field>
+              )}
 
               <Field label="Vent" textMuted={textMuted}>
                 <input

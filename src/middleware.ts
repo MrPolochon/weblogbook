@@ -10,6 +10,76 @@ function copyCookies(from: NextResponse, to: NextResponse) {
   return to;
 }
 
+// Le middleware Edge est coupé par Vercel (504 MIDDLEWARE_INVOCATION_TIMEOUT)
+// si un appel Supabase ne répond pas. Chaque fetch est donc borné, et toute
+// l'invocation aussi, pour renvoyer un 503 au lieu d'attendre la coupure.
+const MIDDLEWARE_FETCH_MS = 4_000;
+const MIDDLEWARE_DEADLINE_MS = 10_000;
+
+function middlewareFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  if (init?.signal) {
+    if (init.signal.aborted) controller.abort();
+    else init.signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      controller.abort();
+      const err = new Error('middleware_fetch_timeout');
+      err.name = 'TimeoutError';
+      reject(err);
+    }, MIDDLEWARE_FETCH_MS);
+    fetch(input, { ...init, cache: 'no-store', signal: controller.signal }).then(
+      (res) => {
+        clearTimeout(timer);
+        resolve(res);
+      },
+      (err: unknown) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
+function isTimeoutError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : '';
+  const message = 'message' in error && typeof error.message === 'string' ? error.message.toLowerCase() : '';
+  if (
+    name === 'AbortError' ||
+    name === 'TimeoutError' ||
+    message.includes('middleware_fetch_timeout') ||
+    message.includes('abort') ||
+    message.includes('timed out') ||
+    message.includes('timeout')
+  ) {
+    return true;
+  }
+  return 'cause' in error && isTimeoutError((error as { cause?: unknown }).cause);
+}
+
+function isResultTimeout(result: unknown): boolean {
+  if (!result || typeof result !== 'object') return false;
+  if ('timeout' in result && (result as { timeout?: boolean }).timeout) return true;
+  return isTimeoutError((result as { error?: unknown }).error);
+}
+
+function serviceUnavailable(request: NextRequest) {
+  const headers = { 'retry-after': '5', 'cache-control': 'no-store' };
+  if (request.nextUrl.pathname.startsWith('/api/')) {
+    return NextResponse.json(
+      { error: 'Service temporairement indisponible. Réessayez dans un instant.' },
+      { status: 503, headers },
+    );
+  }
+  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Service indisponible</title></head><body style="font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem"><h1>Service temporairement indisponible</h1><p>La vérification de session n'a pas répondu à temps. Rechargez la page dans quelques secondes.</p></body></html>`;
+  return new NextResponse(html, {
+    status: 503,
+    headers: { ...headers, 'content-type': 'text/html; charset=utf-8' },
+  });
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Cache module-level du statut de maintenance (TTL : 30 s)
 // En Edge Runtime les variables module-level persistent dans le même V8 isolate.
@@ -25,7 +95,7 @@ const MAINTENANCE_CACHE_TTL_MS = 30_000;
 
 async function getMaintenanceStatus(
   admin: ReturnType<typeof createAdminClient>,
-): Promise<MaintenanceStatus | null> {
+): Promise<MaintenanceStatus | { timeout: true } | null> {
   const now = Date.now();
   if (_maintenanceCache && now - _maintenanceCache.fetchedAt < MAINTENANCE_CACHE_TTL_MS) {
     return _maintenanceCache.data;
@@ -36,6 +106,7 @@ async function getMaintenanceStatus(
       .select('active, message, maintenance_until')
       .eq('id', 1)
       .single();
+    if (isTimeoutError(error)) return { timeout: true };
     if (error || !data) return null;
     const status: MaintenanceStatus = {
       active: Boolean(data.active),
@@ -44,7 +115,8 @@ async function getMaintenanceStatus(
     };
     _maintenanceCache = { data: status, fetchedAt: now };
     return status;
-  } catch {
+  } catch (err) {
+    if (isTimeoutError(err)) return { timeout: true };
     return null;
   }
 }
@@ -52,6 +124,20 @@ async function getMaintenanceStatus(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function middleware(request: NextRequest) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<NextResponse>((resolve) => {
+    timer = setTimeout(() => resolve(serviceUnavailable(request)), MIDDLEWARE_DEADLINE_MS);
+  });
+  const pending = runMiddleware(request);
+  void pending.catch(() => {});
+  try {
+    return await Promise.race([pending, deadline]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function runMiddleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isSetup = pathname === '/setup';
   const isLogin = pathname === '/login';
@@ -127,6 +213,7 @@ export async function middleware(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: middlewareFetch },
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -143,8 +230,18 @@ export async function middleware(request: NextRequest) {
       },
     }
   );
-  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  let user: { id: string } | null = null;
+  let authError: { code?: string; message?: string } | null = null;
+  try {
+    const authResult = await supabase.auth.getUser();
+    user = authResult.data.user;
+    authError = authResult.error;
+  } catch (err) {
+    if (isTimeoutError(err)) return serviceUnavailable(request);
+    throw err;
+  }
   if (!user) {
+    if (isTimeoutError(authError)) return serviceUnavailable(request);
     if (isStaleRefreshToken(authError)) {
       await supabase.auth.signOut();
     }
@@ -162,16 +259,17 @@ export async function middleware(request: NextRequest) {
   }
 
   // All DB checks in a single parallel batch instead of sequential
-  const admin = createAdminClient();
+  const admin = createAdminClient({ fetch: middlewareFetch });
   const discordRequired = isDiscordLinkRequired();
 
   const [securityResult, siteConfigResult, discordResult, maintenanceStatus] = await Promise.all([
     // 1) Security logout check (fail-closed : en cas d'erreur DB on déconnecte par sécurité)
     Promise.resolve(admin.from('security_logout').select('user_id').eq('user_id', user.id).maybeSingle())
-      .catch(() => ({ error: true, data: null })),
+      .catch((err) => (isTimeoutError(err) ? { timeout: true as const, data: null } : { error: true, data: null })),
 
     // 2) Site config (admin-only login)
-    Promise.resolve(admin.from('site_config').select('login_admin_only').eq('id', 1).maybeSingle()).catch(() => ({ data: null })),
+    Promise.resolve(admin.from('site_config').select('login_admin_only').eq('id', 1).maybeSingle())
+      .catch((err) => (isTimeoutError(err) ? { timeout: true as const, data: null } : { data: null })),
 
     // 3) Discord + profile blocked (only if discord required)
     discordRequired
@@ -181,12 +279,22 @@ export async function middleware(request: NextRequest) {
             .select('discord_user_id, status, sanction_ends_at, is_permanent, guild_member, has_required_role')
             .eq('user_id', user.id)
             .maybeSingle(),
-        ]).catch(() => [{ data: null }, { data: null }] as const)
+        ]).catch((err) => (isTimeoutError(err) ? { timeout: true as const } : [{ data: null }, { data: null }] as const))
       : Promise.resolve(null),
 
     // 4) Statut de maintenance (utilise le cache 30 s — quasi-gratuit si en cache)
     getMaintenanceStatus(admin),
   ]);
+
+  if (
+    isResultTimeout(securityResult) ||
+    isResultTimeout(siteConfigResult) ||
+    isResultTimeout(discordResult) ||
+    isResultTimeout(maintenanceStatus) ||
+    (Array.isArray(discordResult) && discordResult.some((item) => isResultTimeout(item)))
+  ) {
+    return serviceUnavailable(request);
+  }
 
   // Handle security logout (fail-closed : si erreur de lecture, on déconnecte par sécurité)
   const securityErr = (securityResult as { error?: boolean })?.error === true;
@@ -259,7 +367,7 @@ export async function middleware(request: NextRequest) {
   // ── Mode maintenance ─────────────────────────────────────────────────────
   // Bloque tous les utilisateurs non-admin si la maintenance est active.
   // Les admins passent toujours, même en maintenance.
-  if (maintenanceStatus?.active && !pathname.startsWith('/api/')) {
+  if (maintenanceStatus && 'active' in maintenanceStatus && maintenanceStatus.active && !pathname.startsWith('/api/')) {
     const until = maintenanceStatus.maintenance_until;
 
     if (until && new Date(until).getTime() < Date.now()) {

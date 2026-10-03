@@ -345,6 +345,9 @@ export function buildAtisPatchBody(opts: {
       atis_type: 'tma',
       tma: true,
       information_prefix: 'TMA ATIS',
+      expected_approach: '',
+      expected_runway: '',
+      runway_condition: '',
       tma_airports: included.map((a) => ({
         icao: a.icao,
         name: a.nom,

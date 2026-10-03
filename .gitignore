@@ -45,3 +45,12 @@ build_output*.txt
 # analyse / radar capture outputs
 .analysis/
 radar-capture/output/
+
+# Local Blender generation runtime
+.tools/blender311/
+.tools/blender-wheels/
+.tools/blender-python/
+
+# Python
+__pycache__/
+*.py[cod]
