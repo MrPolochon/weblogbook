@@ -10,11 +10,15 @@ function copyCookies(from: NextResponse, to: NextResponse) {
   return to;
 }
 
-// Le middleware Edge est coupé par Vercel (504 MIDDLEWARE_INVOCATION_TIMEOUT)
-// si un appel Supabase ne répond pas. Chaque fetch est donc borné, et toute
-// l'invocation aussi, pour renvoyer un 503 au lieu d'attendre la coupure.
-const MIDDLEWARE_FETCH_MS = 4_000;
-const MIDDLEWARE_DEADLINE_MS = 10_000;
+// Le middleware Edge est coupé par Vercel (504) si un appel Supabase ne répond pas.
+// Chaque fetch est borné. Si la vérification n'aboutit pas, on laisse passer :
+// les layouts refont getUser() côté serveur. Une page 503 bloquait tout le site.
+const MIDDLEWARE_FETCH_MS = 8_000;
+const MIDDLEWARE_DEADLINE_MS = 12_000;
+
+function passThrough(request: NextRequest) {
+  return NextResponse.next({ request });
+}
 
 function middlewareFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const controller = new AbortController();
@@ -65,21 +69,6 @@ function isResultTimeout(result: unknown): boolean {
   return isTimeoutError((result as { error?: unknown }).error);
 }
 
-function serviceUnavailable(request: NextRequest) {
-  const headers = { 'retry-after': '5', 'cache-control': 'no-store' };
-  if (request.nextUrl.pathname.startsWith('/api/')) {
-    return NextResponse.json(
-      { error: 'Service temporairement indisponible. Réessayez dans un instant.' },
-      { status: 503, headers },
-    );
-  }
-  const html = `<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Service indisponible</title></head><body style="font-family:system-ui,sans-serif;max-width:36rem;margin:4rem auto;padding:0 1rem"><h1>Service temporairement indisponible</h1><p>La vérification de session n'a pas répondu à temps. Rechargez la page dans quelques secondes.</p></body></html>`;
-  return new NextResponse(html, {
-    status: 503,
-    headers: { ...headers, 'content-type': 'text/html; charset=utf-8' },
-  });
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Cache module-level du statut de maintenance (TTL : 30 s)
 // En Edge Runtime les variables module-level persistent dans le même V8 isolate.
@@ -126,7 +115,7 @@ async function getMaintenanceStatus(
 export async function middleware(request: NextRequest) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<NextResponse>((resolve) => {
-    timer = setTimeout(() => resolve(serviceUnavailable(request)), MIDDLEWARE_DEADLINE_MS);
+    timer = setTimeout(() => resolve(passThrough(request)), MIDDLEWARE_DEADLINE_MS);
   });
   const pending = runMiddleware(request);
   void pending.catch(() => {});
@@ -237,11 +226,11 @@ async function runMiddleware(request: NextRequest) {
     user = authResult.data.user;
     authError = authResult.error;
   } catch (err) {
-    if (isTimeoutError(err)) return serviceUnavailable(request);
+    if (isTimeoutError(err)) return response;
     throw err;
   }
   if (!user) {
-    if (isTimeoutError(authError)) return serviceUnavailable(request);
+    if (isTimeoutError(authError)) return response;
     if (isStaleRefreshToken(authError)) {
       await supabase.auth.signOut();
     }
@@ -293,7 +282,7 @@ async function runMiddleware(request: NextRequest) {
     isResultTimeout(maintenanceStatus) ||
     (Array.isArray(discordResult) && discordResult.some((item) => isResultTimeout(item)))
   ) {
-    return serviceUnavailable(request);
+    return response;
   }
 
   // Handle security logout (fail-closed : si erreur de lecture, on déconnecte par sécurité)
