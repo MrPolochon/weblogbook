@@ -10,11 +10,14 @@ function copyCookies(from: NextResponse, to: NextResponse) {
   return to;
 }
 
-// Le middleware Edge est coupé par Vercel (504) si un appel Supabase ne répond pas.
-// Chaque fetch est borné. Si la vérification n'aboutit pas, on laisse passer :
-// les layouts refont getUser() côté serveur. Une page 503 bloquait tout le site.
-const MIDDLEWARE_FETCH_MS = 8_000;
-const MIDDLEWARE_DEADLINE_MS = 12_000;
+// getUser() contacte Auth à chaque requête et, depuis l'Edge, peut rester
+// bloqué jusqu'au 504 Vercel. Ici la session est lue dans le cookie. Les
+// contrôles base (déconnexion, Discord, maintenance) ont un délai court :
+// s'ils n'aboutissent pas, la page continue et les layouts revérifient l'utilisateur.
+const MIDDLEWARE_FETCH_MS = 3_500;
+const MIDDLEWARE_DEADLINE_MS = 8_000;
+const GUARD_CACHE_TTL_MS = 20_000;
+const GUARD_CACHE_MAX = 400;
 
 function passThrough(request: NextRequest) {
   return NextResponse.next({ request });
@@ -81,6 +84,47 @@ type MaintenanceStatus = {
 
 let _maintenanceCache: { data: MaintenanceStatus; fetchedAt: number } | null = null;
 const MAINTENANCE_CACHE_TTL_MS = 30_000;
+
+type GuardBundle = {
+  fetchedAt: number;
+  securityResult: unknown;
+  siteConfigResult: unknown;
+  discordResult: unknown;
+  maintenanceStatus: MaintenanceStatus | { timeout: true } | null;
+};
+
+const _guardCache = new Map<string, GuardBundle>();
+
+function readGuardCache(userId: string): GuardBundle | null {
+  const hit = _guardCache.get(userId);
+  if (!hit) return null;
+  if (Date.now() - hit.fetchedAt > GUARD_CACHE_TTL_MS) {
+    _guardCache.delete(userId);
+    return null;
+  }
+  return hit;
+}
+
+function writeGuardCache(userId: string, bundle: GuardBundle) {
+  if (_guardCache.size >= GUARD_CACHE_MAX) {
+    const oldest = _guardCache.keys().next().value;
+    if (oldest) _guardCache.delete(oldest);
+  }
+  _guardCache.set(userId, bundle);
+}
+
+/** `sub` du JWT d'accès, sans passer par session.user (proxy qui avertit à chaque lecture). */
+function userIdFromAccessToken(accessToken: string): string | null {
+  const part = accessToken.split('.')[1];
+  if (!part) return null;
+  try {
+    const padded = part.replace(/-/g, '+').replace(/_/g, '/');
+    const json = JSON.parse(atob(padded)) as { sub?: unknown };
+    return typeof json.sub === 'string' && json.sub ? json.sub : null;
+  } catch {
+    return null;
+  }
+}
 
 async function getMaintenanceStatus(
   admin: ReturnType<typeof createAdminClient>,
@@ -219,17 +263,19 @@ async function runMiddleware(request: NextRequest) {
       },
     }
   );
-  let user: { id: string } | null = null;
+  let userId: string | null = null;
   let authError: { code?: string; message?: string } | null = null;
   try {
-    const authResult = await supabase.auth.getUser();
-    user = authResult.data.user;
+    // Lecture locale du cookie. Réseau seulement si le jeton est à moins de 90 s de l'expiration.
+    const authResult = await supabase.auth.getSession();
     authError = authResult.error;
+    const accessToken = authResult.data.session?.access_token;
+    if (accessToken) userId = userIdFromAccessToken(accessToken);
   } catch (err) {
     if (isTimeoutError(err)) return response;
     throw err;
   }
-  if (!user) {
+  if (!userId) {
     if (isTimeoutError(authError)) return response;
     if (isStaleRefreshToken(authError)) {
       await supabase.auth.signOut();
@@ -247,13 +293,17 @@ async function runMiddleware(request: NextRequest) {
     return copyCookies(response, NextResponse.redirect(url));
   }
 
-  // All DB checks in a single parallel batch instead of sequential
+  // Contrôles base en parallèle, mis en cache 20 s par utilisateur pour ne pas
+  // retaper Supabase à chaque navigation.
   const admin = createAdminClient({ fetch: middlewareFetch });
   const discordRequired = isDiscordLinkRequired();
+  const cachedGuards = readGuardCache(userId);
 
-  const [securityResult, siteConfigResult, discordResult, maintenanceStatus] = await Promise.all([
+  const [securityResult, siteConfigResult, discordResult, maintenanceStatus] = cachedGuards
+    ? [cachedGuards.securityResult, cachedGuards.siteConfigResult, cachedGuards.discordResult, cachedGuards.maintenanceStatus]
+    : await Promise.all([
     // 1) Security logout check (fail-closed : en cas d'erreur DB on déconnecte par sécurité)
-    Promise.resolve(admin.from('security_logout').select('user_id').eq('user_id', user.id).maybeSingle())
+    Promise.resolve(admin.from('security_logout').select('user_id').eq('user_id', userId).maybeSingle())
       .catch((err) => (isTimeoutError(err) ? { timeout: true as const, data: null } : { error: true, data: null })),
 
     // 2) Site config (admin-only login)
@@ -263,10 +313,10 @@ async function runMiddleware(request: NextRequest) {
     // 3) Discord + profile blocked (only if discord required)
     discordRequired
       ? Promise.all([
-          admin.from('profiles').select('role, blocked_until, block_reason').eq('id', user.id).maybeSingle(),
+          admin.from('profiles').select('role, blocked_until, block_reason').eq('id', userId).maybeSingle(),
           admin.from('discord_links')
             .select('discord_user_id, status, sanction_ends_at, is_permanent, guild_member, has_required_role')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .maybeSingle(),
         ]).catch((err) => (isTimeoutError(err) ? { timeout: true as const } : [{ data: null }, { data: null }] as const))
       : Promise.resolve(null),
@@ -275,22 +325,32 @@ async function runMiddleware(request: NextRequest) {
     getMaintenanceStatus(admin),
   ]);
 
-  if (
+  const guardsTimedOut =
     isResultTimeout(securityResult) ||
     isResultTimeout(siteConfigResult) ||
     isResultTimeout(discordResult) ||
     isResultTimeout(maintenanceStatus) ||
-    (Array.isArray(discordResult) && discordResult.some((item) => isResultTimeout(item)))
-  ) {
-    return response;
+    (Array.isArray(discordResult) && discordResult.some((item) => isResultTimeout(item)));
+
+  if (!cachedGuards && !guardsTimedOut) {
+    writeGuardCache(userId, {
+      fetchedAt: Date.now(),
+      securityResult,
+      siteConfigResult,
+      discordResult,
+      maintenanceStatus,
+    });
   }
+
+  if (guardsTimedOut) return response;
 
   // Handle security logout (fail-closed : si erreur de lecture, on déconnecte par sécurité)
   const securityErr = (securityResult as { error?: boolean })?.error === true;
   const logoutRow = (securityResult as { data: { user_id: string } | null })?.data;
   if (securityErr || logoutRow) {
+    _guardCache.delete(userId);
     if (logoutRow) {
-      try { await admin.from('security_logout').delete().eq('user_id', user.id); } catch { /* ignore */ }
+      try { await admin.from('security_logout').delete().eq('user_id', userId); } catch { /* ignore */ }
     }
     await supabase.auth.signOut();
     const url = request.nextUrl.clone();
@@ -306,7 +366,7 @@ async function runMiddleware(request: NextRequest) {
     if (discordResult) {
       role = ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role || null;
     } else {
-      const { data: p } = await admin.from('profiles').select('role').eq('id', user.id).single();
+      const { data: p } = await admin.from('profiles').select('role').eq('id', userId).single();
       role = p?.role || null;
     }
     if (role !== 'admin') {
@@ -325,7 +385,7 @@ async function runMiddleware(request: NextRequest) {
         ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
     } else {
       try {
-        const { data: p } = await admin.from('profiles').select('role').eq('id', user.id).single();
+        const { data: p } = await admin.from('profiles').select('role').eq('id', userId).single();
         siaviRole = p?.role ?? null;
       } catch { /* ignore */ }
     }
@@ -375,7 +435,7 @@ async function runMiddleware(request: NextRequest) {
           ((discordResult as [{ data: { role?: string } | null }, unknown])[0]?.data as { role?: string } | null)?.role ?? null;
       } else {
         try {
-          const { data: p } = await admin.from('profiles').select('role').eq('id', user.id).single();
+          const { data: p } = await admin.from('profiles').select('role').eq('id', userId).single();
           userRole = p?.role ?? null;
         } catch { /* ignore */ }
       }
@@ -402,6 +462,7 @@ async function runMiddleware(request: NextRequest) {
       : null;
 
     if (discordLink?.is_permanent || discordLink?.status === 'permanent_block') {
+      _guardCache.delete(userId);
       await supabase.auth.signOut();
       const url = request.nextUrl.clone();
       url.pathname = '/login';
