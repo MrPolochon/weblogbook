@@ -8,6 +8,7 @@
  */
 import { createClient } from '@supabase/supabase-js';
 import WebSocket from 'ws';
+import { RADAR_ENABLED } from '../src/lib/radar-status';
 import { writeIngest, type PfTrailCursor } from '../src/lib/pf-odw-ingest';
 import { upsertPfOdwHealth } from '../src/lib/pf-odw-health';
 import {
@@ -32,12 +33,12 @@ const FLIGHT_IDLE_SEC = Number(process.env.PF_WORKER_IDLE_SEC || 120);
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
-if (!SUPABASE_URL || !SERVICE_KEY) {
+if (RADAR_ENABLED && (!SUPABASE_URL || !SERVICE_KEY)) {
   console.error('[pf-worker] SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont requis.');
   process.exit(1);
 }
 
-const db = createClient(SUPABASE_URL, SERVICE_KEY, {
+const db = createClient(SUPABASE_URL || 'https://radar-disabled.invalid', SERVICE_KEY || 'disabled', {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
@@ -392,7 +393,11 @@ async function main(): Promise<void> {
   process.exit(0);
 }
 
-main().catch((e) => {
+if (!RADAR_ENABLED) {
+  console.log('[pf-worker] radar temporairement désactivé : aucune collecte, écriture ou purge.');
+  // Stay idle so Railway's ALWAYS restart policy does not create a restart loop.
+  setInterval(() => {}, 60_000);
+} else main().catch((e) => {
   console.error('[pf-worker] erreur fatale', e);
   process.exit(1);
 });

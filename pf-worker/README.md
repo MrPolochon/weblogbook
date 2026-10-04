@@ -1,5 +1,15 @@
 # PFtesterODW — enregistreur de positions
 
+## Pause temporaire du radar
+
+Le radar est désactivé via `RADAR_ENABLED = false` dans `src/lib/radar-status.ts`.
+Le worker reste inactif sans collecte, heartbeat, écriture ni purge ; les API et
+les pages radar sont également bloquées. Le cron de secours est retiré de
+`vercel.json`. Appliquer le déploiement Vercel et redéployer le worker Railway
+(ou arrêter son service) pour interrompre les instances déjà en production.
+Pour réactiver : remettre le drapeau à `true`, restaurer le cron
+`/api/cron/pf-odw-tracks` à `* * * * *`, puis redéployer les deux services.
+
 Service permanent qui lit le trafic Project Flight et écrit les positions du
 serveur privé Mixou dans Supabase (`pf_odw_positions`).
 

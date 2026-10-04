@@ -4,6 +4,7 @@ import { isStaleRefreshToken } from '@/lib/auth/session-error';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive, type DiscordLinkStatus } from '@/lib/discord-link';
 import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
+import { RADAR_ENABLED } from '@/lib/radar-status';
 
 function copyCookies(from: NextResponse, to: NextResponse) {
   from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
@@ -157,6 +158,16 @@ async function getMaintenanceStatus(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function middleware(request: NextRequest) {
+  if (!RADAR_ENABLED && (
+    request.nextUrl.pathname.startsWith('/api/radar/') ||
+    request.nextUrl.pathname.startsWith('/api/pftester-odw/') ||
+    request.nextUrl.pathname === '/api/carte-atc/flights' ||
+    request.nextUrl.pathname === '/api/cron/pf-odw-tracks'
+  )) {
+    return NextResponse.json({ error: 'Radar temporairement désactivé', disabled: true }, {
+      status: 503, headers: { 'Cache-Control': 'no-store' },
+    });
+  }
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<NextResponse>((resolve) => {
     timer = setTimeout(() => resolve(passThrough(request)), MIDDLEWARE_DEADLINE_MS);

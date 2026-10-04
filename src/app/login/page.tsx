@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
+import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 
@@ -30,15 +31,20 @@ function isSafeRedirectPath(p: string | null | undefined): p is string {
 }
 
 /* ── Étoiles scintillantes ── */
+// Stable on server and client to avoid replacing the page during hydration.
+function decorValue(seed: number) {
+  return ((seed * 9301 + 49297) % 233280) / 233280;
+}
+
 function TwinklingStars() {
   const stars = useMemo(() =>
     Array.from({ length: 30 }, (_, i) => ({
       id: i,
-      left: Math.random() * 100,
-      top: Math.random() * 55,
-      size: 1 + Math.random() * 1.5,
-      duration: 2 + Math.random() * 4,
-      delay: Math.random() * 6,
+      left: decorValue(i * 7) * 100,
+      top: decorValue(i * 7 + 1) * 55,
+      size: 1 + decorValue(i * 7 + 2) * 1.5,
+      duration: 2 + decorValue(i * 7 + 3) * 4,
+      delay: decorValue(i * 7 + 4) * 6,
     })), []);
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -53,12 +59,12 @@ function TwinklingStars() {
 /* ── Nuages en deux couches parallax ── */
 function ParallaxClouds() {
   const layer1 = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
-    id: i, size: 80 + Math.random() * 80, top: 8 + Math.random() * 35,
-    duration: 30 + Math.random() * 25, delay: Math.random() * -40, opacity: 0.04 + Math.random() * 0.04,
+    id: i, size: 80 + decorValue(i * 11) * 80, top: 8 + decorValue(i * 11 + 1) * 35,
+    duration: 30 + decorValue(i * 11 + 2) * 25, delay: decorValue(i * 11 + 3) * -40, opacity: 0.04 + decorValue(i * 11 + 4) * 0.04,
   })), []);
   const layer2 = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
-    id: i + 10, size: 50 + Math.random() * 60, top: 15 + Math.random() * 45,
-    duration: 50 + Math.random() * 30, delay: Math.random() * -55, opacity: 0.02 + Math.random() * 0.03,
+    id: i + 10, size: 50 + decorValue(i * 13 + 50) * 60, top: 15 + decorValue(i * 13 + 51) * 45,
+    duration: 50 + decorValue(i * 13 + 52) * 30, delay: decorValue(i * 13 + 53) * -55, opacity: 0.02 + decorValue(i * 13 + 54) * 0.03,
   })), []);
   const CloudSVG = ({ w, h }: { w: number; h: number }) => (
     <svg viewBox="0 0 160 80" width={w} height={h} className="fill-white">
@@ -219,11 +225,11 @@ function VORBeacons() {
   ], []);
   return (
     <div className="absolute inset-0 pointer-events-none hidden sm:block">
-      {beacons.map((b) => (
+      {beacons.map((b, i) => (
         <div key={b.label} className="absolute" style={{ left: b.left, top: b.top }}>
           <div className="relative flex items-center justify-center">
-            <div className="absolute rounded-full border border-cyan-400/30 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${Math.random()}s` }} />
-            <div className="absolute rounded-full border border-cyan-400/20 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${0.8 + Math.random()}s` }} />
+            <div className="absolute rounded-full border border-cyan-400/30 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${decorValue(i)}s` }} />
+            <div className="absolute rounded-full border border-cyan-400/20 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${0.8 + decorValue(i + 10)}s` }} />
             <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/50" />
           </div>
           <p className="text-[7px] font-mono text-cyan-300/30 text-center mt-1 tracking-widest">{b.label}</p>
@@ -269,7 +275,7 @@ function SummerUpdateDecor() {
 const LOGIN_LOGO_FALLBACKS = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
 async function fetchLogoImage(): Promise<string> {
   try {
-    const res = await fetch(`/api/login-logo?_t=${Date.now()}`, { cache: 'no-store' });
+    const res = await fetchWithTimeout(`/api/login-logo?_t=${Date.now()}`, { cache: 'no-store' });
     const data: { url?: string } = await res.json().catch(() => ({}));
     if (data?.url) return data.url;
   } catch { /* ignore */ }
@@ -296,7 +302,6 @@ function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [, startTransition] = useTransition();
-  const [loading, setLoading] = useState(true);
   const messageParam = searchParams.get('message');
   const showTestEchoue = messageParam === 'test_echoue_temps_termine';
   const showCompteCree = messageParam === 'compte_cree';
@@ -348,19 +353,24 @@ function LoginPageContent() {
   useEffect(() => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 10000);
-    Promise.all([
-      fetch('/api/has-admin', { cache: 'no-store', signal: ctrl.signal }).then((r) => r.json()),
-      fetch('/api/site-config', { cache: 'no-store', signal: ctrl.signal }).then((r) => r.json()),
+    Promise.allSettled([
+      fetch('/api/has-admin', { cache: 'no-store', signal: ctrl.signal }).then((r) => {
+        if (!r.ok) throw new Error('Configuration indisponible');
+        return r.json();
+      }),
+      fetch('/api/site-config', { cache: 'no-store', signal: ctrl.signal }).then((r) => {
+        if (!r.ok) throw new Error('Configuration indisponible');
+        return r.json();
+      }),
     ])
       .then(([hasAdminData, siteConfigData]) => {
         clearTimeout(t);
-        if (!hasAdminData?.hasAdmin) router.replace('/setup');
-        else setLoading(false);
-        setLoginAdminOnly(Boolean(siteConfigData?.login_admin_only));
+        if (ctrl.signal.aborted) return;
+        if (hasAdminData.status === 'fulfilled' && hasAdminData.value?.hasAdmin === false) router.replace('/setup');
+        if (siteConfigData.status === 'fulfilled') setLoginAdminOnly(Boolean(siteConfigData.value?.login_admin_only));
       })
       .catch(() => {
         clearTimeout(t);
-        setLoading(false);
       });
     return () => {
       clearTimeout(t);
@@ -374,14 +384,14 @@ function LoginPageContent() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (loading || step !== 'form') return;
+    if (step !== 'form') return;
     if (searchParams.get('step') === 'verify') {
       try {
         const stored = typeof window !== 'undefined' ? window.sessionStorage.getItem(REDIRECT_STORAGE_KEY) : null;
         if (isSafeRedirectPath(stored)) setRedirectTo(stored);
       } catch { /* sessionStorage indispo */ }
 
-      fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' })
+      fetchWithTimeout('/api/auth/register-login', { method: 'POST', credentials: 'include' })
         .then(async (regRes) => {
           const regData = await regRes.json().catch(() => ({}));
           const monthlyForce = Boolean(regData.forceEmail);
@@ -407,7 +417,7 @@ function LoginPageContent() {
         })
         .catch(() => setStep('email'));
     }
-  }, [loading, searchParams, step, redirectTo, router]);
+  }, [searchParams, step, redirectTo, router]);
 
   useEffect(() => {
     const reset = searchParams.get('reset');
@@ -426,7 +436,7 @@ function LoginPageContent() {
   }
 
   async function beginEmailVerificationFlow() {
-    const codeRes = await fetch('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
+    const codeRes = await fetchWithTimeout('/api/auth/send-login-code', { method: 'POST', credentials: 'include' });
     const codeData = await codeRes.json().catch(() => ({}));
     if (codeRes.ok && codeData.skipCode) {
       await doRedirect();
@@ -476,14 +486,19 @@ function LoginPageContent() {
       const email = identifiantToEmail(identifiant);
       const supabase = createClient();
       const { data: signData, error: signInErr } = await supabase.auth.signInWithPassword({ email, password });
-      if (signInErr) throw new Error(signInErr.message || 'Identifiant ou mot de passe incorrect.');
+      if (signInErr) {
+        const message = signInErr.message?.trim();
+        throw new Error(!message || message === '{}' || /fetch|timeout|network/i.test(message)
+          ? 'Le service de connexion ne répond pas. Réessayez dans quelques instants.'
+          : message === 'Invalid login credentials' ? 'Identifiant ou mot de passe incorrect.' : message);
+      }
       const uid = signData?.user?.id;
       if (!uid) { router.replace('/logbook'); startTransition(() => router.refresh()); return; }
       let requireCode = true;
       let monthlyForce = false;
       let passkeysAvailable = false;
       try {
-        const regRes = await fetch('/api/auth/register-login', { method: 'POST', credentials: 'include' });
+        const regRes = await fetchWithTimeout('/api/auth/register-login', { method: 'POST', credentials: 'include' });
         const regData = await regRes.json().catch(() => ({}));
         requireCode = regData.requireCode !== false;
         monthlyForce = Boolean(regData.forceEmail);
@@ -491,7 +506,8 @@ function LoginPageContent() {
         setForceEmail(monthlyForce);
         setHasPasskeys(passkeysAvailable);
       } catch { /* ignore */ }
-      const { data: profile } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).single();
+      const { data: profile, error: profileError } = await supabase.from('profiles').select('role, atc, siavi').eq('id', uid).abortSignal(AbortSignal.timeout(15_000)).single();
+      if (profileError || !profile) throw new Error('Impossible de charger votre compte. Le service est temporairement indisponible.');
       if (loginAdminOnly && profile?.role !== 'admin') {
         await supabase.auth.signOut();
         throw new Error('Les connexions sont temporairement réservées aux administrateurs.');
@@ -555,7 +571,7 @@ function LoginPageContent() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch('/api/auth/send-login-code', {
+      const res = await fetchWithTimeout('/api/auth/send-login-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: loginEmail.trim() }),
@@ -581,7 +597,7 @@ function LoginPageContent() {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch('/api/auth/verify-login-code', {
+      const res = await fetchWithTimeout('/api/auth/verify-login-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ code: code.replace(/\s/g, '') }),
@@ -613,7 +629,7 @@ function LoginPageContent() {
     setSubmitting(true);
     try {
       const body = step === 'code' && loginEmail.trim() ? { email: loginEmail.trim() } : {};
-      const res = await fetch('/api/auth/send-login-code', {
+      const res = await fetchWithTimeout('/api/auth/send-login-code', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -642,16 +658,6 @@ function LoginPageContent() {
   const overlay = (
     <div className="absolute inset-0 bg-gradient-to-br from-sky-950/80 via-cyan-950/55 to-orange-950/45" />
   );
-
-  if (loading) {
-    return (
-      <div className="min-h-screen relative flex items-center justify-center">
-        {fond}
-        {overlay}
-        <p className="relative z-10 text-slate-400">Chargement…</p>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-dvh relative flex items-start sm:items-center justify-center px-4 pt-8 pb-6 sm:p-4 overflow-x-hidden animate-page-reveal">
@@ -924,7 +930,7 @@ function LoginPageContent() {
                     setForgotMessage(null);
                     setSubmitting(true);
                     try {
-                      const res = await fetch('/api/auth/forgot-password', {
+                      const res = await fetchWithTimeout('/api/auth/forgot-password', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ identifiant_or_email: forgotIdentifiantOrEmail.trim(), action: 'send_link' }),
@@ -949,7 +955,7 @@ function LoginPageContent() {
                     setForgotMessage(null);
                     setSubmitting(true);
                     try {
-                      const res = await fetch('/api/auth/forgot-password', {
+                      const res = await fetchWithTimeout('/api/auth/forgot-password', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ identifiant_or_email: forgotIdentifiantOrEmail.trim(), action: 'request_admin' }),
@@ -989,7 +995,7 @@ function LoginPageContent() {
                 setError(null);
                 setSubmitting(true);
                 try {
-                  const res = await fetch('/api/auth/reset-password-with-token', {
+                  const res = await fetchWithTimeout('/api/auth/reset-password-with-token', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ token: resetToken, new_password: resetPassword }),

@@ -56,7 +56,7 @@ export default function NavBar({
 
   useEffect(() => { setMounted(true); }, []);
 
-  const [utcTime, setUtcTime] = useState('');
+  const [utcTime, setUtcTime] = useState('--:--z');
   useEffect(() => {
     function tick() {
       const now = new Date();

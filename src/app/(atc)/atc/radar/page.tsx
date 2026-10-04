@@ -4,8 +4,10 @@ import { Lock } from 'lucide-react';
 import { hasRadarUnlockCookie } from '@/lib/radar-access';
 import PfRadarClient from './PfRadarClient';
 import RadarUnlock from './RadarUnlock';
+import { RADAR_ENABLED } from '@/lib/radar-status';
 
 export default async function RadarPage() {
+  if (!RADAR_ENABLED) return <div className="card"><p>Le radar est temporairement désactivé.</p></div>;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

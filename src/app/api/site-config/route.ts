@@ -12,12 +12,13 @@ export async function GET() {
       .from('site_config')
       .select('login_admin_only')
       .eq('id', 1)
+      .abortSignal(AbortSignal.timeout(5_000))
       .single();
     if (error || !data) {
-      return NextResponse.json({ login_admin_only: false });
+      return NextResponse.json({ error: 'Configuration indisponible' }, { status: 503 });
     }
     return NextResponse.json({ login_admin_only: Boolean(data.login_admin_only) });
   } catch {
-    return NextResponse.json({ login_admin_only: false });
+    return NextResponse.json({ error: 'Configuration indisponible' }, { status: 503 });
   }
 }

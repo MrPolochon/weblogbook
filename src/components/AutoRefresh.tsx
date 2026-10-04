@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useTransition, useCallback } from 'react';
+import { useEffect, useTransition, useCallback, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
 /**
  * Appelle router.refresh() périodiquement en arrière-plan via startTransition
  * pour que les données serveur se mettent à jour SANS bloquer le UI.
  * Met en pause quand l'onglet n'est pas visible.
- * Au retour sur l'onglet, un refresh immédiat est déclenché.
+ * Au retour sur l'onglet, rafraîchit seulement si les données sont anciennes.
  *
  * pauseRefreshWhenPathStartsWith : aucun refresh périodique ni au retour d'onglet
  * si le chemin commence par l'un des préfixes (ex. saisie de longs formulaires).
@@ -21,13 +21,19 @@ export default function AutoRefresh({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
+  const lastRefresh = useRef(Date.now());
 
   const softRefresh = useCallback(() => {
+    if (isPending || document.visibilityState !== 'visible') return;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && focused.closest('input, textarea, select, [contenteditable="true"]')) return;
+    if (Date.now() - lastRefresh.current < Math.max(10, intervalSeconds) * 1000) return;
+    lastRefresh.current = Date.now();
     startTransition(() => {
       router.refresh();
     });
-  }, [router, startTransition]);
+  }, [router, startTransition, isPending, intervalSeconds]);
 
   const isPaused =
     pauseRefreshWhenPathStartsWith.length > 0 &&
