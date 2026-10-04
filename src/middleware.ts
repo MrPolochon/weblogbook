@@ -161,7 +161,6 @@ export async function middleware(request: NextRequest) {
   if (!RADAR_ENABLED && (
     request.nextUrl.pathname.startsWith('/api/radar/') ||
     request.nextUrl.pathname.startsWith('/api/pftester-odw/') ||
-    request.nextUrl.pathname === '/api/carte-atc/flights' ||
     request.nextUrl.pathname === '/api/cron/pf-odw-tracks'
   )) {
     return NextResponse.json({ error: 'Radar temporairement désactivé', disabled: true }, {

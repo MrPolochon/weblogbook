@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { RADAR_ENABLED } from '@/lib/radar-status';
 import { RefreshCw, Radio, Layers, ArrowLeft, Info, X, ZoomIn, ZoomOut, RotateCcw, Plane, RotateCw } from 'lucide-react';
 import PfTesterOdwMap from './PfTesterOdwMap';
 import PfTesterOdwIntroModal, { PF_ODW_INTRO_STORAGE_KEY } from './PfTesterOdwIntroModal';
@@ -195,7 +196,7 @@ export default function AtcMapClient() {
   const [showAirports, setShowAirports] = useState(true);
   const [showWaypoints, setShowWaypoints] = useState(true);
   const [showVors, setShowVors] = useState(true);
-  const [pfMode, setPfMode] = useState(true);
+  const [pfMode, setPfMode] = useState(RADAR_ENABLED);
   const [pfMapAllowed, setPfMapAllowed] = useState(false);
 
   const fetchMapData = useCallback(async () => {
@@ -456,6 +457,7 @@ export default function AtcMapClient() {
             )}
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
+            {RADAR_ENABLED && (
             <button
               type="button"
               onClick={() => setPfMode((v) => !v)}
@@ -468,6 +470,7 @@ export default function AtcMapClient() {
             >
               {pfMode ? 'ODW PTFS' : 'PFtesterODW'}
             </button>
+            )}
             {!pfMode && (
               <button onClick={() => { setLoading(true); fetchMapData(); }} className="p-2 rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700" title="Actualiser">
                 <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
