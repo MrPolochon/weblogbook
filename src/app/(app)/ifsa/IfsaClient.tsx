@@ -2047,7 +2047,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
             <div className="flex items-start justify-between mb-4">
               <div>
                 <span className="text-xs font-mono text-slate-500">{selectedSignalement.numero_signalement}</span>
-                <h3 className="text-lg font-semibold text-slate-100">{selectedSignalement.titre}</h3>
+                <h3 id="signalement-title" className="text-lg font-semibold text-slate-100">{selectedSignalement.titre}</h3>
               </div>
               <button onClick={() => setSelectedSignalement(null)} className="text-slate-400 hover:text-slate-200" aria-label="Fermer">
                 <X className="h-5 w-5" />
@@ -2086,6 +2086,37 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
               )}
             </div>
 
+            <form
+              key={selectedSignalement.id}
+              className="mt-6 space-y-4 border-t border-slate-700 pt-4"
+              onSubmit={event => {
+                event.preventDefault();
+                if (loading) return;
+                const fields = new FormData(event.currentTarget);
+                void handleUpdateSignalement(selectedSignalement.id, {
+                  statut: String(fields.get('statut')),
+                  reponse_ifsa: String(fields.get('reponse_ifsa') ?? '').trim() || null,
+                });
+              }}
+            >
+              <div>
+                <label htmlFor="signalement-statut" className="label">Statut du signalement</label>
+                <select id="signalement-statut" name="statut" defaultValue={selectedSignalement.statut} disabled={loading} className="input w-full">
+                  {Object.entries(STATUTS_SIGNALEMENT).map(([value, status]) => (
+                    <option key={value} value={value}>{status.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="signalement-reponse" className="label">Réponse IFSA</label>
+                <textarea id="signalement-reponse" name="reponse_ifsa" defaultValue={selectedSignalement.reponse_ifsa ?? ''} disabled={loading} rows={3} className="input w-full" placeholder="Décision ou suivi du signalement…" />
+              </div>
+              <p className="text-xs text-slate-400">Ce changement concerne le signalement. Le statut d’une enquête liée se gère dans l’onglet Enquêtes.</p>
+              <button type="submit" disabled={loading} className="flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 font-medium text-white hover:bg-sky-500 disabled:opacity-50">
+                {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                {loading ? 'Enregistrement…' : 'Enregistrer les modifications'}
+              </button>
+            </form>
             <div className="flex gap-3 mt-6">
               <button
                 onClick={() => setSelectedSignalement(null)}
