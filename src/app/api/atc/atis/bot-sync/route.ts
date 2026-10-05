@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
   const instanceId = resolveInstanceId(request.nextUrl.searchParams.get('instance_id'));
 
   const admin = createAdminClient();
-  const { data: state } = await admin
+  const { data: state, error: stateError } = await admin
     .from('atis_broadcast_state')
     .select('broadcasting, source, aeroport, position, controlling_user_id, started_at')
     .eq('id', String(instanceId))
@@ -71,11 +71,13 @@ export async function POST(request: NextRequest) {
   const admin = createAdminClient();
 
   if (action === 'start') {
-    const { data: existing } = await admin
+    const { data: existing, error: existingError } = await admin
       .from('atis_broadcast_state')
       .select('broadcasting, source')
       .eq('id', String(instanceId))
       .maybeSingle();
+
+    if (existingError) return NextResponse.json({ error: 'Lecture ATIS indisponible' }, { status: 503 });
 
     if (existing?.broadcasting) {
       return NextResponse.json(
@@ -90,13 +92,14 @@ export async function POST(request: NextRequest) {
 
     // Vérifie qu'aucune autre instance ne diffuse cet aéroport.
     if (aeroport) {
-      const { data: aeroBusy } = await admin
+      const { data: aeroBusy, error: busyError } = await admin
         .from('atis_broadcast_state')
         .select('id')
         .eq('aeroport', String(aeroport).toUpperCase())
         .eq('broadcasting', true)
         .neq('id', String(instanceId))
         .maybeSingle();
+      if (busyError) return NextResponse.json({ error: 'Lecture ATIS indisponible' }, { status: 503 });
       if (aeroBusy) {
         return NextResponse.json(
           {
@@ -107,11 +110,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    await admin.from('atis_broadcast_state').upsert(
+    const { error: saveError } = await admin.from('atis_broadcast_state').upsert(
       {
         id: String(instanceId),
         controlling_user_id: null,
-        aeroport: aeroport || null,
+        aeroport: aeroport ? String(aeroport).trim().toUpperCase() : null,
         position: position || null,
         broadcasting: true,
         source: 'discord',
@@ -130,7 +133,7 @@ export async function POST(request: NextRequest) {
   }
 
   // action === 'stop'
-  await admin.from('atis_broadcast_state').upsert(
+  const { error: saveError } = await admin.from('atis_broadcast_state').upsert(
     {
       id: String(instanceId),
       controlling_user_id: null,
@@ -143,6 +146,8 @@ export async function POST(request: NextRequest) {
     },
     { onConflict: 'id' }
   );
+
+  if (saveError) return NextResponse.json({ error: 'Arrêt ATIS non enregistré' }, { status: 503 });
 
   return NextResponse.json({ ok: true, broadcasting: false, instance_id: instanceId });
 }
