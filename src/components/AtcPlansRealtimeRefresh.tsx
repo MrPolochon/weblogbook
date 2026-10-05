@@ -50,7 +50,12 @@ export default function AtcPlansRealtimeRefresh({
           table: 'plans_vol',
           filter: `current_holder_user_id=eq.${userId}`,
         },
-        scheduleRefresh
+        (payload) => {
+          const row = payload.new as { statut?: string };
+          const old = payload.old as { statut?: string };
+          if (row.statut === 'en_attente_cloture' && old.statut !== row.statut) window.dispatchEvent(new CustomEvent('atc-sound-alert', { detail: 'closure' }));
+          scheduleRefresh();
+        }
       )
       .on(
         'postgres_changes',
@@ -79,7 +84,10 @@ export default function AtcPlansRealtimeRefresh({
           table: 'plans_vol',
           filter: `aeroport_depart=eq.${aero}`,
         },
-        scheduleRefresh
+        (payload) => {
+          if (payload.eventType === 'INSERT') window.dispatchEvent(new CustomEvent('atc-sound-alert', { detail: 'new-plan' }));
+          scheduleRefresh();
+        }
       )
       .on(
         'postgres_changes',

@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import {
   Plane, Bell, LayoutGrid, Users2, Wrench,
-  CheckCircle2, AlertCircle, Trophy, X,
+  CheckCircle2, AlertCircle, Trophy, X, Search,
 } from 'lucide-react';
 import EquipeTab from './EquipeTab';
 import ModalAvion from './ModalAvion';
@@ -171,9 +171,14 @@ export default function GroundDashboard({
           void fetchPlanIfMissing(row.plan_vol_id);
         }
         if (payload.eventType === 'UPDATE') {
-          setDemandes(prev => prev.map(d => d.id === row.id ? row : d));
-          // Mettre à jour le plan sélectionné si besoin
-          setSelectedPlan(prev => prev?.id === row.plan_vol_id ? prev : prev);
+          setDemandes(prev => prev.some(d => d.id === row.id)
+            ? prev.map(d => d.id === row.id ? row : d)
+            : [...prev, row]);
+          void fetchPlanIfMissing(row.plan_vol_id);
+        }
+        if (payload.eventType === 'DELETE') {
+          const deleted = payload.old as { id?: string };
+          setDemandes(prev => prev.filter(d => d.id !== deleted.id));
         }
       })
       .subscribe();
@@ -182,6 +187,27 @@ export default function GroundDashboard({
 
   useEffect(() => {
     const supabase = createClient();
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshController: AbortController | undefined;
+    let disposed = false;
+    const refreshPlans = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        refreshController?.abort();
+        const controller = new AbortController();
+        refreshController = controller;
+        fetch(`/api/ground/avions?aeroport=${encodeURIComponent(aeroport)}`, { signal: controller.signal })
+          .then(r => { if (!r.ok) throw new Error('Chargement indisponible'); return r.json(); })
+          .then(({ plans: fetched }: { plans: PlanVol[] }) => {
+            if (!disposed && !controller.signal.aborted && Array.isArray(fetched)) {
+              plansRef.current = fetched;
+              setPlans(fetched);
+              setSelectedPlan(previous => previous ? fetched.find(p => p.id === previous.id) ?? null : null);
+            }
+          })
+          .catch(() => {});
+      }, 300);
+    };
     const channel = supabase
       .channel('ground_plans_' + sessionId)
       .on('postgres_changes', {
@@ -189,19 +215,20 @@ export default function GroundDashboard({
         schema: 'public',
         table: 'plans_vol',
       }, (payload) => {
-        const row = (payload.new || payload.old) as { aeroport_depart?: string; aeroport_arrivee?: string } | null;
+        const row = (payload.eventType === 'DELETE' ? payload.old : payload.new) as { aeroport_depart?: string; aeroport_arrivee?: string } | null;
         const dep = String(row?.aeroport_depart || '').toUpperCase();
         const arr = String(row?.aeroport_arrivee || '').toUpperCase();
-        if (dep !== aeroport && arr !== aeroport) return;
-        fetch(`/api/ground/avions?aeroport=${encodeURIComponent(aeroport)}`)
-          .then((r) => r.json())
-          .then(({ plans: fetched }: { plans: PlanVol[] }) => {
-            if (Array.isArray(fetched)) setPlans(fetched);
-          })
-          .catch(() => {});
+        const id = (payload.eventType === 'DELETE' ? payload.old : payload.new)?.id;
+        if (dep !== aeroport && arr !== aeroport && !plansRef.current.some(p => p.id === id)) return;
+        refreshPlans();
       })
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      disposed = true;
+      refreshController?.abort();
+      if (refreshTimer) clearTimeout(refreshTimer);
+      supabase.removeChannel(channel);
+    };
   }, [sessionId, aeroport]);
 
   const activePlanIds = new Set(plans.map(p => p.id));
@@ -261,6 +288,8 @@ export default function GroundDashboard({
           <button
             key={tab}
             type="button"
+            aria-label={TAB_LABELS[tab]}
+            aria-pressed={activeTab === tab}
             onClick={() => setActiveTab(tab)}
             className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg px-2 py-2 text-xs sm:text-sm font-semibold transition-colors relative ${
               activeTab === tab
@@ -269,7 +298,7 @@ export default function GroundDashboard({
             }`}
           >
             {TAB_ICONS[tab]}
-            <span className="hidden sm:inline">{TAB_LABELS[tab]}</span>
+            <span>{TAB_LABELS[tab]}</span>
             {tab === 'demandes' && pendingCount > 0 && (
               <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
                 {pendingCount}
@@ -356,6 +385,8 @@ function AvionsTab({
   aeroport: string;
   onSelectPlan: (plan: PlanVol) => void;
 }) {
+  const [search, setSearch] = useState('');
+  const [direction, setDirection] = useState<'tous' | 'depart' | 'arrivee'>('tous');
   const norm = (s: string) => s.trim().toUpperCase();
   const aeroportNorm = norm(aeroport);
 
@@ -367,6 +398,13 @@ function AvionsTab({
       .filter(p => norm(p.aeroport_arrivee) === aeroportNorm && norm(p.aeroport_depart) !== aeroportNorm)
       .map(p => ({ ...p, dirType: 'arrivee' as const })),
   ];
+  const pendingByPlan = new Map<string, number>();
+  for (const request of demandes) {
+    if (request.statut === 'pending') pendingByPlan.set(request.plan_vol_id, (pendingByPlan.get(request.plan_vol_id) ?? 0) + 1);
+  }
+  const visiblePlans = allPlans
+    .filter(plan => (direction === 'tous' || plan.dirType === direction) && norm([plan.callsign, plan.immatriculation, plan.porte, plan.aeroport_depart, plan.aeroport_arrivee].join(' ')).includes(norm(search)))
+    .sort((a, b) => (pendingByPlan.get(b.id) ?? 0) - (pendingByPlan.get(a.id) ?? 0));
 
   if (allPlans.length === 0) {
     return (
@@ -379,7 +417,20 @@ function AvionsTab({
 
   return (
     <div className="space-y-2">
-      {allPlans.map(plan => {
+      <div className="flex flex-col sm:flex-row gap-2">
+        <label className="flex flex-1 items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-3">
+          <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
+          <input aria-label="Rechercher un avion" value={search} onChange={e => setSearch(e.target.value)} placeholder="Vol, immatriculation ou porte…" className="w-full bg-transparent py-3 text-sm text-slate-100 outline-none" />
+        </label>
+        <select aria-label="Filtrer les mouvements" value={direction} onChange={e => setDirection(e.target.value as typeof direction)} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-slate-200">
+          <option value="tous">Tous les mouvements</option>
+          <option value="depart">Départs</option>
+          <option value="arrivee">Arrivées</option>
+        </select>
+      </div>
+      <p className="text-xs text-slate-400" role="status">{visiblePlans.length} avion(s) affiché(s) sur {allPlans.length}</p>
+      {visiblePlans.length === 0 && <p className="rounded-xl border border-slate-700 p-6 text-center text-sm text-slate-400">Aucun avion ne correspond. Modifiez votre recherche ou le filtre.</p>}
+      {visiblePlans.map(plan => {
         const planDemandes = demandes.filter(d => d.plan_vol_id === plan.id);
         const pendingCount = planDemandes.filter(d => d.statut === 'pending').length;
         const hasMarshallingAlert = planDemandes.some(
@@ -476,13 +527,14 @@ function DemandesTab({
   plans: PlanVol[];
   onOpenModal: (plan: PlanVol) => void;
 }) {
-  const active = demandes.filter(d => ['accepted', 'in_progress'].includes(d.statut));
+  const active = demandes.filter(d => ['pending', 'accepted', 'in_progress'].includes(d.statut) && plans.some(p => p.id === d.plan_vol_id))
+    .sort((a, b) => Number(b.statut === 'pending') - Number(a.statut === 'pending') || Date.parse(a.requested_at) - Date.parse(b.requested_at));
 
   if (active.length === 0) {
     return (
       <div className="rounded-xl border border-slate-700/40 bg-slate-800/20 p-12 text-center">
         <CheckCircle2 className="h-10 w-10 text-slate-600 mx-auto mb-3" />
-        <p className="text-slate-400">Aucune demande en cours</p>
+        <p className="text-slate-400">Aucune demande à traiter</p>
         <p className="text-slate-500 text-sm mt-1">Les nouvelles demandes apparaissent en temps réel</p>
       </div>
     );
@@ -502,11 +554,11 @@ function DemandesTab({
                     {SERVICE_LABELS[req.service_type]}
                   </span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                    req.statut === 'accepted'
+                    req.statut === 'pending' ? 'bg-amber-500/20 text-amber-300' : req.statut === 'accepted'
                       ? 'bg-sky-500/20 text-sky-300'
                       : 'bg-purple-500/20 text-purple-300'
                   }`}>
-                    {req.statut === 'accepted' ? 'Pris en charge' : 'En cours'}
+                    {req.statut === 'pending' ? 'À prendre en charge' : req.statut === 'accepted' ? 'Pris en charge' : 'En cours'}
                   </span>
                 </div>
                 {plan && (
@@ -521,7 +573,7 @@ function DemandesTab({
                   onClick={() => onOpenModal(plan)}
                   className="text-xs px-3 py-1.5 rounded-lg border border-slate-600/50 text-slate-300 hover:text-slate-100 hover:border-slate-500/50 transition-colors"
                 >
-                  Voir le plan →
+                  Ouvrir les services →
                 </button>
               )}
             </div>

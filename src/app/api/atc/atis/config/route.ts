@@ -91,7 +91,7 @@ export async function PATCH(request: NextRequest) {
   const instanceId = resolveInstanceId(typeof instance_id === 'string' ? instance_id : String(instance_id ?? ''));
   const admin = createAdminClient();
   try {
-    await admin.from('atis_broadcast_config').upsert(
+    const { error: saveError } = await admin.from('atis_broadcast_config').upsert(
       {
         id: String(instanceId),
         discord_guild_id: discord_guild_id ?? null,
@@ -102,6 +102,10 @@ export async function PATCH(request: NextRequest) {
       },
       { onConflict: 'id' }
     );
+    if (saveError) {
+      console.error('ATIS config save:', saveError.message);
+      return NextResponse.json({ error: 'La configuration n’a pas été enregistrée. Réessayez.' }, { status: 503 });
+    }
     // Forcer un refresh des listes Discord au prochain appel (au cas ou le bot
     // a rejoint un nouveau serveur ou ajoute un canal vocal).
     invalidateAtisCaches();

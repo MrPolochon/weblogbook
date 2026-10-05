@@ -34,6 +34,8 @@ export default function GroundConnexion({ userId: _userId }: Props) {
         return;
       }
       startTransition(() => router.refresh());
+    } catch {
+      setError('Connexion impossible. Vérifiez votre réseau puis réessayez.');
     } finally {
       setLoading(false);
     }

@@ -55,9 +55,9 @@ export async function fetchAtisBot<T>(
   const finalPath = buildPath(path, options?.instanceId);
   const timeoutMs = options?.timeoutMs ?? 45000;
   const t0 = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(`${url}${finalPath}`, {
       method: options?.method ?? 'GET',
       headers: headers(),
@@ -65,9 +65,11 @@ export async function fetchAtisBot<T>(
       cache: 'no-store',
       signal: controller.signal,
     });
-    clearTimeout(timeout);
     const latencyMs = Date.now() - t0;
-    const data = await res.json().catch(() => ({}));
+    const data = await res.json().catch(() => null);
+    if (res.ok && (data === null || typeof data !== 'object')) {
+      return { error: 'Réponse invalide du bot ATIS. Réessayez.', status: 502, latencyMs };
+    }
     if (!res.ok) {
       const msg =
         data?.error ||
@@ -86,9 +88,11 @@ export async function fetchAtisBot<T>(
       error: isTimeout
         ? 'Délai dépassé (le bot Railway est peut-être en cours de redéploiement, réessayez dans 1 min)'
         : 'Erreur de connexion au bot',
-      status: 500,
+      status: isTimeout ? 504 : 502,
       latencyMs: Date.now() - t0,
     };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

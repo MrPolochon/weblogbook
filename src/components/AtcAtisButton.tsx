@@ -345,7 +345,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     }
   }, []);
 
+  const channelRequestRef = useRef(0);
   const fetchChannels = useCallback(async (guildId: string) => {
+    const requestId = ++channelRequestRef.current;
+    setChannels([]);
     if (!guildId) {
       setChannels([]);
       return;
@@ -353,9 +356,14 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     try {
       const res = await fetch(`/api/atc/atis/discord-channels?guild_id=${encodeURIComponent(guildId)}`);
       const data = await res.json();
+      if (requestId !== channelRequestRef.current) return;
       setChannels(res.ok && data?.channels ? data.channels : []);
+      if (!res.ok) setError(data?.error || 'Impossible de charger les salons Discord.');
     } catch {
-      setChannels([]);
+      if (requestId === channelRequestRef.current) {
+        setChannels([]);
+        setError('Impossible de charger les salons Discord. Vérifiez votre connexion.');
+      }
     }
   }, []);
 
@@ -614,7 +622,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     const channelId = selectedChannelId;
     const guildName = guilds.find((g) => g.id === guildId)?.name;
     const channelName = channels.find((c) => c.id === channelId)?.name;
-    if (!guildId || !channelId) {
+    if (!guildId || !channelId || !channelName) {
       setError('Sélectionnez un serveur et un canal vocal');
       return;
     }
@@ -1161,7 +1169,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
                 <select
                   value={selectedChannelId}
                   onChange={(e) => setSelectedChannelId(e.target.value)}
-                  disabled={!selectedGuildId}
+                  disabled={!selectedGuildId || channels.length === 0}
                   className={`w-full px-3 py-2 rounded-lg border ${inputCl} disabled:opacity-50`}
                 >
                   <option value="">— Choisir —</option>
@@ -1172,7 +1180,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
               </div>
               <button
                 onClick={saveDiscordConfig}
-                disabled={savingConfig || !selectedGuildId || !selectedChannelId}
+                disabled={savingConfig || !selectedGuildId || !channels.some(c => c.id === selectedChannelId)}
                 className={`w-full py-2.5 rounded-lg text-sm font-semibold ${btnCl} disabled:opacity-50`}
               >
                 {savingConfig ? 'Enregistrement...' : `Enregistrer config Bot ${configInstanceId}`}
