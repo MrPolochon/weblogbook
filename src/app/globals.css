@@ -1426,3 +1426,30 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 .login-shell[data-music-playing="false"] :is(.login-card, .login-heading, .login-modes, .login-links),
 .login-shell[data-music-playing="false"] .login-card::before { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .login-heading, .login-modes, .login-links { animation: none !important; } }
+/* A curious companion peeks from behind the panels; its real link stays reachable. */
+.login-content { isolation: isolate; }
+.login-content > :not(.login-join-wanderer) { position: relative; z-index: 2; }
+.login-join-eyes { display: inline-flex; gap: 3px; flex-shrink: 0; }
+.login-join-eyes i { position: relative; display: block; width: 12px; height: 15px; border-radius: 50%; background: #fff4df; box-shadow: 0 0 6px #e9d5ff55; animation: login-join-blink 7s infinite; }
+.login-join-eyes i::after { content: ''; position: absolute; top: 5px; left: 4px; width: 5px; height: 6px; border-radius: 50%; background: #29133f; animation: login-join-look 9s ease-in-out infinite; }
+.login-join-wanderer { position: absolute; z-index: 1; left: 50%; top: 60%; display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 9px 12px; border: 1px solid #c084fc88; border-radius: 14px; color: #f3e8ff; background: #542a83; box-shadow: 0 0 20px #a855f733; font-size: 11px; font-weight: 600; white-space: nowrap; pointer-events: none; animation: login-join-roam 32s ease-in-out infinite; }
+.login-join-wanderer .login-join-eyes i { width: 18px; height: 23px; }
+.login-join-wanderer .login-join-eyes i::after { width: 7px; height: 9px; top: 8px; left: 6px; }
+.login-join-button:hover .login-join-eyes i, .login-join-button:focus-visible .login-join-eyes i { animation: none; }
+.login-join-button:hover .login-join-eyes i::after, .login-join-button:focus-visible .login-join-eyes i::after { animation: none; transform: translateY(-2px); }
+.login-content:has(.login-join-button:hover) .login-join-wanderer, .login-content:has(.login-join-button:focus-visible) .login-join-wanderer { animation-play-state: paused; }
+@keyframes login-join-roam {
+  0%, 100% { left: 48%; top: 65%; transform: translate(-50%, 0) rotate(-5deg); opacity: 0; }
+  6%, 16% { left: 0%; top: 65%; transform: translate(-35%, 0) rotate(-12deg); opacity: 1; }
+  23%, 29% { left: 40%; top: 65%; transform: translate(-50%, 0); opacity: 0; }
+  30% { left: 60%; top: 35%; transform: translate(-50%, 0); opacity: 0; }
+  36%, 47% { left: 100%; top: 35%; transform: translate(-65%, 0) rotate(12deg); opacity: 1; }
+  54%, 61% { left: 60%; top: 35%; transform: translate(-50%, 0); opacity: 0; }
+  62% { left: 55%; top: 45%; transform: translate(-50%, 0); opacity: 0; }
+  69%, 82% { left: 55%; top: 27%; transform: translate(-50%, -70%) rotate(-4deg); opacity: 1; }
+  90% { left: 55%; top: 45%; transform: translate(-50%, 0); opacity: 0; }
+}
+@keyframes login-join-look { 0%, 100% { transform: translate(0, 0); } 15%, 30% { transform: translate(-3px, -1px); } 45%, 60% { transform: translate(3px, -1px); } 75%, 85% { transform: translate(0, -3px); } }
+@keyframes login-join-blink { 0%, 42%, 46%, 94%, 98%, 100% { transform: scaleY(1); } 44%, 96% { transform: scaleY(.12); } }
+@media (max-width: 640px) { .login-join-wanderer { font-size: 9px; padding: 6px; } }
+@media (prefers-reduced-motion: reduce) { .login-join-wanderer { display: none; } .login-join-eyes i, .login-join-eyes i::after { animation: none; } }

@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff, Users } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 import PasswordlessLogin from '@/components/PasswordlessLogin';
 import HalloweenAmbience from '@/components/HalloweenAmbience';
@@ -432,6 +432,10 @@ function LoginPageContent() {
 
       
       <div className="login-content relative z-10 w-full max-w-lg">
+        <div className="login-join-wanderer" aria-hidden="true">
+          <span className="login-join-eyes"><i /><i /></span>
+          <span>Nous rejoindre</span>
+        </div>
         {messageParam === 'discord-not-linked' && <p role="alert" className="rounded-lg bg-red-950/70 p-3 text-sm text-red-200">Ce Discord n’est lié à aucun compte. Connectez-vous avec votre identifiant puis liez Discord depuis votre profil.</p>}
         {/* Logo / Titre */}
         <div className="login-heading text-center mb-3">
@@ -1038,9 +1042,9 @@ function LoginPageContent() {
             href="https://discord.gg/NfUaC9Kbss"
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/20 px-3 py-2 font-semibold text-purple-200 transition-colors hover:bg-purple-500/30"
+            className="login-join-button inline-flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/20 px-3 py-2 font-semibold text-purple-200 transition-colors hover:bg-purple-500/30"
           >
-            <Users className="h-4 w-4 shrink-0" />
+            <span className="login-join-eyes" aria-hidden="true"><i /><i /></span>
             <span>Nous rejoindre</span>
           </a>
           <Link
