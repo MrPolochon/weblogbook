@@ -1300,7 +1300,43 @@ html[data-theme="halloween"] :is(a, button, input, select, textarea):focus-visib
 .login-heading p { margin-top: 3px; }
 .login-heading::after { content: '🎃'; position: absolute; top: 8px; right: 12px; font-size: 24px; pointer-events: none; }
 .login-modes button { padding-top: 8px; padding-bottom: 8px; }
-.login-card { padding: 18px; }
+.login-card {
+  --login-float-distance: -6px;
+  position: relative;
+  isolation: isolate;
+  padding: 18px;
+  animation: login-panel-float 9s ease-in-out infinite;
+}
+.login-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 24px 45px rgba(0, 0, 0, .32), 0 0 28px rgba(168, 85, 247, .13), 0 0 14px rgba(249, 115, 22, .08);
+  animation: login-panel-glow 9s ease-in-out infinite;
+}
+@keyframes login-panel-float {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(0, var(--login-float-distance), 0) rotate(.16deg); }
+}
+@keyframes login-panel-glow {
+  0%, 100% { opacity: .45; }
+  50% { opacity: 1; }
+}
+.login-card:focus-within,
+.login-card:focus-within::before { animation-play-state: paused; }
+@media (hover: hover) {
+  .login-card:hover,
+  .login-card:hover::before { animation-play-state: paused; }
+}
+@media (max-width: 640px) {
+  .login-card { --login-float-distance: -3px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-card, .login-card::before { animation: none; }
+}
 .login-card form { gap: 10px; }
 .login-card form > :not([hidden]) ~ :not([hidden]) { margin-top: 10px; }
 .login-card .input { padding-top: 9px; padding-bottom: 9px; }
