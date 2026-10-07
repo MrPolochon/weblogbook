@@ -432,10 +432,10 @@ function LoginPageContent() {
 
       
       <div className="login-content relative z-10 w-full max-w-lg">
-        <div className="login-join-wanderer" aria-hidden="true">
-          <span className="login-join-eyes"><i /><i /></span>
+        <a className="login-join-wanderer" href="https://discord.gg/NfUaC9Kbss" target="_blank" rel="noopener noreferrer">
+          <span className="login-join-eyes" aria-hidden="true"><i /><i /></span>
           <span>Nous rejoindre</span>
-        </div>
+        </a>
         {messageParam === 'discord-not-linked' && <p role="alert" className="rounded-lg bg-red-950/70 p-3 text-sm text-red-200">Ce Discord n’est lié à aucun compte. Connectez-vous avec votre identifiant puis liez Discord depuis votre profil.</p>}
         {/* Logo / Titre */}
         <div className="login-heading text-center mb-3">
