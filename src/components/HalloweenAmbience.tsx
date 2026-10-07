@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { HALLOWEEN_BEAT, halloweenSection } from '@/lib/halloween-score';
 
 /** Original music-box theme: introduction, build, drop, release and quiet reprise. */
 export default function HalloweenAmbience() {
@@ -8,7 +9,7 @@ export default function HalloweenAmbience() {
     let context: AudioContext | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
-    const beat = 0.72;
+    const beat = HALLOWEEN_BEAT;
     const bars = [
       { chord: [57, 60, 64], melody: [81, 84, 88, 87] },
       { chord: [53, 57, 60], melody: [84, 81, 80, 76] },
@@ -20,8 +21,11 @@ export default function HalloweenAmbience() {
       { chord: [52, 56, 59], melody: [83, 80, 76, 80] },
     ];
     let output: GainNode | null = null;
+    let organWave: PeriodicWave | null = null;
+    let noise: AudioBuffer | null = null;
     let nextBarTime = 0;
     let barIndex = 0;
+    let previousVolume = 0;
     const note = (pitch: number, time: number, duration: number, volume: number, type: OscillatorType = 'sine', attack = 0.015) => {
       if (!context || !output) return;
       const oscillator = context.createOscillator();
@@ -53,50 +57,91 @@ export default function HalloweenAmbience() {
       oscillator.stop(time + 0.4);
       oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
     };
+    const organ = (pitch: number, time: number, duration: number, volume: number) => {
+      if (!context || !output || !organWave) return;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.setPeriodicWave(organWave);
+      oscillator.frequency.value = 440 * Math.pow(2, (pitch - 69) / 12);
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(volume, time + 0.08);
+      gain.gain.setValueAtTime(volume * 0.85, time + duration * 0.75);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + duration + 0.4);
+      oscillator.connect(gain);
+      gain.connect(output);
+      oscillator.start(time);
+      oscillator.stop(time + duration + 0.45);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    };
+    const percussion = (time: number, volume: number, cymbal = false) => {
+      if (!context || !output || !noise) return;
+      const source = context.createBufferSource();
+      const filter = context.createBiquadFilter();
+      const gain = context.createGain();
+      source.buffer = noise;
+      filter.type = 'highpass';
+      filter.frequency.value = cymbal ? 6500 : 1400;
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(volume, time + 0.008);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + (cymbal ? 0.85 : 0.18));
+      source.connect(filter);
+      filter.connect(gain);
+      gain.connect(output);
+      source.start(time);
+      source.stop(time + (cymbal ? 0.9 : 0.2));
+      source.onended = () => { source.disconnect(); filter.disconnect(); gain.disconnect(); };
+    };
     const schedule = () => {
       if (!context || context.state !== 'running' || document.hidden) return;
       // Schedule against the audio clock so background pauses never stack loops.
       if (nextBarTime < context.currentTime) nextBarTime = context.currentTime + 0.1;
       while (nextBarTime < context.currentTime + 1) {
-        // A complete arc lasts about 58 seconds; the drop resolves before looping.
-        const section = barIndex % 20;
-        const building = section >= 4 && section < 8;
-        const dropping = section >= 8 && section < 12;
-        const releasing = section >= 12 && section < 16;
-        const quiet = section >= 16;
-        const intensity = building ? (section - 3) / 4 : dropping ? 1 : releasing ? (16 - section) / 4 : 0;
-        const bar = bars[(section < 16 ? section : section - 16) % bars.length];
+        const { bar: section, build: building, drop: dropping, outro: releasing, quiet, intensity, volume } = halloweenSection(barIndex);
+        output!.gain.setValueAtTime(previousVolume, nextBarTime);
+        output!.gain.linearRampToValueAtTime(volume, nextBarTime + (dropping ? 0.08 : 0.5));
+        previousVolume = volume;
+        const bar = bars[section % bars.length];
         bar.melody.forEach((pitch, index) => {
           const time = nextBarTime + index * beat;
           note(pitch, time, quiet ? 2 : 1.5, quiet ? 0.024 : 0.035);
           note(pitch + 12, time, 0.65, quiet ? 0.003 : 0.006); // Soft bell overtone.
-          if (dropping || releasing) note(pitch - 12, time, beat * 0.85, 0.022 * intensity, 'triangle', 0.04);
+          if (dropping) organ(pitch - 12, time, beat * 0.85, 0.065);
         });
         bar.chord.forEach(pitch => note(pitch, nextBarTime, beat * 4, 0.007 + intensity * 0.003, 'sine', 0.3));
         note(bar.chord[0] - 12, nextBarTime, beat * 3.8, quiet ? 0.01 : 0.018, 'triangle', 0.1);
-        const steps = quiet ? 4 : building && section >= 6 ? 16 : 8;
+        if (dropping) {
+          bar.chord.forEach(pitch => organ(pitch - 12, nextBarTime, beat * 3.7, 0.055));
+          bar.chord.forEach(pitch => organ(pitch, nextBarTime, beat * 3.7, 0.035));
+          organ(bar.chord[0] - 24, nextBarTime, beat * 3.7, 0.065);
+        } else if (releasing) {
+          bar.chord.forEach(pitch => organ(pitch - 12, nextBarTime, beat * 3.7, 0.018 * intensity));
+        }
+        const steps = quiet ? 4 : (building && section % 8 >= 4) || dropping ? 16 : 8;
         for (let index = 0; index < steps; index++) {
           const pitch = bar.chord[[0, 1, 2, 1][index % 4]] + 12;
           note(pitch, nextBarTime + index * beat * 4 / steps, 0.7, quiet ? 0.006 : 0.009 + intensity * 0.004);
         }
         if (building) {
-          const hits = section === 7 ? 8 : 4;
+          const hits = section % 8 === 7 ? 16 : section % 8 >= 4 ? 8 : 4;
           for (let index = 0; index < hits; index++) {
             drum(nextBarTime + index * beat * 4 / hits, 0.008 + intensity * 0.012, true);
+            percussion(nextBarTime + index * beat * 4 / hits, 0.014 + intensity * 0.016);
           }
           // A rising bell run announces the impact without changing the theme.
-          if (section === 7) [76, 80, 83, 88, 92, 95, 100, 104].forEach((pitch, index) => {
+          if (section % 8 === 7) [76, 80, 83, 88, 92, 95, 100, 104].forEach((pitch, index) => {
             note(pitch, nextBarTime + index * beat / 2, 0.5, 0.01 + index * 0.001);
           });
         }
         if (dropping) {
-          [0, 1.5, 2, 3.5].forEach(offset => {
-            drum(nextBarTime + offset * beat, 0.065);
-            note(bar.chord[0] - 24, nextBarTime + offset * beat, beat * 0.8, 0.035, 'sine', 0.02);
+          [0, 1, 2, 3].forEach(offset => {
+            drum(nextBarTime + offset * beat, 0.14);
+            note(bar.chord[0] - 24, nextBarTime + offset * beat, beat * 0.8, 0.06, 'sine', 0.02);
           });
-          [1, 3].forEach(offset => drum(nextBarTime + offset * beat, 0.032, true));
+          [1, 3].forEach(offset => { drum(nextBarTime + offset * beat, 0.065, true); percussion(nextBarTime + offset * beat, 0.075); });
+          for (let index = 0; index < 8; index++) percussion(nextBarTime + index * beat / 2, 0.014, true);
+          if (section === 16 || section === 48) percussion(nextBarTime, 0.11, true);
           // The final bar releases the rhythm, leaving the bell echo and harmony.
-          if (section === 11) note(81, nextBarTime + 3 * beat, beat * 3, 0.028);
+          if (section === 31 || section === 55) note(81, nextBarTime + 3 * beat, beat * 3, 0.028);
         }
         nextBarTime += beat * 4;
         barIndex++;
@@ -107,17 +152,28 @@ export default function HalloweenAmbience() {
       try {
         if (!context) {
           context = new AudioContext();
+          organWave = context.createPeriodicWave(new Float32Array(9), new Float32Array([0, 1, 0.6, 0.28, 0.4, 0.12, 0.18, 0.08, 0.15]));
+          noise = context.createBuffer(1, context.sampleRate, context.sampleRate);
+          const samples = noise.getChannelData(0);
+          for (let index = 0; index < samples.length; index++) samples[index] = Math.random() * 2 - 1;
           output = context.createGain();
           output.gain.setValueAtTime(0, context.currentTime);
-          output.gain.linearRampToValueAtTime(0.65, context.currentTime + 2);
-          output.connect(context.destination);
+          output.gain.linearRampToValueAtTime(0.38, context.currentTime + 2);
+          const limiter = context.createDynamicsCompressor();
+          limiter.threshold.value = -8;
+          limiter.knee.value = 6;
+          limiter.ratio.value = 12;
+          limiter.attack.value = 0.005;
+          limiter.release.value = 0.25;
+          output.connect(limiter);
+          limiter.connect(context.destination);
           const echo = context.createDelay(1);
           const echoGain = context.createGain();
           echo.delayTime.value = beat * 0.75;
           echoGain.gain.value = 0.18;
           output.connect(echo);
           echo.connect(echoGain);
-          echoGain.connect(context.destination);
+          echoGain.connect(limiter);
         }
         await context.resume();
         if (disposed || context.state !== 'running' || timer) return;
