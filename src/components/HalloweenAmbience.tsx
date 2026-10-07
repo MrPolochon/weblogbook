@@ -26,6 +26,9 @@ export default function HalloweenAmbience() {
     let nextBarTime = 0;
     let barIndex = 0;
     let previousVolume = 0;
+    let lastSplashBar = -1;
+    const scene = document.querySelector<HTMLElement>('.login-shell');
+    scene?.style.setProperty('--music-beat', `${beat}s`);
     const note = (pitch: number, time: number, duration: number, volume: number, type: OscillatorType = 'sine', attack = 0.015) => {
       if (!context || !output) return;
       const oscillator = context.createOscillator();
@@ -146,6 +149,26 @@ export default function HalloweenAmbience() {
         nextBarTime += beat * 4;
         barIndex++;
       }
+      // Look-ahead schedules sound early; the scene follows the bar actually playing.
+      const soundingBar = Math.max(0, barIndex - (context.currentTime < nextBarTime - beat * 4 ? 2 : 1));
+      const phase = halloweenSection(soundingBar);
+      if (scene) {
+        const name = phase.drop ? 'drop' : phase.build ? 'build' : phase.outro ? 'outro' : phase.quiet ? 'calm' : 'intro';
+        if (scene.dataset.musicPhase !== name) {
+          scene.dataset.musicPhase = name;
+          scene.style.setProperty('--music-offset', `${-(context.currentTime % beat)}s`);
+        }
+        scene.style.setProperty('--music-energy', String(phase.intensity));
+        const floatPeriod = beat * (phase.drop ? 6 : phase.build ? 20 - phase.intensity * 12 : 20);
+        scene.style.setProperty('--music-float-period', `${floatPeriod}s`);
+        if (soundingBar !== lastSplashBar) {
+          lastSplashBar = soundingBar;
+          const shape = () => `${Array.from({ length: 4 }, () => `${25 + Math.floor(Math.random() * 50)}%`).join(' ')} / ${Array.from({ length: 4 }, () => `${25 + Math.floor(Math.random() * 50)}%`).join(' ')}`;
+          scene.style.setProperty('--splash-shape', shape());
+          scene.style.setProperty('--splash-shape-inner', shape());
+        }
+        scene.dataset.musicPlaying = 'true';
+      }
     };
     const start = async () => {
       if (disposed || document.hidden) return;
@@ -182,7 +205,7 @@ export default function HalloweenAmbience() {
       } catch { /* A browser policy must never prevent signing in. */ }
     };
     const visibility = () => {
-      if (document.hidden) void context?.suspend();
+      if (document.hidden) { if (scene) scene.dataset.musicPlaying = 'false'; void context?.suspend(); }
       else void start();
     };
     void start();
@@ -196,6 +219,7 @@ export default function HalloweenAmbience() {
       document.removeEventListener('keydown', start);
       document.removeEventListener('visibilitychange', visibility);
       void context?.close();
+      if (scene) { delete scene.dataset.musicPhase; delete scene.dataset.musicPlaying; ['--music-energy', '--music-beat', '--music-offset', '--music-float-period', '--splash-shape', '--splash-shape-inner'].forEach(name => scene.style.removeProperty(name)); }
     };
   }, []);
   return null;

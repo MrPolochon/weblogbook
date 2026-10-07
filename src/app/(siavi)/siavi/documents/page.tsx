@@ -1,3 +1,4 @@
+import TribunalJournalLink from '@/components/TribunalJournalLink';
 import { createClient } from '@/lib/supabase/server';
 import { FolderOpen } from 'lucide-react';
 import DocumentTree from '@/components/DocumentTree';
@@ -17,6 +18,7 @@ export default async function SiaviDocumentsPage() {
 
   return (
     <div className="space-y-6">
+      <TribunalJournalLink />
       <div>
         <h1 className="text-2xl font-semibold text-red-900">Documents</h1>
         <p className="text-sm text-slate-500 mt-1">{totalFiles} document(s) disponible(s)</p>

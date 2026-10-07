@@ -1,3 +1,4 @@
+import TribunalJournalLink from '@/components/TribunalJournalLink';
 import { createClient } from '@/lib/supabase/server';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -15,6 +16,7 @@ export default async function AdminDocumentsPage() {
 
   return (
     <div className="space-y-6">
+      <TribunalJournalLink />
       <div className="flex items-center gap-4">
         <Link href="/admin" className="text-slate-400 hover:text-slate-200">
           <ArrowLeft className="h-5 w-5" />
@@ -26,6 +28,7 @@ export default async function AdminDocumentsPage() {
           </p>
         </div>
       </div>
+      <Link href="/admin/documents/journal" className="btn-primary inline-block">Publier un bulletin du tribunal</Link>
       <DocumentSections sections={sections || []} />
     </div>
   );

@@ -1305,7 +1305,7 @@ html[data-theme="halloween"] :is(a, button, input, select, textarea):focus-visib
   position: relative;
   isolation: isolate;
   padding: 18px;
-  animation: login-panel-float 9s ease-in-out infinite;
+  animation: login-panel-float var(--music-float-period, 14s) ease-in-out infinite;
 }
 .login-card::before {
   content: '';
@@ -1315,7 +1315,7 @@ html[data-theme="halloween"] :is(a, button, input, select, textarea):focus-visib
   border-radius: inherit;
   pointer-events: none;
   box-shadow: 0 24px 45px rgba(0, 0, 0, .32), 0 0 28px rgba(168, 85, 247, .13), 0 0 14px rgba(249, 115, 22, .08);
-  animation: login-panel-glow 9s ease-in-out infinite;
+  animation: login-panel-glow var(--music-float-period, 14s) ease-in-out infinite;
 }
 @keyframes login-panel-float {
   0%, 100% { transform: translate3d(0, 0, 0) rotate(0deg); }
@@ -1366,3 +1366,61 @@ html[data-theme="halloween"] :is(a, button, input, select, textarea):focus-visib
 .login-heading::after { content: none; }
 .login-heading h1::after { content: ' 🎃'; font-size: .8em; }
 html[data-theme="halloween"] .login-card form > button { background: linear-gradient(100deg, #b94a11, #923c7f) !important; }
+
+/* The audio clock controls the scene's phase; only decorative layers pulse. */
+.login-scene { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
+.login-scene-fog { position: absolute; width: 70%; height: 75%; border-radius: 50%; opacity: .32; animation: login-fog-drift 24s ease-in-out infinite alternate; }
+.login-scene-fog-orange { top: -20%; left: -20%; background: radial-gradient(ellipse, #d35e274f, transparent 65%); }
+.login-scene-fog-purple { bottom: -20%; right: -20%; background: radial-gradient(ellipse, #9333ea55, transparent 65%); animation-delay: -12s; }
+.login-scene-halo {
+  position: absolute; inset: 8% -5%;
+  border-radius: var(--splash-shape, 37% 63% 58% 42% / 62% 38% 65% 35%);
+  background: linear-gradient(125deg, #ed762d16, #b057da25, #ed762d0c);
+  border: 1px solid #da78ef22;
+  box-shadow: inset 0 0 80px #ba55e744, 0 0 60px #f5833833;
+  opacity: .22;
+  transition: border-radius 2.7s ease-in-out, opacity 2s ease;
+  animation: login-splash-drift 18s ease-in-out infinite alternate;
+}
+.login-scene-halo::before {
+  content: ''; position: absolute; inset: 8% -3%;
+  border-radius: var(--splash-shape-inner, 65% 35% 40% 60% / 30% 66% 34% 70%);
+  background: linear-gradient(210deg, #f5833822, transparent 45%, #c065ed33);
+  box-shadow: inset 0 0 45px #f5833822, 0 0 35px #ba55e733;
+  transition: border-radius 2.7s ease-in-out;
+  animation: login-splash-drift 23s ease-in-out infinite alternate-reverse;
+}
+.login-scene-moon { position: absolute; right: 7%; top: 10%; width: clamp(45px, 8vw, 100px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffdbac33, #f5a96318 60%, transparent 72%); box-shadow: 0 0 50px #e8a66515; animation: login-moon-drift 18s ease-in-out infinite; }
+.login-scene-ember { position: absolute; bottom: -15px; width: 3px; height: 3px; border-radius: 50%; background: #ffbc77; box-shadow: 0 0 8px #fb923c77; animation: login-ember-rise 24s linear infinite; opacity: 0; }
+.login-scene-ember:nth-of-type(3n) { background: #c9a0ff; box-shadow: 0 0 8px #b57cff77; }
+.login-shell[data-music-phase="build"] .login-scene-halo { opacity: calc(.2 + var(--music-energy, 0) * .5); }
+.login-shell[data-music-phase="drop"] .login-scene-halo { animation: login-music-pulse var(--music-beat, .703125s) ease-out infinite; animation-delay: var(--music-offset, 0s); }
+.login-shell[data-music-phase="drop"] .login-scene-fog { opacity: .65; }
+.login-shell[data-music-phase="outro"] .login-scene-halo { opacity: calc(.1 + var(--music-energy, 0) * .3); }
+.login-shell[data-music-playing="false"] .login-scene-halo { animation-play-state: paused; }
+@keyframes login-fog-drift { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(8%, 6%, 0) scale(1.15); } }
+@keyframes login-moon-drift { 0%, 100% { transform: translateY(0); opacity: .55; } 50% { transform: translateY(-12px); opacity: .9; } }
+@keyframes login-ember-rise { 0% { transform: translate3d(0, 0, 0); opacity: 0; } 15% { opacity: .45; } 75% { opacity: .3; } 100% { transform: translate3d(var(--ember-drift), -90vh, 0); opacity: 0; } }
+@keyframes login-music-pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.06); opacity: .22; } }
+@keyframes login-splash-drift { from { transform: translate3d(-2%, 1%, 0) rotate(-5deg) scale(.98); } to { transform: translate3d(3%, -2%, 0) rotate(6deg) scale(1.04); } }
+@media (max-width: 640px) { .login-scene-ember:nth-of-type(n+10) { display: none; } .login-scene-moon { right: 3%; top: 4%; } }
+@media (prefers-reduced-motion: reduce) { .login-scene *, .login-shell[data-music-phase="drop"] .login-scene-halo { animation: none !important; transition: none !important; } .login-scene-ember { display: none; } }
+.login-heading, .login-modes, .login-links {
+  opacity: 1;
+  animation: login-element-float var(--music-float-period, 14s) ease-in-out infinite;
+}
+.login-heading { animation-delay: calc(var(--music-float-period, 14s) * -.15); }
+.login-modes { animation-delay: calc(var(--music-float-period, 14s) * -.3); }
+.login-links { animation-delay: calc(var(--music-float-period, 14s) * -.5); }
+.login-heading:focus-within, .login-modes:focus-within, .login-links:focus-within { animation-play-state: paused; }
+@media (hover: hover) {
+  .login-heading:hover, .login-modes:hover, .login-links:hover { animation-play-state: paused; }
+}
+@keyframes login-element-float {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -4px, 0); }
+}
+.login-shell[data-music-phase="drop"] .login-scene-ember { animation-duration: calc(var(--music-beat, .703125s) * 16) !important; }
+.login-shell[data-music-playing="false"] :is(.login-card, .login-heading, .login-modes, .login-links),
+.login-shell[data-music-playing="false"] .login-card::before { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) { .login-heading, .login-modes, .login-links { animation: none !important; } }

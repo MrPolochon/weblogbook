@@ -1,3 +1,4 @@
+import TribunalJournalLink from '@/components/TribunalJournalLink';
 import { createClient } from '@/lib/supabase/server';
 import { FolderOpen } from 'lucide-react';
 import Link from 'next/link';
@@ -18,6 +19,7 @@ export default async function DocumentsPage() {
 
   return (
     <div className="space-y-6">
+      <TribunalJournalLink />
       <div>
         <h1 className="text-2xl font-semibold text-slate-100">Documents</h1>
         <p className="text-sm text-slate-400 mt-1">

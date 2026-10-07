@@ -6,10 +6,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff, Users } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 import PasswordlessLogin from '@/components/PasswordlessLogin';
 import HalloweenAmbience from '@/components/HalloweenAmbience';
+import HalloweenScene from '@/components/HalloweenScene';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -426,6 +427,7 @@ function LoginPageContent() {
       <HalloweenAmbience />
       {fond}
       {overlay}
+      <HalloweenScene />
       
 
       
@@ -1032,6 +1034,15 @@ function LoginPageContent() {
 
         {/* Boutons secondaires */}
         <div className="login-links mt-3 flex flex-wrap items-center justify-center gap-2 sm:gap-3 animate-init animate-slide-up delay-800">
+          <a
+            href="https://discord.gg/NfUaC9Kbss"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-purple-400/40 bg-purple-500/20 px-3 py-2 font-semibold text-purple-200 transition-colors hover:bg-purple-500/30"
+          >
+            <Users className="h-4 w-4 shrink-0" />
+            <span>Nous rejoindre</span>
+          </a>
           <Link
             href="/aeroschool"
             className="inline-flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"

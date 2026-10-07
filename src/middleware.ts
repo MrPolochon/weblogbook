@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive, type DiscordLinkStatus } from '@/lib/discord-link';
 import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 import { RADAR_ENABLED } from '@/lib/radar-status';
+import { isPublicBulletinPath } from '@/lib/tribunal-bulletins';
 
 function copyCookies(from: NextResponse, to: NextResponse) {
   from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
@@ -247,7 +248,7 @@ async function runMiddleware(request: NextRequest) {
   if (
     isAuthCallback || isApiPublic || isApiDiscord || isApiSupportBot || isApiDiscordInteractions || isApiAeroSchoolPublic || isApiAuth ||
     isSetup || isLogin || isDownload || isCodeConduite || isLivretProgression || isManuelControleur || isAeroSchool || isCalendrier || isCarteAtc || isApiAtcOnline ||
-    isMaintenance || isTranscript
+    isMaintenance || isTranscript || isPublicBulletinPath(pathname)
   ) {
     return NextResponse.next({ request });
   }

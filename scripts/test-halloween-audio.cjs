@@ -19,7 +19,9 @@ test('Halloween composition lasts three minutes with two contrasting organ drops
 test('Halloween audio schedules one loop, pauses in background and releases audio on departure', async () => {
  const saved = { document: global.document, AudioContext: global.AudioContext, setInterval: global.setInterval, clearInterval: global.clearInterval };
  const events = new Map(); let cleanup, loops = 0, cleared = 0, ctx, schedule;
- global.document = { hidden: false, addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) };
+ const sceneStyles = new Map();
+ const scene = { dataset: {}, style: { setProperty: (name, value) => sceneStyles.set(name, value), removeProperty: name => sceneStyles.delete(name) } };
+ global.document = { hidden: false, querySelector: () => scene, addEventListener: (name, fn) => events.set(name, fn), removeEventListener: name => events.delete(name) };
  global.setInterval = fn => { loops++; schedule = fn; return 42; };
  global.clearInterval = id => { if (id === 42) cleared++; };
  global.AudioContext = class {
@@ -45,6 +47,7 @@ test('Halloween audio schedules one loop, pauses in background and releases audi
   ctx.currentTime = 2; schedule(); assert.equal(ctx.notes, 40);
   await events.get('pointerdown')(); assert.equal(loops, 1);
   global.document.hidden = true; events.get('visibilitychange')(); assert.equal(ctx.state, 'suspended');
+  assert.equal(scene.dataset.musicPlaying, 'false');
   schedule(); assert.equal(ctx.notes, 40);
   global.document.hidden = false; events.get('visibilitychange')(); await Promise.resolve(); assert.equal(ctx.state, 'running');
   // Advance through the musical arc. The drop must be fuller, then return to calm.
@@ -55,6 +58,10 @@ test('Halloween audio schedules one loop, pauses in background and releases audi
    if (bar === 16 || bar === 48) {
     assert.ok(ctx.organNotes > organBefore, 'the drop plays a sustained organ');
     assert.ok(ctx.drums > drumsBefore, 'the drop adds snare and cymbals');
+    assert.notEqual(scene.dataset.musicPhase, 'drop', 'look-ahead must not trigger the visuals early');
+    ctx.currentTime = bar * score.HALLOWEEN_BEAT * 4 + 0.01; schedule();
+    assert.equal(scene.dataset.musicPhase, 'drop', 'visuals follow the audible drop');
+    assert.ok(parseFloat(sceneStyles.get('--music-float-period')) < score.HALLOWEEN_BEAT * 20, 'floating speeds up with the drop');
    }
   }
   assert.ok(counts[15] > counts[2], 'the build adds rhythmic motion');
@@ -62,5 +69,7 @@ test('Halloween audio schedules one loop, pauses in background and releases audi
   assert.ok(counts[32] < counts[16], 'the breakdown calms down');
   assert.equal(counts[64], 20, 'the next cycle returns to the original music-box texture');
   cleanup(); assert.equal(ctx.state, 'closed'); assert.equal(cleared, 1); assert.equal(events.size, 0);
+  assert.deepEqual(scene.dataset, {});
+  assert.equal(sceneStyles.size, 0);
  } finally { Object.assign(global, saved); }
 });
