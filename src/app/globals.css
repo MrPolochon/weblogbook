@@ -1464,3 +1464,25 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 @keyframes login-join-blink { 0%, 42%, 46%, 94%, 98%, 100% { transform: scaleY(1); } 44%, 96% { transform: scaleY(.12); } }
 @media (max-width: 640px) { .login-join-wanderer { font-size: 12px; padding: 10px 12px; } }
 @media (prefers-reduced-motion: reduce) { .login-join-wanderer { display: none; } .login-join-eyes i, .login-join-eyes i::after { animation: none; } }
+/* Startled by the pointer, the companion steps into view until it leaves. */
+.login-join-wanderer { transition: transform .22s ease-out, box-shadow .22s ease-out; cursor: pointer; }
+.login-join-wanderer:hover {
+  animation-play-state: paused;
+  transform: translate(-50%, -12px) rotate(0deg) scale(1.08) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  z-index: 5 !important;
+  box-shadow: 0 10px 30px #160727aa, 0 0 30px #e9b5ff99;
+}
+.login-join-wanderer:hover .login-join-eyes i { animation: none; transform: scale(1.2); }
+.login-join-wanderer:hover .login-join-eyes i::after { animation: none; transform: translateY(-2px) scale(.65); }
+@media (max-width: 640px) {
+  .login-join-wanderer:hover { transform: translate(-50%, -12px) rotate(0deg) !important; }
+}
+@media (prefers-reduced-motion: reduce) { .login-join-wanderer { transition: none; } }
+/* Keep the pointer inside the hit area while the startled pose moves outward. */
+.login-join-wanderer:hover::before { content: ''; position: absolute; inset: -36px -70px; }
+@media (max-width: 640px) {
+  .login-join-wanderer:hover { transform: translate(-50%, -12px) !important; left: clamp(75px, 50%, calc(100% - 75px)) !important; }
+}
