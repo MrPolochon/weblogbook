@@ -12,7 +12,16 @@ test('Halloween composition lasts three minutes with two contrasting organ drops
  assert.equal(score.HALLOWEEN_BAR_COUNT * 4 * score.HALLOWEEN_BEAT, 180);
  assert.equal(score.halloweenSection(16).drop, true);
  assert.equal(score.halloweenSection(48).drop, true);
- assert.ok(score.halloweenSection(16).volume >= score.halloweenSection(0).volume * 2);
+ for (const start of [16, 48]) {
+  assert.ok(score.halloweenSection(start).volume - score.halloweenSection(start - 1).volume < 0.04);
+  for (let bar = start + 1; bar < start + 4; bar++) {
+   assert.ok(score.halloweenSection(bar).volume > score.halloweenSection(bar - 1).volume);
+   assert.ok(score.halloweenSection(bar).dropStrength > score.halloweenSection(bar - 1).dropStrength);
+  }
+  assert.equal(score.halloweenSection(start + 3).dropStrength, 1);
+  assert.ok(score.halloweenSection(start).dropStrength < 0.2);
+  assert.ok(score.halloweenSection(start + 3).volume <= 0.76);
+ }
  assert.equal(score.halloweenSection(32).drop, false);
  assert.ok(score.halloweenSection(63).volume < score.halloweenSection(48).volume);
 });

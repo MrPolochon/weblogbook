@@ -99,23 +99,23 @@ export default function HalloweenAmbience() {
       // Schedule against the audio clock so background pauses never stack loops.
       if (nextBarTime < context.currentTime) nextBarTime = context.currentTime + 0.1;
       while (nextBarTime < context.currentTime + 1) {
-        const { bar: section, build: building, drop: dropping, outro: releasing, quiet, intensity, volume } = halloweenSection(barIndex);
+        const { bar: section, build: building, drop: dropping, outro: releasing, quiet, intensity, volume, dropStrength } = halloweenSection(barIndex);
         output!.gain.setValueAtTime(previousVolume, nextBarTime);
-        output!.gain.linearRampToValueAtTime(volume, nextBarTime + (dropping ? 0.08 : 0.5));
+        output!.gain.linearRampToValueAtTime(volume, nextBarTime + beat * 4);
         previousVolume = volume;
         const bar = bars[section % bars.length];
         bar.melody.forEach((pitch, index) => {
           const time = nextBarTime + index * beat;
           note(pitch, time, quiet ? 2 : 1.5, quiet ? 0.024 : 0.035);
           note(pitch + 12, time, 0.65, quiet ? 0.003 : 0.006); // Soft bell overtone.
-          if (dropping) organ(pitch - 12, time, beat * 0.85, 0.065);
+          if (dropping) organ(pitch - 12, time, beat * 0.85, 0.05 * dropStrength);
         });
         bar.chord.forEach(pitch => note(pitch, nextBarTime, beat * 4, 0.007 + intensity * 0.003, 'sine', 0.3));
         note(bar.chord[0] - 12, nextBarTime, beat * 3.8, quiet ? 0.01 : 0.018, 'triangle', 0.1);
         if (dropping) {
-          bar.chord.forEach(pitch => organ(pitch - 12, nextBarTime, beat * 3.7, 0.055));
-          bar.chord.forEach(pitch => organ(pitch, nextBarTime, beat * 3.7, 0.035));
-          organ(bar.chord[0] - 24, nextBarTime, beat * 3.7, 0.065);
+          bar.chord.forEach(pitch => organ(pitch - 12, nextBarTime, beat * 3.7, 0.045 * dropStrength));
+          bar.chord.forEach(pitch => organ(pitch, nextBarTime, beat * 3.7, 0.028 * dropStrength));
+          organ(bar.chord[0] - 24, nextBarTime, beat * 3.7, 0.05 * dropStrength);
         } else if (releasing) {
           bar.chord.forEach(pitch => organ(pitch - 12, nextBarTime, beat * 3.7, 0.018 * intensity));
         }
@@ -137,12 +137,12 @@ export default function HalloweenAmbience() {
         }
         if (dropping) {
           [0, 1, 2, 3].forEach(offset => {
-            drum(nextBarTime + offset * beat, 0.14);
-            note(bar.chord[0] - 24, nextBarTime + offset * beat, beat * 0.8, 0.06, 'sine', 0.02);
+            drum(nextBarTime + offset * beat, 0.10 * dropStrength);
+            note(bar.chord[0] - 24, nextBarTime + offset * beat, beat * 0.8, 0.045 * dropStrength, 'sine', 0.02);
           });
-          [1, 3].forEach(offset => { drum(nextBarTime + offset * beat, 0.065, true); percussion(nextBarTime + offset * beat, 0.075); });
-          for (let index = 0; index < 8; index++) percussion(nextBarTime + index * beat / 2, 0.014, true);
-          if (section === 16 || section === 48) percussion(nextBarTime, 0.11, true);
+          [1, 3].forEach(offset => { drum(nextBarTime + offset * beat, 0.05 * dropStrength, true); percussion(nextBarTime + offset * beat, 0.055 * dropStrength); });
+          for (let index = 0; index < 8; index++) percussion(nextBarTime + index * beat / 2, 0.012 * dropStrength, true);
+          if (section === 19 || section === 51) percussion(nextBarTime, 0.035, true);
           // The final bar releases the rhythm, leaving the bell echo and harmony.
           if (section === 31 || section === 55) note(81, nextBarTime + 3 * beat, beat * 3, 0.028);
         }

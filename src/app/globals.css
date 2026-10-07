@@ -1391,7 +1391,9 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
   animation: login-splash-drift 23s ease-in-out infinite alternate-reverse;
 }
 .login-scene-moon { position: absolute; right: 7%; top: 10%; width: clamp(45px, 8vw, 100px); aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #ffdbac33, #f5a96318 60%, transparent 72%); box-shadow: 0 0 50px #e8a66515; animation: login-moon-drift 18s ease-in-out infinite; }
-.login-scene-ember { position: absolute; bottom: -15px; width: 3px; height: 3px; border-radius: 50%; background: #ffbc77; box-shadow: 0 0 8px #fb923c77; animation: login-ember-rise 24s linear infinite; opacity: 0; }
+.login-scene-ember { position: absolute; bottom: -15px; width: 3px; height: 3px; border-radius: 50%; background: #ffbc77; box-shadow: 0 0 8px #fb923c77; animation: login-ember-rise var(--ember-duration, 15s) linear infinite; opacity: 0; }
+.login-scene-ember-drop { visibility: hidden; }
+.login-shell[data-music-phase="drop"] .login-scene-ember-drop { visibility: visible; }
 .login-scene-ember:nth-of-type(3n) { background: #c9a0ff; box-shadow: 0 0 8px #b57cff77; }
 .login-shell[data-music-phase="build"] .login-scene-halo { opacity: calc(.2 + var(--music-energy, 0) * .5); }
 .login-shell[data-music-phase="drop"] .login-scene-halo { animation: login-music-pulse var(--music-beat, .703125s) ease-out infinite; animation-delay: var(--music-offset, 0s); }
@@ -1403,7 +1405,7 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 @keyframes login-ember-rise { 0% { transform: translate3d(0, 0, 0); opacity: 0; } 15% { opacity: .45; } 75% { opacity: .3; } 100% { transform: translate3d(var(--ember-drift), -90vh, 0); opacity: 0; } }
 @keyframes login-music-pulse { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(1.06); opacity: .22; } }
 @keyframes login-splash-drift { from { transform: translate3d(-2%, 1%, 0) rotate(-5deg) scale(.98); } to { transform: translate3d(3%, -2%, 0) rotate(6deg) scale(1.04); } }
-@media (max-width: 640px) { .login-scene-ember:nth-of-type(n+10) { display: none; } .login-scene-moon { right: 3%; top: 4%; } }
+@media (max-width: 640px) { .login-scene-ember:nth-of-type(3n) { display: none; } .login-scene-moon { right: 3%; top: 4%; } }
 @media (prefers-reduced-motion: reduce) { .login-scene *, .login-shell[data-music-phase="drop"] .login-scene-halo { animation: none !important; transition: none !important; } .login-scene-ember { display: none; } }
 .login-heading, .login-modes, .login-links {
   opacity: 1;
@@ -1420,7 +1422,7 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
   0%, 100% { transform: translate3d(0, 0, 0); }
   50% { transform: translate3d(0, -4px, 0); }
 }
-.login-shell[data-music-phase="drop"] .login-scene-ember { animation-duration: calc(var(--music-beat, .703125s) * 16) !important; }
+.login-shell[data-music-phase="drop"] .login-scene-ember { animation-duration: calc(var(--music-beat, .703125s) * 8) !important; }
 .login-shell[data-music-playing="false"] :is(.login-card, .login-heading, .login-modes, .login-links),
 .login-shell[data-music-playing="false"] .login-card::before { animation-play-state: paused; }
 @media (prefers-reduced-motion: reduce) { .login-heading, .login-modes, .login-links { animation: none !important; } }
