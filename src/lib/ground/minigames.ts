@@ -86,13 +86,12 @@ export const MINIGAMES: Record<MinigameType, MinigameConfig> = {
 
 /**
  * Calcule le score du mini-jeu bagages.
- * Score = (clics réussis / total apparitions) × (temps restant / durée totale)
+ * Fixed-duration game: precision determines the score; no unreachable speed bonus.
  */
 export function calculerScoreBagages(clicsReussis: number, totalApparitions: number, tempsRestant: number, dureeTotale: number): number {
   if (totalApparitions <= 0) return 0;
   const precisionScore = clicsReussis / totalApparitions;
-  const vitesseScore = Math.max(0, tempsRestant) / dureeTotale;
-  return Math.max(0, Math.min(1, (precisionScore * 0.7 + vitesseScore * 0.3)));
+  return Math.max(0, Math.min(1, precisionScore));
 }
 
 /**

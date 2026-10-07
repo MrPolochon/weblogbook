@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import {
   X, Package, Utensils, Fuel, Users, Loader2,
@@ -74,6 +74,8 @@ export default function ModalAvion({
 }: Props) {
   const [activeGameReqId, setActiveGameReqId] = useState<string | null>(null);
   const [loadingReqId, setLoadingReqId] = useState<string | null>(null);
+  const [error, setError] = useState('');
+  const completionLock = useRef(false);
 
   const activeGameReq = activeGameReqId
     ? requests.find(r => r.id === activeGameReqId) ?? null
@@ -95,12 +97,12 @@ export default function ModalAvion({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    const data = await res.json() as { request?: ServiceRequest };
+    const data = await res.json() as { request?: ServiceRequest; error?: string };
     if (res.ok && data.request) {
       onUpdateRequest(data.request);
       return data.request;
     }
-    return null;
+    throw new Error(data.error || 'Impossible d’enregistrer le service. Réessayez.');
   }, [onUpdateRequest]);
 
   async function handleAccepter(req: ServiceRequest) {
@@ -113,20 +115,27 @@ export default function ModalAvion({
       if (updated && MINIGAME_TYPES.includes(req.service_type)) {
         setActiveGameReqId(req.id);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur réseau');
     } finally {
       setLoadingReqId(null);
     }
   }
 
   async function handleMinigameFinish(score: number) {
-    if (!activeGameReq) return;
+    if (!activeGameReq || completionLock.current) return;
+    completionLock.current = true;
+    setError('');
     const req = activeGameReq;
-    setActiveGameReqId(null);
     setLoadingReqId(req.id);
     try {
       await patchRequest(req.id, { statut: 'completed', score_minijeu: score });
+      setActiveGameReqId(null);
       onServiceComplete(score, req.service_type, req.pax_count);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur réseau : votre résultat reste disponible.');
     } finally {
+      completionLock.current = false;
       setLoadingReqId(null);
     }
   }
@@ -135,6 +144,8 @@ export default function ModalAvion({
     setLoadingReqId(req.id);
     try {
       await patchRequest(req.id, { statut: 'accepted', accepted_by: userId });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur réseau');
     } finally {
       setLoadingReqId(null);
     }
@@ -145,6 +156,8 @@ export default function ModalAvion({
     try {
       await patchRequest(req.id, { statut: 'completed' });
       onServiceComplete(1.0, req.service_type, null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur réseau');
     } finally {
       setLoadingReqId(null);
     }
@@ -182,6 +195,8 @@ export default function ModalAvion({
           <button
             type="button"
             onClick={onClose}
+            disabled={loadingReqId !== null}
+            aria-label="Fermer les services au sol"
             className="p-2 rounded-xl border border-slate-700/50 text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition-colors shrink-0"
           >
             <X className="h-4 w-4" />
@@ -190,31 +205,38 @@ export default function ModalAvion({
 
         {/* Corps scrollable */}
         <div className="flex-1 overflow-y-auto p-5 space-y-5">
+          {error && <p role="alert" className="rounded-lg border border-red-500/40 p-3 text-red-300 text-sm">{error}</p>}
 
           {/* Mini-jeu inline */}
           {activeGameReq && (
-            <div className="rounded-xl border border-slate-600/50 bg-slate-800/40 p-5">
+            <div className="gameplay-surface rounded-xl border border-slate-600/50 bg-slate-800/40 p-5" aria-busy={loadingReqId === activeGameReq.id}>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-bold text-slate-100 text-sm">
                   {SERVICE_LABELS[activeGameReq.service_type]}
                 </h3>
                 <button
                   type="button"
+                  disabled={loadingReqId === activeGameReq.id}
                   onClick={async () => {
-                    await patchRequest(activeGameReq.id, { statut: 'pending' });
-                    setActiveGameReqId(null);
+                    try {
+                      await patchRequest(activeGameReq.id, { statut: 'pending' });
+                      setActiveGameReqId(null);
+                    } catch (err) { setError(err instanceof Error ? err.message : 'Erreur réseau'); }
                   }}
                   className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1"
                 >
                   <X className="h-3 w-3" /> Annuler
                 </button>
               </div>
-              {activeGameReq.service_type === 'bagages'  && <MinijeuBagages  onFinish={handleMinigameFinish} />}
-              {activeGameReq.service_type === 'catering' && <MinijeuCatering onFinish={handleMinigameFinish} />}
-              {activeGameReq.service_type === 'fuel'     && <MinijeuFuel     onFinish={handleMinigameFinish} />}
+              <fieldset disabled={loadingReqId === activeGameReq.id}>
+              {loadingReqId === activeGameReq.id && <p role="status" className="mb-3 flex items-center gap-2 text-sm text-sky-300"><Loader2 className="h-4 w-4 animate-spin" /> Enregistrement du service…</p>}
+              {activeGameReq.service_type === 'bagages'  && <MinijeuBagages key={activeGameReq.id} onFinish={handleMinigameFinish} />}
+              {activeGameReq.service_type === 'catering' && <MinijeuCatering key={activeGameReq.id} onFinish={handleMinigameFinish} />}
+              {activeGameReq.service_type === 'fuel'     && <MinijeuFuel key={activeGameReq.id}     onFinish={handleMinigameFinish} />}
               {activeGameReq.service_type === 'boarding' && (
-                <MinijeuBoarding paxCount={activeGameReq.pax_count ?? 50} onFinish={handleMinigameFinish} />
+                <MinijeuBoarding key={activeGameReq.id} paxCount={activeGameReq.pax_count ?? 50} onFinish={handleMinigameFinish} />
               )}
+              </fieldset>
             </div>
           )}
 

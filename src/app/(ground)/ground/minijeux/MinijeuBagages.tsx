@@ -7,12 +7,13 @@ interface Colis {
   id: number;
   x: number;
   y: number;
-  yOffset: number;  // pour animation chute (0 → 1)
   visible: boolean;
   emoji: string;
   fragile: boolean;
   spawnedAt: number;
 }
+
+import { useGameDeadline } from '@/lib/use-game-deadline';
 
 interface Props {
   onFinish: (score: number) => void;
@@ -32,22 +33,11 @@ export default function MinijeuBagages({ onFinish }: Props) {
   const [penalties, setPenalties] = useState(0);
   const [score, setScore] = useState<number | null>(null);
   const [flashMsg, setFlashMsg] = useState<{ txt: string; ok: boolean } | null>(null);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const colisTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const animFrameRef = useRef<number | null>(null);
+  const pendingTimers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+  const claimed = useRef(new Set<number>());
+  function later(action: () => void, delay: number) { const id = setTimeout(() => { pendingTimers.current.delete(id); action(); }, delay); pendingTimers.current.add(id); }
   const nextIdRef = useRef(0);
-
-  // Animer la chute des colis (yOffset 0→1 en 600ms)
-  const animate = useCallback(() => {
-    const now = Date.now();
-    setColis(prev =>
-      prev.map(c => {
-        const elapsed = (now - c.spawnedAt) / 600;
-        return c.visible ? { ...c, yOffset: Math.min(1, elapsed) } : c;
-      })
-    );
-    animFrameRef.current = requestAnimationFrame(animate);
-  }, []);
 
   const spawnColis = useCallback(() => {
     const id = nextIdRef.current++;
@@ -57,7 +47,6 @@ export default function MinijeuBagages({ onFinish }: Props) {
       id,
       x: 5 + Math.random() * 85,
       y: 10 + Math.random() * 75,
-      yOffset: 0,
       visible: true,
       emoji: pool[Math.floor(Math.random() * pool.length)],
       fragile,
@@ -65,7 +54,7 @@ export default function MinijeuBagages({ onFinish }: Props) {
     };
     setColis(prev => [...prev.filter(c => c.visible).slice(-8), newColis]);
     setTotalApparus(n => n + 1);
-    setTimeout(() => {
+    later(() => {
       setColis(prev => prev.map(c => c.id === id ? { ...c, visible: false } : c));
     }, 2200);
   }, []);
@@ -77,48 +66,49 @@ export default function MinijeuBagages({ onFinish }: Props) {
     setTotalApparus(0);
     setPenalties(0);
     setColis([]);
-    nextIdRef.current = 0;
+    for (const id of pendingTimers.current) clearTimeout(id);
+    pendingTimers.current.clear();
+    claimed.current.clear();
+    setFlashMsg(null);
 
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) { clearInterval(timerRef.current!); clearInterval(colisTimerRef.current!); return 0; }
-        return t - 1;
-      });
-    }, 1000);
 
     colisTimerRef.current = setInterval(spawnColis, 750);
-    animFrameRef.current = requestAnimationFrame(animate);
-  }, [spawnColis, animate]);
+    spawnColis();
+  }, [spawnColis]);
 
-  useEffect(() => {
-    if (phase === 'playing' && timeLeft === 0) {
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+  useGameDeadline(phase === 'playing', DUREE, setTimeLeft, () => {
+    if (phase === 'playing') {
+      for (const id of pendingTimers.current) clearTimeout(id);
+      pendingTimers.current.clear();
+      if (colisTimerRef.current) clearInterval(colisTimerRef.current);
       setPhase('finished');
       const rawScore = calculerScoreBagages(clicsReussis, Math.max(1, totalApparus), 0, DUREE);
       const penaltyDeduction = penalties * 0.2;
       setScore(Math.max(0, rawScore - penaltyDeduction));
     }
-  }, [timeLeft, phase, clicsReussis, totalApparus, penalties]);
+  });
 
   useEffect(() => {
+    const timers = pendingTimers.current;
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
       if (colisTimerRef.current) clearInterval(colisTimerRef.current);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      for (const id of timers) clearTimeout(id);
+      timers.clear();
     };
   }, []);
 
   function showFlash(txt: string, ok: boolean) {
     setFlashMsg({ txt, ok });
-    setTimeout(() => setFlashMsg(null), 700);
+    later(() => setFlashMsg(null), 700);
   }
 
   function handleClick(c: Colis) {
-    if (!c.visible) return;
+    if (phase !== 'playing' || !c.visible || claimed.current.has(c.id)) return;
+    claimed.current.add(c.id);
     setColis(prev => prev.map(p => p.id === c.id ? { ...p, visible: false } : p));
 
     // Vérifier si des colis normaux sont encore visibles
-    const normalVisibles = colis.filter(co => co.visible && !co.fragile && co.id !== c.id);
+    const normalVisibles = colis.filter(co => co.visible && !co.fragile && !claimed.current.has(co.id));
 
     if (c.fragile && normalVisibles.length > 0) {
       setPenalties(n => n + 1);
@@ -134,7 +124,7 @@ export default function MinijeuBagages({ onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">🧳</div>
         <h2 className="text-xl font-bold text-slate-100">Chargement Bagages</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -151,7 +141,7 @@ export default function MinijeuBagages({ onFinish }: Props) {
   if (phase === 'finished' && score !== null) {
     const pct = Math.round(score * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 75 ? '🏆' : pct >= 50 ? '👍' : '😅'}</div>
         <h2 className="text-xl font-bold text-slate-100">Terminé !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-amber-900/20 border border-amber-800/40">
@@ -168,7 +158,7 @@ export default function MinijeuBagages({ onFinish }: Props) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="gameplay-surface space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="text-sm font-semibold text-slate-300">{clicsReussis} colis</span>
@@ -194,18 +184,17 @@ export default function MinijeuBagages({ onFinish }: Props) {
         </div>
 
         {colis.filter(c => c.visible).map(c => {
-          const fallY = c.yOffset * 12; // 0 → 12px de chute
+
           return (
             <button
               key={c.id}
               type="button"
               onClick={() => handleClick(c)}
-              className={`absolute transition-none cursor-pointer select-none ${c.fragile ? 'text-2xl' : 'text-3xl'}`}
+              aria-label={c.fragile ? "Colis fragile" : "Charger le bagage"}
+              className={`game-parcel absolute min-h-11 min-w-11 transition-none cursor-pointer select-none ${c.fragile ? 'text-2xl' : 'text-3xl'}`}
               style={{
                 left: `${c.x}%`,
-                top: `calc(${c.y}% + ${fallY}px)`,
-                transform: `translate(-50%, -50%) scale(${0.6 + c.yOffset * 0.4})`,
-                opacity: c.yOffset < 0.3 ? c.yOffset / 0.3 : 1,
+                top: `${c.y}%`,
               }}
             >
               {c.fragile && <span className="absolute -top-1 -right-1 text-[10px] font-bold text-red-400 bg-slate-900/80 rounded-full px-0.5">!</span>}

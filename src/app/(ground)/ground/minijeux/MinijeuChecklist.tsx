@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 
+import { useGameDeadline } from '@/lib/use-game-deadline';
+import { shuffle } from '@/lib/gameplay';
+
 interface Props {
   onFinish: (score: number) => void;
 }
@@ -30,7 +33,7 @@ const MEMO_DURATION = 5; // secondes pour mémoriser
 const N_ITEMS = 10;
 
 function generateChecklist(): CheckItem[] {
-  const shuffled = [...ALL_ITEMS].sort(() => Math.random() - 0.5).slice(0, N_ITEMS);
+  const shuffled = shuffle(ALL_ITEMS).slice(0, N_ITEMS);
   return shuffled.map((item, i) => ({ ...item, reglOrder: i + 1 }));
 }
 
@@ -46,13 +49,14 @@ export default function MinijeuChecklist({ onFinish }: Props) {
 
   const startGame = useCallback(() => {
     const checklist = generateChecklist();
-    const shuffled = [...checklist].sort(() => Math.random() - 0.5);
+    const shuffled = shuffle(checklist);
     setItems(checklist);
     setDisplayOrder(shuffled);
     setCountdown(MEMO_DURATION);
     setChecked([]);
     setWrongClicks(new Set());
     setNextExpected(1);
+    setTimeLeft(60);
     setPhase('memorize');
     setScore(null);
   }, []);
@@ -64,6 +68,12 @@ export default function MinijeuChecklist({ onFinish }: Props) {
     const id = setTimeout(() => setCountdown(c => c - 1), 1000);
     return () => clearTimeout(id);
   }, [phase, countdown]);
+
+  const [timeLeft, setTimeLeft] = useState(60);
+  useGameDeadline(phase === 'play', 60, setTimeLeft, () => {
+    const correct = checked.filter((id, position) => items.find(item => item.id === id)?.reglOrder === position + 1).length;
+    setScore(correct / items.length); setPhase('finished');
+  });
 
   function handleCheck(item: CheckItem) {
     if (phase !== 'play' || checked.includes(item.id)) return;
@@ -106,7 +116,7 @@ export default function MinijeuChecklist({ onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">📋</div>
         <h2 className="text-xl font-bold text-slate-100">Checklist Pré-vol</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -122,12 +132,12 @@ export default function MinijeuChecklist({ onFinish }: Props) {
 
   if (phase === 'memorize') {
     return (
-      <div className="space-y-4">
+      <div className="gameplay-surface space-y-4">
         <div className="flex items-center justify-between">
           <span className="text-slate-400 text-sm font-semibold">Mémorisez l&apos;ordre réglementaire</span>
           <span className="text-2xl font-black text-violet-400">{countdown}s</span>
         </div>
-        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+        <div className="gameplay-surface space-y-1.5 max-h-80 overflow-y-auto">
           {items.map((item, i) => (
             <div key={item.id} className="flex items-center gap-3 rounded-lg bg-slate-800/40 border border-slate-700/30 px-3 py-2">
               <span className="shrink-0 w-6 h-6 rounded-full bg-violet-500/20 border border-violet-500/40 text-violet-300 text-xs font-bold flex items-center justify-center">
@@ -143,15 +153,15 @@ export default function MinijeuChecklist({ onFinish }: Props) {
 
   if (phase === 'play') {
     return (
-      <div className="space-y-3">
+      <div className="gameplay-surface space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-slate-400 text-sm">Item {Math.min(checked.length + 1, items.length)}/{items.length}</span>
-          <span className="text-xs text-slate-500">Cochez dans le bon ordre réglementaire</span>
+          <span className="text-xs text-slate-400 tabular-nums">{timeLeft}s · Respectez l’ordre</span>
         </div>
         <div className="h-1.5 rounded-full bg-slate-700 overflow-hidden">
           <div className="h-full bg-violet-500 transition-all" style={{ width: `${(checked.length / items.length) * 100}%` }} />
         </div>
-        <div className="space-y-1.5 max-h-80 overflow-y-auto">
+        <div className="gameplay-surface space-y-1.5 max-h-80 overflow-y-auto">
           {displayOrder.map(item => {
             const isChecked = checked.includes(item.id);
             const isWrong = wrongClicks.has(item.id);
@@ -201,7 +211,7 @@ export default function MinijeuChecklist({ onFinish }: Props) {
       return it.reglOrder === pos + 1;
     }).length;
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 80 ? '✅' : pct >= 50 ? '📋' : '❌'}</div>
         <h2 className="text-xl font-bold text-slate-100">Checklist terminée !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-violet-900/20 border border-violet-800/40">

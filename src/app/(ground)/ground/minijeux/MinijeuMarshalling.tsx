@@ -113,7 +113,7 @@ export default function MinijeuMarshalling({ onFinish }: Props) {
     handledRef.current = true;
 
     const delta = PLANE_POS_MAP[currentStep.dir] ?? { x: 0, y: 0 };
-    setPlanePos(prev => ({ x: prev.x + delta.x, y: prev.y + delta.y }));
+    if (isCorrect) setPlanePos(prev => ({ x: prev.x + delta.x, y: prev.y + delta.y }));
 
     const newCorrect = isCorrect ? correct + 1 : correct;
     if (isCorrect) {
@@ -132,6 +132,7 @@ export default function MinijeuMarshalling({ onFinish }: Props) {
     function onKey(e: KeyboardEvent) {
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
         e.preventDefault();
+      if (e.repeat) return;
         handleInput(e.code);
       }
     }
@@ -145,7 +146,7 @@ export default function MinijeuMarshalling({ onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">🦺</div>
         <h2 className="text-xl font-bold text-slate-100">Marshalling</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -166,7 +167,7 @@ export default function MinijeuMarshalling({ onFinish }: Props) {
   if (phase === 'finished' && score !== null) {
     const pct = Math.round(score * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 85 ? '🅿️' : pct >= 60 ? '🦺' : '✈️💥'}</div>
         <h2 className="text-xl font-bold text-slate-100">Parking atteint !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-orange-900/20 border border-orange-800/40">
@@ -183,7 +184,7 @@ export default function MinijeuMarshalling({ onFinish }: Props) {
 
   // Phase playing
   return (
-    <div className="space-y-4">
+    <div className="gameplay-surface space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-slate-300">

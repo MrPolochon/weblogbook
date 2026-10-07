@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { calculerScoreFuel } from '@/lib/ground/minigames';
 
+import { useGameDeadline } from '@/lib/use-game-deadline';
+
 interface Props {
   onFinish: (score: number) => void;
 }
@@ -19,6 +21,8 @@ interface Attempt {
 export default function MinijeuFuel({ onFinish }: Props) {
   const [phase, setPhase] = useState<'idle' | 'playing' | 'result' | 'finished'>('idle');
   const [value, setValue] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(20);
+  useGameDeadline(phase === "playing", 20, setTimeLeft, () => stop());
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [currentAttempt, setCurrentAttempt] = useState(0);
   const [lastStopped, setLastStopped] = useState<number | null>(null);
@@ -26,6 +30,7 @@ export default function MinijeuFuel({ onFinish }: Props) {
   const rafRef = useRef<number | null>(null);
   const startRef = useRef<number>(0);
   const playingRef = useRef(false);
+  const valueRef = useRef(0);
 
   // Jauge oscillante : deux sinus à fréquences distinctes + phase aléatoire
   const phaseRef = useRef(Math.random() * Math.PI * 2);
@@ -34,12 +39,15 @@ export default function MinijeuFuel({ onFinish }: Props) {
     if (!playingRef.current) return;
     const t = (ts - startRef.current) / 1000; // secondes
     const v = 50 + 30 * Math.sin(t * 1.4 + phaseRef.current) + 14 * Math.sin(t * 3.1 + phaseRef.current * 1.7);
-    setValue(Math.max(0, Math.min(100, v)));
+    valueRef.current = Math.max(0, Math.min(100, v));
+    setValue(valueRef.current);
     rafRef.current = requestAnimationFrame(animate);
   }, []);
 
   function startAttempt() {
     setValue(0);
+    valueRef.current = 0;
+    setTimeLeft(20);
     setLastStopped(null);
     setLastScore(null);
     phaseRef.current = Math.random() * Math.PI * 2; // aléatoire chaque tentative
@@ -56,10 +64,10 @@ export default function MinijeuFuel({ onFinish }: Props) {
   }
 
   function stop() {
-    if (phase !== 'playing') return;
+    if (!playingRef.current) return;
     playingRef.current = false;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    const v = value;
+    const v = valueRef.current;
     const s = calculerScoreFuel(v, CIBLE_PCT - TOLERANCE_PCT, CIBLE_PCT + TOLERANCE_PCT);
     setLastStopped(v);
     setLastScore(s);
@@ -80,7 +88,7 @@ export default function MinijeuFuel({ onFinish }: Props) {
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.code === 'Space') { e.preventDefault(); stop(); }
+      if (e.code === 'Space' && !e.repeat) { e.preventDefault(); stop(); }
     }
     if (phase === 'playing') {
       window.addEventListener('keydown', onKey);
@@ -100,7 +108,7 @@ export default function MinijeuFuel({ onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">⛽</div>
         <h2 className="text-xl font-bold text-slate-100">Ravitaillement Carburant</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -120,7 +128,7 @@ export default function MinijeuFuel({ onFinish }: Props) {
     const pct = Math.round(lastScore * 100);
     const remaining = MAX_ATTEMPTS - attempts.length;
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-4xl">{inZoneFinal ? '🎯' : '😬'}</div>
         <div className={`inline-flex flex-col items-center gap-1 px-6 py-3 rounded-2xl ${inZoneFinal ? 'bg-sky-900/30 border border-sky-700/40' : 'bg-red-900/20 border border-red-700/30'}`}>
           <span className={`text-3xl font-black ${inZoneFinal ? 'text-sky-400' : 'text-red-400'}`}>{pct}%</span>
@@ -161,7 +169,7 @@ export default function MinijeuFuel({ onFinish }: Props) {
   if (phase === 'finished' && bestScore !== null) {
     const pct = Math.round(bestScore * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 90 ? '🏆' : pct >= 60 ? '🎯' : '😓'}</div>
         <h2 className="text-xl font-bold text-slate-100">Ravitaillement terminé !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-sky-900/20 border border-sky-800/40">
@@ -178,10 +186,10 @@ export default function MinijeuFuel({ onFinish }: Props) {
 
   // Phase playing
   return (
-    <div className="space-y-5">
+    <div className="gameplay-surface space-y-5">
       <div className="flex items-center justify-between">
         <span className="text-sm text-slate-400">
-          Tentative <span className="text-slate-200 font-bold">{currentAttempt + 1}</span> / {MAX_ATTEMPTS}
+          Tentative <span className="text-slate-200 font-bold">{currentAttempt + 1}</span> / {MAX_ATTEMPTS} · {timeLeft}s
         </span>
         <span className="text-xs text-slate-500">
           Appuyez sur <kbd className="px-1 py-0.5 rounded bg-slate-700 text-slate-300 text-[10px] font-mono">Espace</kbd> ou cliquez
@@ -191,6 +199,10 @@ export default function MinijeuFuel({ onFinish }: Props) {
       <div
         className="relative flex flex-col-reverse rounded-2xl border border-slate-700/50 bg-slate-900 overflow-hidden cursor-pointer select-none mx-auto"
         style={{ width: 80, height: 300 }}
+        role="button"
+        tabIndex={0}
+        aria-label="Arrêter le ravitaillement"
+        onKeyDown={e => { if (e.key === "Enter") stop(); }}
         onClick={stop}
       >
         {/* Zone verte */}

@@ -122,7 +122,7 @@ export default function MinijeuRepoussage({ onFinish }: Props) {
     handledRef.current = true;
 
     const delta = PUSHBACK_MOVE[currentStep.dir] ?? { x: 0, y: 0 };
-    setPlanePos(prev => ({ x: prev.x + delta.x, y: prev.y + delta.y }));
+    if (isCorrect) setPlanePos(prev => ({ x: prev.x + delta.x, y: prev.y + delta.y }));
 
     const newCorrect = isCorrect ? correct + 1 : correct;
     if (isCorrect) setCorrect(newCorrect);
@@ -141,6 +141,7 @@ export default function MinijeuRepoussage({ onFinish }: Props) {
       const code = e.code;
       if (!['ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(code)) return;
       e.preventDefault();
+      if (e.repeat) return;
       const currentStep = sequence[currentIdx];
       if (!currentStep) return;
       // Résoudre la direction exacte attendue si plusieurs options pour cette touche
@@ -160,7 +161,7 @@ export default function MinijeuRepoussage({ onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">🚛</div>
         <h2 className="text-xl font-bold text-slate-100">Repoussage</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -190,7 +191,7 @@ export default function MinijeuRepoussage({ onFinish }: Props) {
   if (phase === 'finished' && score !== null) {
     const pct = Math.round(score * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 80 ? '✈️' : pct >= 60 ? '👍' : '😓'}</div>
         <h2 className="text-xl font-bold text-slate-100">Repoussage terminé !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-orange-900/20 border border-orange-800/40">
@@ -218,7 +219,7 @@ export default function MinijeuRepoussage({ onFinish }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="gameplay-surface space-y-4">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-slate-300">
           Manœuvre {currentIdx + 1} / {sequence.length}

@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from 'next';
 import { Suspense } from 'react';
 import { Inter } from 'next/font/google';
 import NavigationProgress from '@/components/NavigationProgress';
+import MotionLifecycle from '@/components/MotionLifecycle';
 import { Toaster } from 'sonner';
 import './globals.css';
 
@@ -33,6 +34,7 @@ export default function RootLayout({
   return (
     <html lang="fr" className={inter.variable} data-theme="halloween">
       <body className="antialiased font-sans">
+        <MotionLifecycle />
         <Suspense fallback={null}>
           <NavigationProgress />
         </Suspense>

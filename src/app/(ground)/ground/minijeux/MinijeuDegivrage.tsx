@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 
+import { wingCellVisible } from '@/lib/gameplay';
+
+import { useGameDeadline } from '@/lib/use-game-deadline';
+
 interface Props {
   onFinish: (score: number) => void;
 }
@@ -14,7 +18,7 @@ const DUREE = 45;
 const PROBA_GLACE = 0.68;
 
 function genererGlace(): boolean[] {
-  return Array.from({ length: TOTAL }, () => Math.random() < PROBA_GLACE);
+  return Array.from({ length: TOTAL }, (_, index) => wingCellVisible(index) && Math.random() < PROBA_GLACE);
 }
 
 export default function MinijeuDegivrage({ onFinish }: Props) {
@@ -24,7 +28,6 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
   const [cleared, setCleared] = useState<boolean[]>(Array(TOTAL).fill(false));
   const [score, setScore] = useState<number | null>(null);
   const isDragging = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const totalIced = iced.filter(Boolean).length;
   const totalCleared = cleared.filter((c, i) => c && iced[i]).length;
@@ -38,23 +41,12 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
     setScore(null);
     setPhase('playing');
 
-    timerRef.current = setInterval(() => {
-      setTimeLeft(t => {
-        if (t <= 1) { clearInterval(timerRef.current!); return 0; }
-        return t - 1;
-      });
-    }, 1000);
   }
 
-  useEffect(() => {
-    if (phase === 'playing' && timeLeft === 0) {
-      endGame();
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, phase]);
+  useGameDeadline(phase === 'playing', DUREE, setTimeLeft, () => endGame());
 
   const endGame = useCallback(() => {
-    if (timerRef.current) clearInterval(timerRef.current);
+    isDragging.current = false;
     const icedAtEnd = iced;
     const clearedAtEnd = cleared;
     const totalIcedEnd = icedAtEnd.filter(Boolean).length;
@@ -71,9 +63,6 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
     if (allDone && totalIced > 0) endGame();
   }, [cleared, iced, phase, totalIced, endGame]);
 
-  useEffect(() => {
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, []);
 
   function clearCell(idx: number) {
     if (!iced[idx] || cleared[idx] || phase !== 'playing') return;
@@ -102,7 +91,7 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">❄️</div>
         <h2 className="text-xl font-bold text-slate-100">Dégivrage Aile</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -119,7 +108,7 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
   if (phase === 'finished' && score !== null) {
     const pct = Math.round(score * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 85 ? '✈️' : pct >= 60 ? '👍' : '😬'}</div>
         <h2 className="text-xl font-bold text-slate-100">Dégivrage terminé !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-sky-900/20 border border-sky-800/40">
@@ -135,7 +124,7 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
   }
 
   return (
-    <div className="space-y-3" onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
+    <div className="gameplay-surface space-y-3" onMouseUp={handleMouseUp} onMouseLeave={handleMouseUp}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -156,6 +145,7 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
       <div
         className="rounded-xl overflow-hidden border border-slate-700/40 select-none bg-slate-800/40 p-2"
         onTouchMove={handleTouchMove}
+        onTouchStart={handleTouchMove}
         style={{ touchAction: 'none' }}
       >
         {/* Forme d'aile stylisée */}
@@ -165,17 +155,18 @@ export default function MinijeuDegivrage({ onFinish }: Props) {
           style={{ gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
         >
           {Array.from({ length: TOTAL }).map((_, i) => {
-            const col = i % COLS;
-            const row = Math.floor(i / COLS);
             const isIced = iced[i];
             const isCleared = cleared[i];
             // Forme d'aile : profil effilé (lignes du haut plus longues)
-            const maxCol = Math.round(COLS - row * (COLS / ROWS) * 0.3);
-            const visible = col < maxCol;
+
+            const visible = wingCellVisible(i);
             if (!visible) return <div key={i} className="aspect-square" />;
 
             return (
-              <div
+              <button
+                type="button"
+                aria-label={`Cellule ${i + 1} : ${isIced && !isCleared ? 'glace' : 'dégivrée'}`}
+                onClick={() => clearCell(i)}
                 key={i}
                 data-idx={i}
                 onMouseDown={() => handleMouseDown(i)}

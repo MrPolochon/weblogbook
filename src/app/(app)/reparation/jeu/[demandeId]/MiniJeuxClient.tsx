@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback, useMemo, useLayoutEffect } from 'react';
+import { useGameDeadline } from '@/lib/use-game-deadline';
+import { shuffle } from '@/lib/gameplay';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, Eye, Sliders, Puzzle, Gauge, Check, ArrowRight,
@@ -91,8 +93,12 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
   const [loading, setLoading] = useState(true);
   const [demande, setDemande] = useState<DemandeInfo | null>(null);
   const [currentGame, setCurrentGame] = useState<string | null>(null);
+  const [gameReady, setGameReady] = useState(false);
   const [completedGames, setCompletedGames] = useState<Map<string, number>>(new Map());
   const [error, setError] = useState('');
+  const [pendingScore, setPendingScore] = useState<GameScore | null>(null);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const assignedGames = getGamesForDemande(demandeId);
 
@@ -113,6 +119,11 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
   }, [demandeId]);
 
   async function submitScore(gameScore: GameScore): Promise<boolean> {
+    if (savingRef.current) return false;
+    savingRef.current = true;
+    setSaving(true);
+    setPendingScore(gameScore);
+    setError('');
     try {
       const res = await fetch(`/api/reparation/demandes/${demandeId}/mini-jeu`, {
         method: 'POST',
@@ -123,6 +134,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
       if (!res.ok) throw new Error(data.error || 'Erreur');
       setCompletedGames(prev => new Map(prev).set(gameScore.type_jeu, data.score));
       setCurrentGame(null);
+      setPendingScore(null);
 
       if (data.all_completed) {
         setDemande(prev => prev ? { ...prev, scores: data.scores } : prev);
@@ -131,6 +143,9 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
       return false;
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
   }
 
@@ -152,20 +167,35 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
 
   const allCompleted = assignedGames.every(g => completedGames.has(g));
   const avgScore = allCompleted
-    ? Math.round(Array.from(completedGames.values()).reduce((a, b) => a + b, 0) / completedGames.size)
+    ? Math.round(assignedGames.reduce((sum, game) => sum + (completedGames.get(game) ?? 0), 0) / assignedGames.length)
     : null;
 
   if (currentGame) {
     const GameComponent = GAME_COMPONENTS[currentGame as GameType];
     return (
-      <div className="space-y-4 animate-fade-in">
-        <button onClick={() => setCurrentGame(null)} className="text-sm text-slate-400 hover:text-slate-200 transition-colors">← Retour aux jeux</button>
-        {GameComponent && <GameComponent onComplete={submitScore} />}
+      <div className="gameplay-surface space-y-4 animate-fade-in">
+        <button disabled={saving} onClick={() => { setCurrentGame(null); setPendingScore(null); setError(''); }} className="text-sm text-slate-400 hover:text-slate-200 transition-colors">← Retour aux jeux</button>
+        {pendingScore ? (
+          <div className="game-result space-y-4 text-center" role="status" aria-live="polite">
+            <Trophy className="h-10 w-10 mx-auto text-amber-300" />
+            <h2 className="text-xl font-bold">Épreuve terminée : {pendingScore.score}/100</h2>
+            <p className="text-slate-300">{saving ? 'Enregistrement du résultat…' : 'Le résultat est conservé ici. Réessayez son enregistrement.'}</p>
+            {error && <p role="alert" className="text-red-300">{error}</p>}
+            {!saving && <button className="btn-primary" onClick={() => void submitScore(pendingScore)}>Réessayer l’enregistrement</button>}
+          </div>
+        ) : !gameReady ? (
+          <div className="game-result space-y-4 text-center">
+            <h2 className="text-xl font-bold">{ALL_GAME_META[currentGame]?.label}</h2>
+            <p className="text-slate-300 max-w-lg mx-auto">{ALL_GAME_META[currentGame]?.shortHint}</p>
+            <p className="text-sm text-slate-400">Lisez les consignes avant de commencer. Le chronomètre ne démarre pas sur cet écran.</p>
+            <button className="btn-primary" onClick={() => setGameReady(true)}>Je suis prêt</button>
+          </div>
+        ) : GameComponent && <GameComponent onComplete={submitScore} />}
       </div>
     );
   }
 
-  const completedCount = completedGames.size;
+  const completedCount = assignedGames.filter(game => completedGames.has(game)).length;
   const totalCount = assignedGames.length;
   const overallPct = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
@@ -219,7 +249,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
           return (
             <button
               key={key}
-              onClick={() => !done && setCurrentGame(key)}
+              onClick={() => { if (!done) { setGameReady(false); setError(''); setCurrentGame(key); } }}
               disabled={done}
               className={`group relative p-6 rounded-xl border text-left transition-all duration-200 overflow-hidden ${
                 done
@@ -328,17 +358,7 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
     setDefects(d);
   }, []);
 
-  useEffect(() => {
-    if (!started || finished) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timer); finish(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [started, finished]);
+  useGameDeadline(started && !finished, TIME_LIMIT, setTimeLeft, () => { finish(); });
 
   function finish() {
     if (finishedRef.current) return;
@@ -522,17 +542,7 @@ function CalibrageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (submitted) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timer); doSubmit(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
+  useGameDeadline(!submitted, TIME_LIMIT, setTimeLeft, () => { doSubmit(); });
 
   function doSubmit() {
     if (finishedRef.current) return;
@@ -540,7 +550,7 @@ function CalibrageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
     setSubmitted(true);
     const prec = values.map((v, i) => {
       const range = GAUGE_DEFS[i].range[1] - GAUGE_DEFS[i].range[0];
-      const diff = Math.abs(v - targets[i]) / range;
+      const diff = Math.abs(v - (targets[i] + oscillation[i])) / range;
       return Math.max(0, Math.round(100 - diff * 250));
     });
     setPrecisions(prec);
@@ -575,7 +585,7 @@ function CalibrageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
         <p className="font-medium text-amber-200/90">Comment jouer</p>
         <ul className="list-disc list-inside space-y-1 leading-relaxed">
           <li>Chaque piste a une <strong className="text-slate-200">zone verte</strong> (tolérance) et une <strong className="text-slate-200">ligne verticale ambre</strong> : c’est la valeur cible, elle <strong className="text-slate-200">bouge</strong> toute seule.</li>
-          <li>Faites glisser le curseur (invisible, toute la hauteur de la piste) pour que le <strong className="text-slate-200">curseur bleu</strong> suive la cible ambre dans la zone verte.</li>
+          <li>Faites glisser le curseur sur toute la hauteur de la piste pour que le <strong className="text-slate-200">curseur bleu</strong> suive la cible ambre dans la zone verte.</li>
           <li>À la fin du temps ou en cliquant <strong className="text-slate-200">Valider le calibrage</strong>, votre score dépend de la précision sur les 5 instruments.</li>
         </ul>
       </div>
@@ -609,7 +619,8 @@ function CalibrageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
                 )}
                 <input type="range" min={g.range[0]} max={g.range[1]} step={(range / 200)} value={values[i]} disabled={submitted}
                   onChange={e => setValues(prev => { const n = [...prev]; n[i] = Number(e.target.value); return n; })}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                  aria-label={g.name}
+                    className="game-range absolute inset-0 w-full h-full cursor-pointer" />
                 <div className={`absolute top-1.5 h-7 w-3 rounded-sm transition-all pointer-events-none shadow-lg ${
                   submitted ? (prec !== undefined && prec >= 80 ? 'bg-emerald-400' : prec !== undefined && prec >= 50 ? 'bg-amber-400' : 'bg-red-400') : 'bg-sky-400'
                 }`} style={{ left: `calc(${Math.max(1, Math.min(99, valPos))}% - 6px)` }} />
@@ -675,17 +686,7 @@ function AssemblageGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (submitted) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timer); doSubmit(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
+  useGameDeadline(!submitted, TIME_LIMIT, setTimeLeft, () => { doSubmit(); });
 
   function doSubmit() {
     if (finishedRef.current) return;
@@ -875,7 +876,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
   const [lineLayoutTick, setLineLayoutTick] = useState(0);
 
   useEffect(() => {
-    const order = WIRE_DEFS.map((_, i) => i).sort(() => Math.random() - 0.5);
+    const order = shuffle(WIRE_DEFS.map((_, i) => i));
     setShuffledTerminals(order);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -892,17 +893,7 @@ function CablageGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
     setLineLayoutTick(t => t + 1);
   }, [connections, shuffledTerminals]);
 
-  useEffect(() => {
-    if (submitted) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timer); doSubmit(); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [submitted]);
+  useGameDeadline(!submitted, TIME_LIMIT, setTimeLeft, () => { doSubmit(); });
 
   function doSubmit() {
     if (finishedRef.current) return;
@@ -1103,6 +1094,7 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
   const pressureRef = useRef(TARGET_PRESSURE);
   const inGreenFrames = useRef(0);
   const totalFrames = useRef(0);
+  const lastSample = useRef(0);
   const startTime = useRef(0);
   const pumpingRef = useRef(false);
   const animRef = useRef(0);
@@ -1116,13 +1108,11 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
 
   function sealLeak(leakId: number) {
     const now = Date.now();
-    let didSeal = false;
-    setLeaks(prev => prev.map(l => {
-      if (l.id !== leakId || l.sealedUntil >= now) return l;
-      didSeal = true;
-      return { ...l, sealedUntil: now + 8000 };
-    }));
-    if (didSeal) setLeaksSealed(prev => prev + 1);
+    if (!leaksRef.current.some(leak => leak.id === leakId && leak.sealedUntil < now)) return;
+    const updated = leaksRef.current.map(leak => leak.id === leakId ? { ...leak, sealedUntil: now + 8000 } : leak);
+    leaksRef.current = updated;
+    setLeaks(updated);
+    setLeaksSealed(prev => prev + 1);
   }
 
   const tick = useCallback(() => {
@@ -1145,13 +1135,15 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
     pressureRef.current = newP;
     setPressure(newP);
 
-    totalFrames.current++;
-    if (Math.abs(newP - TARGET_PRESSURE) <= GREEN_RANGE) inGreenFrames.current++;
+    const sampleSeconds = Math.min(0.1, Math.max(0, (Date.now() - (lastSample.current || Date.now())) / 1000));
+    lastSample.current = Date.now();
+    totalFrames.current += sampleSeconds;
+    if (Math.abs(newP - TARGET_PRESSURE) <= GREEN_RANGE) inGreenFrames.current += sampleSeconds;
     if (totalFrames.current > 0) {
       setLiveScore(Math.round((inGreenFrames.current / totalFrames.current) * 100));
     }
 
-    if (elapsed > 6 && Math.random() < 0.00055 * difficultyMult && leaksRef.current.filter(l => l.sealedUntil < now).length < 1) {
+    if (elapsed > 6 && Math.random() < 1 - Math.exp(-0.033 * difficultyMult * dt) && leaksRef.current.filter(l => l.sealedUntil < now).length < 1) {
       const newLeak: HydLeak = {
         id: nextLeakId.current++,
         position: 10 + Math.random() * 80,
@@ -1170,26 +1162,7 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
     return () => cancelAnimationFrame(animRef.current);
   }, [running, finished, tick]);
 
-  useEffect(() => {
-    if (!running || finished) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setFinished(true);
-          setRunning(false);
-          const score = totalFrames.current > 0
-            ? Math.max(35, Math.round((inGreenFrames.current / totalFrames.current) * 100)) : 50;
-          const duration = Math.round((Date.now() - startTime.current) / 1000);
-          onComplete({ type_jeu: 'hydraulique', score, duree_secondes: Math.max(duration, 12) });
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, finished]);
+  useGameDeadline(running && !finished, DURATION, setTimeLeft, () => { setFinished(true); setRunning(false); const score = totalFrames.current > 0 ? Math.round((inGreenFrames.current / totalFrames.current) * 100) : 0; onComplete({ type_jeu: 'hydraulique', score, duree_secondes: DURATION });; });
 
   function start() {
     pressureRef.current = TARGET_PRESSURE;
@@ -1302,6 +1275,9 @@ function HydrauliqueGame({ onComplete }: { onComplete: (s: GameScore) => void })
           {/* Pump button */}
           {!finished && (
             <button
+              onKeyDown={e => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); setPumping(true); } }}
+              onKeyUp={e => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); setPumping(false); } }}
+              onBlur={() => setPumping(false)}
               onMouseDown={() => setPumping(true)}
               onMouseUp={() => setPumping(false)}
               onMouseLeave={() => setPumping(false)}
@@ -1381,17 +1357,7 @@ function SoudureGame({ onComplete }: { onComplete: (s: GameScore) => void }) {
     return () => clearInterval(interval);
   }, [started, submitted, overheated]);
 
-  useEffect(() => {
-    if (!started || submitted) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) { clearInterval(timer); finishGame([...userClicks]); return 0; }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [started, submitted]);
+  useGameDeadline(started && !submitted, TIME_LIMIT, setTimeLeft, () => { finishGame(userClicks); });
 
   function handleClick(e: React.MouseEvent<SVGSVGElement>) {
     if (submitted || finishedRef.current || overheated) return;
@@ -1678,7 +1644,7 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<
   const TIME_PER_Q = 20;
 
   const [questions] = useState(() => {
-    const shuffled = [...DIAGNOSTIC_QUESTIONS].sort(() => Math.random() - 0.5);
+    const shuffled = shuffle(DIAGNOSTIC_QUESTIONS);
     return shuffled.slice(0, TOTAL_QUESTIONS);
   });
 
@@ -1946,6 +1912,7 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
   const totalFrames = useRef(0);
   const startTime = useRef(0);
   const animRef = useRef<number>(0);
+  const lastSample = useRef(0);
   const slidersRef = useRef(ENGINE_PARAMS.map(p => p.target));
 
   useEffect(() => { slidersRef.current = sliders; }, [sliders]);
@@ -1968,12 +1935,14 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
     });
     setFluctuations(newFluct);
 
-    totalFrames.current++;
+    const sampleSeconds = Math.min(0.1, Math.max(0, (Date.now() - (lastSample.current || Date.now())) / 1000));
+    lastSample.current = Date.now();
+    totalFrames.current += sampleSeconds;
     const inGreenCount = ENGINE_PARAMS.reduce((acc, p, i) => {
       const actual = slidersRef.current[i] + newFluct[i];
       return acc + (Math.abs(actual - p.target) <= p.greenRange ? 1 : 0);
     }, 0);
-    inGreenFrames.current += inGreenCount / ENGINE_PARAMS.length;
+    inGreenFrames.current += sampleSeconds * inGreenCount / ENGINE_PARAMS.length;
     if (totalFrames.current > 0) {
       setLiveScore(Math.round((inGreenFrames.current / totalFrames.current) * 100));
     }
@@ -1987,26 +1956,7 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
     return () => cancelAnimationFrame(animRef.current);
   }, [running, finished, tick]);
 
-  useEffect(() => {
-    if (!running || finished) return;
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setFinished(true);
-          setRunning(false);
-          const score = totalFrames.current > 0
-            ? Math.round((inGreenFrames.current / totalFrames.current) * 100) : 50;
-          const duration = Math.round((Date.now() - startTime.current) / 1000);
-          onComplete({ type_jeu: 'test_moteur', score, duree_secondes: Math.max(duration, 15) });
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, finished]);
+  useGameDeadline(running && !finished, DURATION, setTimeLeft, () => { setFinished(true); setRunning(false); const score = totalFrames.current > 0 ? Math.round((inGreenFrames.current / totalFrames.current) * 100) : 0; onComplete({ type_jeu: 'test_moteur', score, duree_secondes: DURATION });; });
 
   function start() {
     setRunning(true);
@@ -2038,7 +1988,7 @@ function TestMoteurGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
       <div className="rounded-lg border border-red-800/40 bg-red-950/15 px-3 py-2.5 text-xs text-slate-400 space-y-1.5">
         <p className="font-medium text-red-200/90">Comment jouer</p>
         <ul className="list-disc list-inside space-y-1 leading-relaxed">
-          <li>Lancez le test : les paramètres <strong className="text-slate-200">réagissent tout seuls</strong> (bruit / oscillations). Utilisez les <strong className="text-slate-200">curseurs invisibles</strong> sur chaque barre comme au calibrage : faites glisser sur toute la hauteur de la piste.</li>
+          <li>Lancez le test : les paramètres <strong className="text-slate-200">réagissent tout seuls</strong> (bruit / oscillations). Utilisez les <strong className="text-slate-200">curseurs</strong> sur chaque barre comme au calibrage : faites glisser sur toute la hauteur de la piste.</li>
           <li>Restez dans la <strong className="text-slate-200">zone verte</strong> pour chaque grandeur (RPM, EGT, huile, carburant). Les phases <strong className="text-slate-200">Chauffe → Croisière → Stress</strong> augmentent la difficulté.</li>
           <li>Le pourcentage en haut est une moyenne du temps passé « en vert » sur les 4 paramètres.</li>
         </ul>

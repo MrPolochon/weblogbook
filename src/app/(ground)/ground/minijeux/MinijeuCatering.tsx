@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { calculerScoreCatering } from '@/lib/ground/minigames';
+
+import { shuffle } from '@/lib/gameplay';
 
 const PLATS = ['🥗', '🍝', '🍱', '🥩', '🍣', '🥘', '🌮', '🍛', '🥪', '🍜'];
 const DUREE_MEMO_BASE = 3; // secondes de mémorisation (Easy/Medium)
@@ -40,7 +42,7 @@ export default function MinijeuCatering({ onFinish }: Props) {
 
   const generateGame = useCallback((mode: DifficultyMode) => {
     const cfg = DIFF_CONFIG[mode];
-    const pool = [...PLATS].sort(() => Math.random() - 0.5);
+    const pool = shuffle(PLATS);
     const seq = pool.slice(0, cfg.platCount);
     const intrusPool = pool.slice(cfg.platCount, cfg.platCount + cfg.intrusCount);
     return { seq, intrusSet: new Set(intrusPool) };
@@ -75,7 +77,7 @@ export default function MinijeuCatering({ onFinish }: Props) {
       setTimeout(() => setFeedback(null), 600);
       const newRepro = [...repro, plat]; // marquer comme erreur
       setRepro(newRepro);
-      if (newRepro.length >= sequence.length + intrus.size) finishGame(bonnes, sequence.length);
+      if (newRepro.length >= sequence.length) finishGame(bonnes, sequence.length);
       return;
     }
 
@@ -99,11 +101,11 @@ export default function MinijeuCatering({ onFinish }: Props) {
   }
 
   const cfg = DIFF_CONFIG[diffMode];
-  const allGridPlats = [...new Set([...PLATS.slice(0, 8), ...sequence, ...Array.from(intrus)])].sort(() => Math.random() - 0.5).slice(0, 10);
+  const allGridPlats = useMemo(() => shuffle([...new Set([...sequence, ...Array.from(intrus), ...PLATS])]), [sequence, intrus]);
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-5">
+      <div className="gameplay-surface text-center space-y-5">
         <div className="text-5xl">🍽️</div>
         <h2 className="text-xl font-bold text-slate-100">Service Catering</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -149,7 +151,7 @@ export default function MinijeuCatering({ onFinish }: Props) {
 
   if (phase === 'memorize') {
     return (
-      <div className="text-center space-y-5">
+      <div className="gameplay-surface text-center space-y-5">
         <div className="flex items-center justify-center gap-2">
           <span className="text-slate-400 text-sm">Mémorisez !</span>
           <span className="text-2xl font-black text-emerald-400">{countdown}s</span>
@@ -181,9 +183,9 @@ export default function MinijeuCatering({ onFinish }: Props) {
   }
 
   if (phase === 'reproduce') {
-    const reproFiltered = repro.filter(p => !intrus.has(p));
+    const reproFiltered = repro;
     return (
-      <div className="space-y-5">
+      <div className="gameplay-surface space-y-5">
         <div className="flex items-center justify-between">
           <span className="text-sm text-slate-400">
             Reproduisez dans l&apos;ordre : <span className="font-semibold text-slate-200">{reproFiltered.length + 1}/{sequence.length}</span>
@@ -196,7 +198,7 @@ export default function MinijeuCatering({ onFinish }: Props) {
         <div className="flex gap-1.5 flex-wrap min-h-[3rem] items-center">
           {repro.map((plat, i) => {
             const isIntrus = intrus.has(plat);
-            const isCorrect = !isIntrus && sequence[repro.filter(p => !intrus.has(p)).indexOf(plat)] === plat;
+            const isCorrect = !isIntrus && sequence[i] === plat;
             return (
               <div key={i} className={`text-2xl rounded-lg px-2 py-1 border ${
                 isIntrus ? 'bg-red-900/40 border-red-700/50 relative' :
@@ -207,7 +209,7 @@ export default function MinijeuCatering({ onFinish }: Props) {
               </div>
             );
           })}
-          {repro.filter(p => !intrus.has(p)).length < sequence.length && (
+          {repro.length < sequence.length && (
             <div className="h-10 w-10 rounded-lg border-2 border-dashed border-slate-600 animate-pulse" />
           )}
         </div>
@@ -239,7 +241,7 @@ export default function MinijeuCatering({ onFinish }: Props) {
   if (phase === 'finished' && score !== null) {
     const pct = Math.round(score * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 80 ? '🌟' : pct >= 50 ? '👍' : '😅'}</div>
         <h2 className="text-xl font-bold text-slate-100">Service terminé !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-emerald-900/20 border border-emerald-800/40">

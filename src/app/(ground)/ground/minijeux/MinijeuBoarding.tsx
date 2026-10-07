@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { calculerScoreBoarding, getDureeBoarding, BOARDING_CLASS_COLORS } from '@/lib/ground/minigames';
 
+import { boardingDistribution, shuffle } from '@/lib/gameplay';
+
 interface Carte {
   id: number;
   classe: 'vip' | 'business' | 'premium' | 'economy';
@@ -11,6 +13,8 @@ interface Carte {
   row: number;
   vip: boolean;
 }
+
+import { useGameDeadline } from '@/lib/use-game-deadline';
 
 interface Props {
   paxCount: number;
@@ -38,10 +42,7 @@ const CLASS_COLORS: Record<Classe, string> = {
 const NOMS = ['MARTIN', 'DURAND', 'PETIT', 'SIMON', 'BLANC', 'GARCIA', 'THOMAS', 'ROBERT', 'LEROY', 'RICHARD', 'LEBLANC', 'DUPONT', 'MOREAU', 'FAURE', 'GIRARD'];
 
 function genererCartesAvecVIP(paxCount: number): Carte[] {
-  const nbVIP      = Math.min(2, Math.max(1, Math.floor(paxCount * 0.05)));
-  const nbBusiness = Math.max(1, Math.floor(paxCount * 0.1));
-  const nbPremium  = Math.max(1, Math.floor(paxCount * 0.2));
-  const nbEconomy  = paxCount - nbVIP - nbBusiness - nbPremium;
+  const { vip: nbVIP, business: nbBusiness, premium: nbPremium, economy: nbEconomy } = boardingDistribution(paxCount);
 
   const cartes: Carte[] = [];
   let id = 0;
@@ -56,11 +57,11 @@ function genererCartesAvecVIP(paxCount: number): Carte[] {
     cartes.push({ id: id++, classe: 'premium', nom: NOMS[id % NOMS.length], siege: `${10 + i}${String.fromCharCode(65 + (i % 6))}`, row: 10 + i, vip: false });
   }
   for (let i = 0; i < nbEconomy; i++) {
-    const row = 40 - i; // rangée décroissante (arrière en premier)
+    const row = 20 + Math.floor(i / 6); // rangée décroissante (arrière en premier)
     cartes.push({ id: id++, classe: 'economy', nom: NOMS[id % NOMS.length], siege: `${row}${String.fromCharCode(65 + (i % 6))}`, row, vip: false });
   }
 
-  return cartes.sort(() => Math.random() - 0.5);
+  return shuffle(cartes);
 }
 
 export default function MinijeuBoarding({ paxCount, onFinish }: Props) {
@@ -84,18 +85,9 @@ export default function MinijeuBoarding({ paxCount, onFinish }: Props) {
     setScore(null);
   }, [paxCount, duree]);
 
-  // Timer
-  useEffect(() => {
-    if (phase !== 'playing') return;
-    if (timeLeft <= 0) {
-      const s = calculerScoreBoarding(validCount, paxCount);
-      setScore(s);
-      setPhase('finished');
-      return;
-    }
-    const id = setTimeout(() => setTimeLeft(t => t - 1), 1000);
-    return () => clearTimeout(id);
-  }, [phase, timeLeft, validCount, paxCount]);
+  useGameDeadline(phase === 'playing', duree, setTimeLeft, () => {
+    setScore(calculerScoreBoarding(validCount, cartes.length)); setPhase('finished');
+  });
 
   // Prochaine classe attendue
   const nextClasse: Classe | null = useMemo(() => {
@@ -129,7 +121,7 @@ export default function MinijeuBoarding({ paxCount, onFinish }: Props) {
 
     const wrongClass = carte.classe !== nextClasse;
     // Pour economy : vérifier l'ordre de rangée (décroissant)
-    const wrongRowOrder = nextClasse === 'economy' && nextEconomySeat && carte.id !== nextEconomySeat.id;
+    const wrongRowOrder = nextClasse === 'economy' && nextEconomySeat && carte.row !== nextEconomySeat.row;
 
     if (wrongClass || wrongRowOrder) {
       setErrors(prev => { const n = new Set(prev); n.add(carte.id); return n; });
@@ -145,7 +137,7 @@ export default function MinijeuBoarding({ paxCount, onFinish }: Props) {
 
   if (phase === 'idle') {
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">🎫</div>
         <h2 className="text-xl font-bold text-slate-100">Boarding Passagers</h2>
         <p className="text-slate-400 text-sm max-w-sm mx-auto">
@@ -165,7 +157,7 @@ export default function MinijeuBoarding({ paxCount, onFinish }: Props) {
   if (phase === 'finished' && score !== null) {
     const pct = Math.round(score * 100);
     return (
-      <div className="text-center space-y-4">
+      <div className="gameplay-surface text-center space-y-4">
         <div className="text-5xl">{pct >= 80 ? '✈️' : pct >= 50 ? '🙂' : '😓'}</div>
         <h2 className="text-xl font-bold text-slate-100">Boarding terminé !</h2>
         <div className="inline-flex flex-col items-center gap-1 px-8 py-4 rounded-2xl bg-purple-900/20 border border-purple-800/40">
@@ -181,7 +173,7 @@ export default function MinijeuBoarding({ paxCount, onFinish }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="gameplay-surface space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="text-sm text-slate-400">
