@@ -13,7 +13,9 @@ export async function GET(req: NextRequest) {
   const res = NextResponse.redirect('https://discord.com/oauth2/authorize?'+params);
   const cookieOptions = {httpOnly:true,secure:req.nextUrl.protocol==='https:',sameSite:'lax' as const,path:'/',maxAge:300};
   res.cookies.set(DISCORD_OAUTH_STATE_COOKIE,state,cookieOptions);
-  res.cookies.set(DISCORD_OAUTH_RETURN_COOKIE,'/login?step=verify',cookieOptions);
+  const target = req.nextUrl.searchParams.get('redirect') || '/logbook';
+  const safeTarget = target.startsWith('/') && !target.startsWith('//') && !target.includes('\\') && !target.startsWith('/login') && !target.startsWith('/auth/') && !target.startsWith('/api/') ? target : '/logbook';
+  res.cookies.set(DISCORD_OAUTH_RETURN_COOKIE,safeTarget,cookieOptions);
   res.cookies.set('discord_oauth_login','1',cookieOptions);
   return res;
 }

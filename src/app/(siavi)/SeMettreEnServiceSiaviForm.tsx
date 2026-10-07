@@ -11,6 +11,7 @@ export default function SeMettreEnServiceSiaviForm() {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState('');
+  const [mode, setMode] = useState('pompier');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -32,7 +33,7 @@ export default function SeMettreEnServiceSiaviForm() {
       const res = await fetch('/api/siavi/session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ aeroport }),
+        body: JSON.stringify({ aeroport, mode }),
       });
 
       const data = await res.json();
@@ -52,7 +53,7 @@ export default function SeMettreEnServiceSiaviForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-bold text-amber-800 mb-1">Aéroport</label>
+        <label className="block text-sm font-bold text-amber-200 mb-1">Aéroport</label>
         <select
           value={aeroport}
           onChange={(e) => setAeroport(e.target.value)}
@@ -76,6 +77,12 @@ export default function SeMettreEnServiceSiaviForm() {
         </select>
       </div>
 
+      <label className="block text-sm text-slate-200">Fonction de service
+        <select value={mode} onChange={e=>setMode(e.target.value)} className="input mt-1">
+          <option value="pompier">Pompier — secours et interventions</option>
+          <option value="afis">Pompier + AFIS — information des vols</option>
+        </select>
+      </label>
       {error && (
         <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-800 text-sm font-medium">
           {error}
@@ -90,9 +97,8 @@ export default function SeMettreEnServiceSiaviForm() {
         {loading ? 'Connexion...' : 'Se mettre en service'}
       </button>
 
-      <p className="text-xs text-amber-700 font-medium">
-        Sur les aéroports SIAVI exclusifs, vous aurez automatiquement les fonctions AFIS.
-        Sur les autres aéroports, vous serez AFIS uniquement si aucun ATC n&apos;est en ligne.
+      <p className="text-xs text-amber-200 font-medium">
+        Le mode Pompier reste disponible avec un ATC présent. Le mode AFIS est disponible sans ATC, ou sur les aéroports SIAVI exclusifs. Vous pourrez changer de fonction pendant votre service.
       </p>
     </form>
   );

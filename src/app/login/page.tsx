@@ -421,15 +421,16 @@ function LoginPageContent() {
   );
 
   return (
-    <div className="min-h-dvh relative flex items-start sm:items-center justify-center px-4 py-8 sm:p-8 overflow-x-hidden bg-slate-950">
+    <div className="login-shell min-h-dvh relative flex items-center justify-center px-4 py-3 overflow-x-hidden bg-slate-950">
       {fond}
       {overlay}
       
 
       
-      <div className="relative z-10 w-full max-w-lg">
+      <div className="login-content relative z-10 w-full max-w-lg">
+        {messageParam === 'discord-not-linked' && <p role="alert" className="rounded-lg bg-red-950/70 p-3 text-sm text-red-200">Ce Discord n’est lié à aucun compte. Connectez-vous avec votre identifiant puis liez Discord depuis votre profil.</p>}
         {/* Logo / Titre */}
-        <div className="text-center mb-4 sm:mb-8">
+        <div className="login-heading text-center mb-3">
           <div
             className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-3 sm:mb-4  overflow-hidden"
             style={{ border: '1px solid rgba(56,130,255,0.3)', borderRadius: '12px', background: 'rgba(56,130,255,0.15)' }}
@@ -452,12 +453,12 @@ function LoginPageContent() {
             )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
-          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Votre réseau aérien, un seul compte</p>
+          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Saison Halloween · Votre réseau aérien</p>
         </div>
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
         {step === 'form' && (
-        <div className="space-y-2 mb-4 sm:mb-6 animate-init animate-reveal-blur delay-400">
+        <div className="login-modes space-y-2 mb-3 animate-init animate-reveal-blur delay-400">
           {/* Ligne principale : Pilote | ATC | SIAVI */}
           <div className="flex gap-2 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30">
             <button
@@ -564,8 +565,8 @@ function LoginPageContent() {
 
         {/* Formulaire : identifiant / mot de passe */}
         {step === 'form' && (
-          <div className="card bg-slate-900 border-slate-700">
-            <div className="mb-5 px-1 py-2">
+          <div className="login-card card bg-slate-900 border-slate-700">
+            <div className="login-intro mb-3 px-1">
               <span
                 className="inline-flex items-center gap-1"
                 style={{ background: 'rgba(56,130,255,0.1)', border: '0.5px solid rgba(56,130,255,0.2)', borderRadius: '4px', fontSize: '9px', color: '#6aa0ff', letterSpacing: '0.06em', padding: '2px 6px' }}
@@ -573,7 +574,7 @@ function LoginPageContent() {
                 <Sun className="shrink-0" style={{ width: '9px', height: '9px' }} />
                 CONNEXION SÉCURISÉE
               </span>
-              <p className="mt-2 text-sm text-cyan-50/80">Choisissez votre espace. Utilisez les mêmes identifiants pour accéder à vos activités.</p>
+              <p className="mt-2 text-sm text-cyan-50/80">Un seul compte pour tous vos espaces.</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -1028,7 +1029,7 @@ function LoginPageContent() {
 
 
         {/* Boutons secondaires */}
-        <div className="mt-4 sm:mt-6 flex flex-wrap items-center justify-center gap-2 sm:gap-3 animate-init animate-slide-up delay-800">
+        <div className="login-links mt-3 flex flex-wrap items-center justify-center gap-2 sm:gap-3 animate-init animate-slide-up delay-800">
           <Link
             href="/aeroschool"
             className="inline-flex items-center gap-1.5 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:text-amber-200 hover:bg-amber-500/20 hover:border-amber-500/50 transition-all backdrop-blur-sm group cursor-pointer"

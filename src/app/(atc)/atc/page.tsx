@@ -183,7 +183,7 @@ export default async function AtcPage() {
       sid_depart: plan.sid_depart || null,
       star_arrivee: plan.star_arrivee || null,
       route_ifr: plan.route_ifr || null,
-      strip_atd: plan.strip_atd || null,
+      deroutement_at: plan.deroutement_at || null, strip_atd: plan.strip_atd || null,
       strip_rwy: plan.strip_rwy || null,
       strip_fl: plan.strip_fl || null,
       strip_fl_unit: plan.strip_fl_unit || null,
@@ -400,4 +400,3 @@ export default async function AtcPage() {
     </div>
   );
 }
-

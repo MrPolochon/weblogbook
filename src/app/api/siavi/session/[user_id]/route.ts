@@ -17,9 +17,10 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ u
     const admin = createAdminClient();
     
     // Récupérer les plans surveillés par cet AFIS et les remettre en autosurveillance
-    await admin.from('plans_vol')
+    const { error: releaseError } = await admin.from('plans_vol')
       .update({ current_afis_user_id: null })
       .eq('current_afis_user_id', user_id);
+    if (releaseError) return NextResponse.json({ error: 'Impossible de libérer les vols. Le service est conservé.' },{status:503});
 
     // Supprimer la session
     const { error } = await admin.from('afis_sessions').delete().eq('user_id', user_id);

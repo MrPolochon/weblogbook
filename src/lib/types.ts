@@ -148,6 +148,8 @@ export type NatureTransport = 'passagers' | 'cargo' | 'mixte';
 export type TypeCargaison = 'generale' | 'dangereuse' | 'perissable' | 'vivante' | 'urgente';
 
 export interface PlanVol {
+  deroutement_at?: string | null;
+  deroutement_destination_initiale?: string | null;
   id: string;
   numero_vol: string;
   pilote_id: string;

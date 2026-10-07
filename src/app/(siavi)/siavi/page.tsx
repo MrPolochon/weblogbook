@@ -10,6 +10,8 @@ import SeMettreEnServiceSiaviForm from '../SeMettreEnServiceSiaviForm';
 import HorsServiceSiaviButton from '../HorsServiceSiaviButton';
 import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
+import SiaviServiceControls from '../SiaviServiceControls';
+import { afisAvailable } from '@/lib/siavi/service-rules';
 
 // Statuts visibles côté SIAVI agent
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
@@ -86,6 +88,7 @@ export default async function SiaviPage() {
     admin.from('plans_vol')
       .select('id, statut, aeroport_depart, aeroport_arrivee, numero_vol, medevac_segment_index, medevac_total_segments, temps_prev_min, medevac_mission_id')
       .eq('pilote_id', user.id)
+      .not('medevac_mission_id','is',null)
       .in('statut', ['en_attente', 'depose', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant'])
       .order('medevac_segment_index', { ascending: true }),
   ]);
@@ -158,41 +161,86 @@ export default async function SiaviPage() {
   const aeroportsActifs = Array.from(positionsParAeroport.entries()).sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <div className="space-y-6">
-      {/* ─── HEADER ─── */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-700 via-rose-700 to-rose-900 p-6 shadow-xl">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30 pointer-events-none" />
-        <div className="absolute top-0 right-0 w-64 h-64 bg-red-400/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
-        <div className="relative flex flex-wrap items-start justify-between gap-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-white/15 backdrop-blur-sm border border-white/10">
-              <Flame className="h-8 w-8 text-white" />
+    <div className="space-y-6 siavi-workspace">
+      <section className="rounded-2xl border border-orange-400/30 bg-slate-900 p-5">
+        <p className="text-xs uppercase tracking-widest text-orange-300">Console opérationnelle SIAVI</p>
+        <h1 className="text-2xl font-bold mt-2">{session ? `${session.aeroport} · ${session.est_afis ? 'Pompier + AFIS' : 'Pompier'}` : 'Préparez votre prise de service'}</h1>
+        <p className="text-sm text-slate-300 mt-2">{session ? 'Priorité aux appels de secours, aux missions actives et à la coordination avec les contrôleurs.' : 'Choisissez votre aéroport et votre fonction. Le service pompier et la surveillance AFIS sont deux activités distinctes.'}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
+          {[['Pompiers en service',afisEnService.length],['AFIS actifs',totalAfisEnService],['Avions disponibles',flotteCount.ground],['Vols surveillés',plansSurveilles.length]].map(([label,value])=><div key={label} className="rounded-xl bg-slate-800/70 p-3"><strong className="block text-xl">{value}</strong><span className="text-xs text-slate-300">{label}</span></div>)}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-4">
+          <Link href="/siavi/medevac/nouveau" className="btn-primary">Nouvelle mission MEDEVAC</Link>
+          <Link href="/siavi/rapports" className="btn-secondary">Rapports</Link>
+          <Link href="/siavi/flotte" className="btn-secondary">Flotte et disponibilité</Link>
+          <Link href="/siavi/documents" className="btn-secondary">Procédures</Link>
+        </div>
+      </section>
+      {/* ─── STATUT DE SERVICE ─── */}
+      {!session ? (
+        <div className="rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-amber-600/5 p-5">
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-xl bg-amber-500/20 shrink-0">
+              <AlertTriangle className="h-6 w-6 text-amber-300" />
             </div>
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <h1 className="text-3xl font-bold text-white tracking-tight">Centre SIAVI</h1>
-                <span className="px-2 py-0.5 rounded-full bg-white/15 text-white/90 text-xs font-medium uppercase tracking-wider">
-                  Brigade
-                </span>
-              </div>
-              <p className="text-red-100/90 text-sm">
-                Service d&apos;Information et d&apos;Assistance en Vol —
-                <span className="ml-1 font-medium">{profile?.identifiant || 'Agent'}</span>
+            <div className="flex-1">
+              <h2 className="text-lg font-bold text-amber-100 mb-1">Hors service</h2>
+              <p className="text-amber-200/80 text-sm mb-4">
+                Choisissez un aéroport et une fonction : Pompier ou Pompier + AFIS.
               </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <div className="px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 text-center min-w-[96px]">
-              <div className="text-2xl font-bold text-white leading-none">{totalAfisEnService}</div>
-              <div className="text-[10px] text-red-100/80 uppercase tracking-wider mt-1">AFIS actifs</div>
-            </div>
-            <div className="px-4 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/10 text-center min-w-[96px]">
-              <div className="text-2xl font-bold text-white leading-none">{totalAtcEnService}</div>
-              <div className="text-[10px] text-red-100/80 uppercase tracking-wider mt-1">ATC en ligne</div>
+              <SeMettreEnServiceSiaviForm />
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <div className={`rounded-xl border p-5 ${
+          session.est_afis
+            ? 'border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-emerald-600/5'
+            : 'border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-amber-600/5'
+        }`}>
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className={`p-3 rounded-xl ${session.est_afis ? 'bg-emerald-500/20' : 'bg-amber-500/20'}`}>
+                  <Shield className={`h-6 w-6 ${session.est_afis ? 'text-emerald-300' : 'text-amber-300'}`} />
+                </div>
+                {session.est_afis && (
+                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full animate-pulse border-2 border-slate-900" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xl font-bold text-white font-mono">{session.aeroport}</span>
+                  {session.est_afis ? (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold border border-emerald-500/30">
+                      AFIS
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-xs font-bold border border-amber-500/30">
+                      POMPIER
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-400 flex items-center gap-1.5 mt-0.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  En service depuis {formatDistanceToNow(new Date(session.started_at), { locale: fr })}
+                </p>
+              </div>
+            </div>
+            <HorsServiceSiaviButton />
+          </div>
+          <SiaviServiceControls estAfis={session.est_afis} available={afisAvailable(session.aeroport,(atcSessionsRaw || []).map(s=>s.aeroport))} />
+
+          {!session.est_afis && (
+            <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+              <p className="text-amber-200 text-sm">
+                <strong className="font-semibold">Mode Pompier :</strong> Vous assurez les secours et interventions.
+                Téléphone utilisable, fonctions AFIS désactivées.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ─── MISSION EN COURS DE L'AGENT ─── */}
       {(segmentActif || segmentEnPause) && (
@@ -349,71 +397,6 @@ export default async function SiaviPage() {
           </div>
         </div>
       </div>
-
-      {/* ─── STATUT DE SERVICE ─── */}
-      {!session ? (
-        <div className="rounded-xl border border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-amber-600/5 p-5">
-          <div className="flex items-start gap-4">
-            <div className="p-3 rounded-xl bg-amber-500/20 shrink-0">
-              <AlertTriangle className="h-6 w-6 text-amber-300" />
-            </div>
-            <div className="flex-1">
-              <h2 className="text-lg font-bold text-amber-100 mb-1">Hors service</h2>
-              <p className="text-amber-200/80 text-sm mb-4">
-                Sélectionnez un aéroport pour prendre la surveillance AFIS.
-              </p>
-              <SeMettreEnServiceSiaviForm />
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className={`rounded-xl border p-5 ${
-          session.est_afis
-            ? 'border-emerald-500/40 bg-gradient-to-r from-emerald-500/10 to-emerald-600/5'
-            : 'border-amber-500/40 bg-gradient-to-r from-amber-500/10 to-amber-600/5'
-        }`}>
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className={`p-3 rounded-xl ${session.est_afis ? 'bg-emerald-500/20' : 'bg-amber-500/20'}`}>
-                  <Shield className={`h-6 w-6 ${session.est_afis ? 'text-emerald-300' : 'text-amber-300'}`} />
-                </div>
-                {session.est_afis && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-emerald-400 rounded-full animate-pulse border-2 border-slate-900" />
-                )}
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xl font-bold text-white font-mono">{session.aeroport}</span>
-                  {session.est_afis ? (
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 text-xs font-bold border border-emerald-500/30">
-                      AFIS
-                    </span>
-                  ) : (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 text-xs font-bold border border-amber-500/30">
-                      POMPIER
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-slate-400 flex items-center gap-1.5 mt-0.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  En service depuis {formatDistanceToNow(new Date(session.started_at), { locale: fr })}
-                </p>
-              </div>
-            </div>
-            <HorsServiceSiaviButton />
-          </div>
-          
-          {!session.est_afis && (
-            <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-              <p className="text-amber-200 text-sm">
-                <strong className="font-semibold">Mode Pompier :</strong> Un contrôleur ATC est en ligne sur cet aéroport.
-                Téléphone utilisable, fonctions AFIS désactivées.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ─── ACTIONS RAPIDES ─── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

@@ -1,80 +1,19 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-
+import { canAccessSiavi } from '@/lib/siavi/permissions';
+import { ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
 export const dynamic = 'force-dynamic';
-
 export async function POST(request: Request) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    const { data: siaviSession } = await supabase
-      .from('afis_sessions')
-      .select('aeroport, est_afis')
-      .eq('user_id', user.id)
-      .single();
-    if (!siaviSession) return NextResponse.json({ error: 'non_en_service' }, { status: 403 });
-
-    const body = await request.json();
-    const { callId } = body;
-
-    const admin = createAdminClient();
-
-    // Récupérer l'appel
-    const { data: call } = await admin.from('atc_calls')
-      .select('id, is_emergency, to_user_id, from_user_id, status')
-      .eq('id', callId)
-      .single();
-
-    if (!call) {
-      return NextResponse.json({ error: 'Appel non trouvé' }, { status: 404 });
-    }
-
-    if (call.status !== 'ringing') {
-      return NextResponse.json({ error: 'Appel déjà répondu ou terminé' }, { status: 400 });
-    }
-
-    // Vérifier les permissions : soit c'est un appel d'urgence, soit l'appel est pour nous
-    const isForMe = call.to_user_id === user.id;
-    const canAnswerEmergency = call.is_emergency && call.from_user_id !== user.id;
-    
-    if (!isForMe && !canAnswerEmergency) {
-      return NextResponse.json({ error: 'Cet appel ne vous est pas destiné' }, { status: 403 });
-    }
-
-    // Pour les appels d'urgence, réassigner à l'utilisateur qui répond
-    const { data: updatedCall, error } = await admin.from('atc_calls')
-      .update({ 
-        status: 'connected', 
-        answered_at: new Date().toISOString(),
-        to_user_id: user.id // Réassigner à celui qui répond
-      })
-      .eq('id', callId)
-      .eq('status', 'ringing') // Double vérification pour éviter les race conditions
-      .select('id')
-      .maybeSingle();
-
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    if (!updatedCall) {
-      return NextResponse.json({ error: 'Cet appel a déjà été traité.' }, { status: 409 });
-    }
-
-    // Si c'est un appel d'urgence (911/112), vérifier si l'agent est pompier seul et le payer
-    if (call.is_emergency) {
-      // Payer seulement si pompier seul (pas AFIS)
-      if (!siaviSession.est_afis) {
-        await admin.rpc('pay_siavi_intervention', {
-          p_user_id: user.id,
-          p_call_id: callId,
-          p_aeroport: siaviSession.aeroport
-        });
-      }
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error('SIAVI answer:', err);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
-  }
+ try {
+  const supabase=await createClient();const {data:{user}}=await supabase.auth.getUser();
+  if(!user)return NextResponse.json({error:'Non autorisé'},{status:401});
+  const admin=createAdminClient();if(!(await canAccessSiavi(admin,user.id)))return NextResponse.json({error:'Accès SIAVI indisponible'},{status:403});
+  const {callId}=await request.json().catch(()=>({}));if(typeof callId!=='string'||! /^[a-f0-9-]{36}$/i.test(callId))return NextResponse.json({error:'Appel invalide'},{status:400});
+  if(!(await ensureComptePersonnel(admin,user.id)))return NextResponse.json({error:'Compte personnel indisponible. Réessayez.'},{status:503});
+  const {data,error}=await admin.rpc('answer_siavi_call',{p_user:user.id,p_call:callId});
+  if(error||!data)return NextResponse.json({error:'La prise d’appel a échoué. Aucun paiement partiel n’a été effectué.'},{status:503});
+  if(data.error)return NextResponse.json({error:data.error},{status:data.status||409});
+  return NextResponse.json({ok:true});
+ }catch{return NextResponse.json({error:'Service téléphonique indisponible'},{status:503});}
 }

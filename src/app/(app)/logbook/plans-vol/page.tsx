@@ -4,6 +4,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatDateHourUTC } from '@/lib/date-utils';
 import { ArrowLeft, FileText, AlertCircle, Bell, Plane, CheckCircle2, XCircle, Timer, ArrowRight, Plus, Radio } from 'lucide-react';
+import DerouterButton from './DerouterButton';
 import PlanVolCloturerButton from './PlanVolCloturerButton';
 import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import PlanVolCopiloteActions from './PlanVolCopiloteActions';
@@ -40,7 +41,7 @@ export default async function MesPlansVolPage() {
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     admin
       .from('plans_vol')
-      .select('id, pilote_id, copilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte, copilote:profiles!plans_vol_copilote_id_fkey(identifiant)')
+      .select('id, pilote_id, copilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte, deroutement_at, deroutement_destination_initiale, copilote:profiles!plans_vol_copilote_id_fkey(identifiant)')
       .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`)
       .order('created_at', { ascending: false }),
     // Plans civils clôturés à enregistrer (pas encore transformés en vol)
@@ -364,6 +365,8 @@ export default async function MesPlansVolPage() {
                       ) : (
                         <div className="flex items-center gap-3">
                           <PlanVolCopiloteActions planId={p.id} statut={p.statut} isCopilote={p.copilote_id === user.id} />
+                          {p.pilote_id === user.id && ['accepte', 'en_cours', 'automonitoring'].includes(p.statut) && !p.deroutement_at && <DerouterButton planId={p.id} destination={p.aeroport_arrivee} />}
+                          {p.deroutement_at && <span className="text-orange-300 text-xs">Dérouté vers {p.aeroport_arrivee}</span>}
                           <PlanVolCloturerButton planId={p.id} statut={p.statut} isMedevac={!!p.siavi_avion_id} automonitoring={!!p.automonitoring} />
                           <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
                         </div>

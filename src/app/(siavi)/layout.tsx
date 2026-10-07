@@ -64,6 +64,7 @@ export default async function SiaviLayout({
     const [{ data: dataAuto }, { data: dataSurveilles }, { data: dataTransfert }] = await Promise.all([
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee')
         .eq('automonitoring', true)
+        .or(`aeroport_depart.eq.${session.aeroport},aeroport_arrivee.eq.${session.aeroport}`)
         .is('current_afis_user_id', null)
         .in('statut', ['accepte', 'en_cours']),
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee')

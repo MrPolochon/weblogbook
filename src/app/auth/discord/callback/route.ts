@@ -10,6 +10,8 @@ import {
 } from '@/lib/discord-link';
 import { refreshDiscordLinkState, upsertDiscordLinkState } from '@/lib/discord-link-service';
 import { createSessionFromVerifiedIdentity } from '@/lib/auth/session-from-identity';
+import { completeLoginVerification } from '@/lib/auth/complete-login-verification';
+import { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,7 +33,7 @@ function clearDiscordCookies(response: NextResponse) {
   response.cookies.set(DISCORD_OAUTH_RETURN_COOKIE, '', { path: '/', maxAge: 0 });
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
   const state = requestUrl.searchParams.get('state');
@@ -109,10 +111,12 @@ export async function GET(request: Request) {
         clearDiscordCookies(res);
         return res;
       }
-      await createSessionFromVerifiedIdentity(existing.user_id);
-      const res = NextResponse.redirect(new URL('/login?step=verify', request.url));
+      const session = await createSessionFromVerifiedIdentity(existing.user_id);
+      const completed = await completeLoginVerification(admin, existing.user_id, request);
+      if (!completed.ok) { await session.auth.signOut(); return redirectWithError('server'); }
+      const res = NextResponse.redirect(new URL(returnTo, request.url));
       clearDiscordCookies(res);
-      res.cookies.set('pending_login_verification','1',{path:'/',sameSite:'lax',secure:requestUrl.protocol==='https:',maxAge:600});
+      res.cookies.set('pending_login_verification','',{path:'/',maxAge:0});
       return res;
     }
     if (!user) return redirectWithError('oauth_invalid');

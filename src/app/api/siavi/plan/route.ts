@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { canAccessSiavi } from '@/lib/siavi/permissions';
+import { afisAvailable, planAtAirport } from '@/lib/siavi/service-rules';
 
 export async function PATCH(request: Request) {
   try {
@@ -38,7 +39,7 @@ export async function PATCH(request: Request) {
 
     // Récupérer le plan
     const { data: plan, error: planError } = await admin.from('plans_vol')
-      .select('id, statut, automonitoring, current_afis_user_id, current_holder_user_id')
+      .select('id, statut, automonitoring, current_afis_user_id, current_holder_user_id, aeroport_depart, aeroport_arrivee')
       .eq('id', plan_id)
       .single();
 
@@ -47,6 +48,11 @@ export async function PATCH(request: Request) {
     }
 
     if (action === 'prendre') {
+      if (!planAtAirport(plan,afisSession.aeroport)) return NextResponse.json({ error: 'Ce vol ne concerne pas votre aéroport.' },{status:403});
+      if (!['accepte','en_cours','automonitoring','en_attente_cloture'].includes(plan.statut)) return NextResponse.json({ error: 'Ce vol ne peut plus être surveillé.' },{status:409});
+      const { data: atcs, error: atcError } = await admin.from('atc_sessions').select('aeroport').eq('aeroport',afisSession.aeroport);
+      if (atcError) return NextResponse.json({ error: 'Disponibilité ATC inconnue' },{status:503});
+      if (!afisAvailable(afisSession.aeroport,(atcs || []).map(a => a.aeroport))) return NextResponse.json({ error: 'Un ATC est présent : surveillance AFIS suspendue.' },{status:409});
       // Prendre un vol en autosurveillance
       if (!plan.automonitoring) {
         return NextResponse.json({ error: 'Ce vol n\'est pas en autosurveillance' }, { status: 400 });
@@ -61,15 +67,16 @@ export async function PATCH(request: Request) {
       }
 
       // Prendre le vol
-      const { error: updateError } = await admin.from('plans_vol')
+      const { data: claimed, error: updateError } = await admin.from('plans_vol')
         .update({ current_afis_user_id: user.id })
-        .eq('id', plan_id);
+        .eq('id', plan_id).is('current_afis_user_id',null).is('current_holder_user_id',null).eq('automonitoring',true).eq('statut',plan.statut).select('id').maybeSingle();
 
       if (updateError) {
         console.error('Erreur prise vol AFIS:', updateError);
         return NextResponse.json({ error: 'Erreur lors de la prise en charge' }, { status: 500 });
       }
 
+      if (!claimed) return NextResponse.json({ error: 'Ce vol a déjà été pris ou modifié.' },{status:409});
       return NextResponse.json({ ok: true, action: 'pris' });
     }
 
@@ -81,7 +88,7 @@ export async function PATCH(request: Request) {
 
       const { error: updateError } = await admin.from('plans_vol')
         .update({ current_afis_user_id: null })
-        .eq('id', plan_id);
+        .eq('id', plan_id).eq('current_afis_user_id',user.id);
 
       if (updateError) {
         console.error('Erreur relâchement vol AFIS:', updateError);

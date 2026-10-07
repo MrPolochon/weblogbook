@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { formatCtot, getSquawkColor, getSquawkLabel, statutLabel } from '@/lib/atc-ui';
 
 export type StripData = {
+  deroutement_at?: string | null;
   id: string;
   numero_vol: string;
   aeroport_depart: string;
@@ -933,6 +934,11 @@ function FlightStripImpl({
         ? { border: 'border-[#ef4444]', head: 'bg-[#1c2028]', left: 'bg-[#171a21]', right: 'bg-[#1c2028]', sep: 'border-[#475569]', txt: 'text-[#94a3b8]', lbl: 'text-[#64748b]', tab: 'bg-[#b91c1c]', ghost: 'text-[#475569]' }
         : { border: 'border-[#dc2626]', head: 'bg-[#cbd5e1]', left: 'bg-[#f1f5f9]', right: 'bg-[#e2e8f0]', sep: 'border-[#94a3b8]', txt: 'text-[#64748b]', lbl: 'text-[#64748b]', tab: 'bg-[#dc2626]', ghost: 'text-[#94a3b8]' };
     }
+    if (strip.deroutement_at) {
+      return isDark
+        ? { border:'border-[#f97316]',head:'bg-[#5b2b0a]',left:'bg-[#3b200e]',right:'bg-[#47270f]',sep:'border-[#b45309]',txt:'text-[#fff7ed]',lbl:'text-[#fed7aa]',tab:'bg-[#f97316]',ghost:'text-[#fdba74]' }
+        : { border:'border-[#ea580c]',head:'bg-[#fed7aa]',left:'bg-[#fff7ed]',right:'bg-[#ffedd5]',sep:'border-[#fb923c]',txt:'text-[#431407]',lbl:'text-[#9a3412]',tab:'bg-[#f97316]',ghost:'text-[#c2410c]' };
+    }
     if (isClotureRequested) {
       return isDark
         ? { border: 'border-[#ef4444]', head: 'bg-[#3a0f13]', left: 'bg-[#240a0d]', right: 'bg-[#2c0d11]', sep: 'border-[#7f1d1d]', txt: 'text-[#f8fafc]', lbl: 'text-[#fca5a5]', tab: 'bg-[#dc2626]', ghost: 'text-[#7f4a4a]' }
@@ -946,7 +952,7 @@ function FlightStripImpl({
     return isDark
       ? { border: 'border-[#047857]', head: 'bg-[#123021]', left: 'bg-[#0c2116]', right: 'bg-[#1e1c0d]', sep: 'border-[#064e3b]', txt: 'text-[#f8fafc]', lbl: 'text-[#a7f3d0]', tab: statut === 'en_cours' ? 'bg-[#0ea5e9]' : statut === 'accepte' ? 'bg-[#10b981]' : 'bg-[#f59e0b]', ghost: 'text-[#4d7a63]' }
       : { border: 'border-[#6f9a6f]', head: 'bg-[#c5dcc5]', left: 'bg-[#e2f2e2]', right: 'bg-[#f6f1d4]', sep: 'border-[#8fbc8f]', txt: 'text-[#0f172a]', lbl: 'text-[#475569]', tab: statut === 'en_cours' ? 'bg-[#0284c7]' : statut === 'accepte' ? 'bg-[#059669]' : 'bg-[#f59e0b]', ghost: 'text-[#94a3b8]' };
-  }, [isEmergency, sqColor, isDupe, isClotureRequested, isManual, isDark, statut]);
+  }, [isEmergency, sqColor, isDupe, isClotureRequested, isManual, isDark, statut, strip.deroutement_at]);
 
   const statutTone =
     statut === 'en_cours' ? (isDark ? 'bg-[#075985] text-[#e0f2fe]' : 'bg-[#bae6fd] text-[#0c4a6e]') :
@@ -1010,7 +1016,7 @@ function FlightStripImpl({
             className={`flex items-center gap-1 overflow-x-auto border-b px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${pal.head} ${pal.sep}`}
             style={{ height: LANE_H }}
           >
-            <Chip tone={statutTone} title={`Statut : ${statutLabel(statut)}`}>{statutLabel(statut)}</Chip>
+            <Chip tone={statutTone} title={`Statut : ${statutLabel(statut)}${strip.deroutement_at ? ' · Vol dérouté' : ''}`}>{strip.deroutement_at ? 'DÉROUTÉ' : statutLabel(statut)}</Chip>
             {sqLabel && <Chip tone="bg-[#dc2626] text-[#ffffff]" pulse title={`Squawk d'urgence ${strip.code_transpondeur}`}>{sqLabel}</Chip>}
             {isClotureRequested && !isDupe && <Chip tone="bg-[#dc2626] text-[#ffffff]" pulse title="Le pilote demande la clôture">Clôture</Chip>}
             {isDupe && <Chip tone="bg-[#b91c1c] text-[#ffffff]" pulse title="Deux vols au même squawk en mode C">Dupe</Chip>}

@@ -7,6 +7,7 @@ import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, AlertTria
 import { useLiveKitCall } from '@/hooks/useLiveKitCall';
 import { usePhoneAudioDevices } from '@/hooks/usePhoneAudioDevices';
 import { CODE_TO_POSITION, CODE_TO_AEROPORT } from '@/lib/atc-phone-codes';
+import { toast } from 'sonner';
 
 type CallState = 'idle' | 'dialing' | 'ringing' | 'incoming' | 'connecting' | 'connected';
 
@@ -366,6 +367,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
         }
         setIncomingCall(null);
       } else {
+        const data = await res.json().catch(()=>({}));
+        toast.error(data.error || 'Impossible de prendre cet appel.');
         setCallState('idle');
         setIncomingCall(null);
       }

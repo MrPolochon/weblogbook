@@ -11,6 +11,7 @@ import {
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 type PlanPaiement = {
+  deroutement_at?: string | null;
   id: string;
   pilote_id: string;
   copilote_id?: string | null;
@@ -498,7 +499,7 @@ export async function envoyerChequesVol(
   const numeroVol = plan.numero_vol || 'N/A';
 
   const { data: compagnie } = await admin.from('compagnies')
-    .select('nom, pdg_id, pourcentage_salaire')
+    .select('nom, pdg_id, pourcentage_salaire, alliance_id')
     .eq('id', plan.compagnie_id)
     .single();
   if (!compagnie) {
@@ -563,6 +564,28 @@ export async function envoyerChequesVol(
   }
   console.log(`${logRef} Compte Felitz compagnie OK (id=${compteCompagnie.id})`);
   console.log(`${logRef} salairePlanning=${salairePlanning}, coefficient=${coefficient}, revenuEffectif=${revenuEffectif}`);
+
+  if (plan.deroutement_at) {
+    // Settlement is one database transaction, locked and idempotent per flight.
+    if (plan.location_loueur_compagnie_id) await ensureCompteEntreprise(admin,plan.location_loueur_compagnie_id);
+    if (compagnie.alliance_id) {
+      const {data: members,error: membersError}=await admin.from('alliance_membres').select('compagnie_id').eq('alliance_id',compagnie.alliance_id);
+      if (membersError) return {success:false,message:'Impossible de vérifier les comptes du codeshare.'};
+      for (const member of members || []) if (!(await ensureCompteEntreprise(admin,member.compagnie_id))) return {success:false,message:'Compte d’une compagnie partenaire indisponible.'};
+    }
+    const { data: controllers, error: controllersError } = await admin.from('atc_plans_controles').select('user_id').eq('plan_vol_id',plan.id);
+    if (controllersError) return {success:false,message:'Impossible de vérifier les bénéficiaires des taxes.'};
+    for (const id of new Set([...(controllers || []).map(c=>c.user_id),...(plan.current_afis_user_id?[plan.current_afis_user_id]:[])])) {
+      if (!(await ensureComptePersonnel(admin,id))) return {success:false,message:'Compte du bénéficiaire des taxes indisponible.'};
+    }
+    const {data: settled,error: settleError}=await admin.rpc('settle_diverted_flight',{
+      p_plan:plan.id,p_revenue:Math.round(revenuEffectif/2),p_salary:Math.round(salairePlanning*coefficient),
+      p_tax_base:Math.round((coefficient===0?plan.revenue_brut:revenuEffectif)/2),
+      p_pilot_account:comptePilote.id,p_copilot_account:compteCopilote?.id ?? null,p_company_account:compteCompagnie.id,
+    });
+    if(settleError || !settled) {console.error(`${logRef} Paiement déroutement annulé:`,settleError?.message);return {success:false,message:'Le paiement du déroutement a échoué. Aucun règlement partiel n’a été effectué.'};}
+    return {success:true,revenus:{brut:plan.revenue_brut,net:Number(settled.net),salaire:Number(settled.salaire),taxes:Number(settled.taxes),coefficient,tempsReel:tempsReelMin,remboursementPret:Number(settled.remboursementPret),taxeAlliance:Number(settled.taxeAlliance),codeshare:Number(settled.codeshare)}};
+  }
 
   const baseTaxes = coefficient === 0 ? plan.revenue_brut : revenuEffectif;
 
@@ -1207,7 +1230,7 @@ export async function finaliserCloturePlan(
 }
 
 const PLAN_CLOTURE_SELECT =
-  'id, pilote_id, copilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
+  'id, pilote_id, copilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, deroutement_at, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
 
 /**
  * Clôture les vols déjà demandés par le pilote, restés en attente ATC
