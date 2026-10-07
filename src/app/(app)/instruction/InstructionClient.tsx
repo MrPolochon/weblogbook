@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
+import { instructionProgressPercent, resolveInstructionTab } from '@/lib/instruction-workspace';
 import {
   GraduationCap, BookOpen, Users, Award, Plane,
   ClipboardList, FileCheck2, Shield, Lock,
@@ -94,7 +95,7 @@ export default function InstructionClient({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const isManager = isManagerProp;
-  const formationProgramsForCreate = createFormationPrograms.length > 0 ? createFormationPrograms : programs;
+  const formationProgramsForCreate = createFormationPrograms;
   const isInstructeurOuExaminateur = isManager || canViewExaminerInbox;
   const isStaffAdmin = viewerRole === 'admin';
 
@@ -106,12 +107,11 @@ export default function InstructionClient({
     return activeSessionProp.kind === 'exam' ? 'examens' : 'espace';
   }, [activeSessionProp]);
 
-  const [activeTab, setActiveTab] = useState<TabId>(() => lockedTab ?? initialTab);
-  useEffect(() => { setActiveTab(lockedTab ?? initialTab); }, [initialTab, lockedTab]);
-
-  useEffect(() => {
-    if (lockedTab) setActiveTab(lockedTab);
-  }, [lockedTab, activeSessionProp?.id]);
+  const resolvedTab = resolveInstructionTab(initialTab, {
+    isAdmin: isStaffAdmin, isManager, canViewExams: canViewExaminerInbox || canGrantTitreInstructionFlight || canGrantTitreInstructionAtc || isStaffAdmin,
+  }, activeSessionProp?.kind);
+  const [activeTab, setActiveTab] = useState<TabId>(resolvedTab);
+  useEffect(() => { setActiveTab(resolvedTab); }, [resolvedTab]);
 
   const sessionLockLabel = useMemo(() => {
     if (!activeSessionProp) return null;
@@ -147,12 +147,11 @@ export default function InstructionClient({
     [programs, myFormationLicence],
   );
   const myCompletedSet = useMemo(
-    () => new Set(myProgression.filter((p) => p.completed).map((p) => p.module_code)),
-    [myProgression],
+    () => new Set(myProgression.filter((p) => p.completed && p.licence_code === myFormationLicence).map((p) => p.module_code)),
+    [myProgression, myFormationLicence],
   );
   const myProgressPercent = useMemo(() => {
-    if (!myProgram || myProgram.modules.length === 0) return 0;
-    return Math.round((myCompletedSet.size / myProgram.modules.length) * 100);
+    return instructionProgressPercent(myProgram, myCompletedSet);
   }, [myProgram, myCompletedSet]);
 
   const pendingExamsCount = useMemo(
@@ -160,7 +159,7 @@ export default function InstructionClient({
     [examRequestsMine],
   );
   const assignedExamsCount = useMemo(
-    () => examRequestsAssigned.filter((r) => r.statut !== 'termine').length,
+    () => examRequestsAssigned.filter((r) => !['termine', 'refuse'].includes(r.statut)).length,
     [examRequestsAssigned],
   );
 
@@ -312,7 +311,7 @@ export default function InstructionClient({
       )}
 
       {/* ===== Tab Bar ===== */}
-      <div className="flex gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
+      <div aria-label="Parcours instruction" className="flex flex-wrap gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
         {([
           { id: 'espace' as TabId, label: 'Mon Espace', icon: BookOpen, visible: true },
           { id: 'formation' as TabId, label: 'Formation', icon: Users, visible: isManager },

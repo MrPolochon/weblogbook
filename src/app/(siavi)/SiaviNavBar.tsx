@@ -1,12 +1,13 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Flame, Radio, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark, HeartPulse, ClipboardList, Menu, X, CalendarDays } from 'lucide-react';
+import { Flame, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashboard, Landmark, HeartPulse, ClipboardList, Menu, X, CalendarDays } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
-import { formatDistanceToNow } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import AdminSpaceSelector from '@/components/AdminSpaceSelector';
+import SpaceNavHeader, { SPACE_NAV_BUTTON } from '@/components/SpaceNavHeader';
+import { cn } from '@/lib/utils';
 
 interface SiaviNavBarProps {
   isAdmin: boolean;
@@ -20,17 +21,43 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
   const pathname = usePathname();
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [mobileOpen, setMobileOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [elapsed, setElapsed] = useState('');
+  const startedAt = sessionInfo?.started_at;
 
-  const handleLogout = async () => {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+  useEffect(() => { setOpen(false); }, [pathname]);
+  useEffect(() => {
+    const close = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && open) { setOpen(false); triggerRef.current?.focus(); }
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', escape);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', escape); };
+  }, [open]);
+  useEffect(() => {
+    if (!startedAt) { setElapsed(''); return; }
+    const tick = () => {
+      const minutes = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 60000));
+      setElapsed(minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}min` : `${minutes}min`);
+    };
+    tick();
+    const timer = setInterval(tick, 60000);
+    return () => clearInterval(timer);
+  }, [startedAt]);
+
+  async function handleLogout() {
+    await createClient().auth.signOut();
     router.push('/login');
     startTransition(() => router.refresh());
-  };
+  }
 
   const links = [
-    { href: '/siavi', label: 'Centre', icon: Flame },
+    { href: '/siavi', label: 'Console', icon: Flame },
     { href: '/siavi/medevac/nouveau', label: 'MEDEVAC', icon: HeartPulse },
     { href: '/siavi/flotte', label: 'Flotte', icon: Plane },
     { href: '/siavi/rapports', label: 'Rapports', icon: ClipboardList },
@@ -39,170 +66,44 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
     { href: '/siavi/messagerie', label: 'Messagerie', icon: Mail },
     { href: '/siavi/felitz-bank', label: 'Banque', icon: Landmark },
     { href: '/siavi/compte', label: 'Compte', icon: User },
+    ...(isAdmin ? [{ href: '/siavi/admin', label: 'Administration', icon: LayoutDashboard }] : []),
   ];
-  
-  const adminLinks = isAdmin ? [
-    { href: '/siavi/admin', label: 'Admin', icon: LayoutDashboard },
-  ] : [];
+  const active = (href: string) => pathname === href || (href !== '/siavi' && pathname.startsWith(`${href}/`));
+  const idle = 'border-slate-700/50 bg-slate-950/40 text-slate-200 hover:bg-slate-800 hover:text-white';
 
   return (
-    <nav className="border-b border-red-400/30 bg-gradient-to-r from-[#3a0f18]/95 via-[#5a1022]/95 to-[#7a1428]/95 backdrop-blur-2xl shadow-[0_20px_40px_rgba(40,6,16,0.55)]">
-      <div className="mx-auto max-w-7xl px-4 sm:px-5 lg:px-6">
-        <div className="flex h-14 items-center justify-between">
-          {/* Logo et titre */}
-          <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded-lg border border-red-300/25 bg-white/10">
-              <Flame className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <span className="font-bold text-white text-lg">SIAVI</span>
-              <span className="text-red-200/90 text-xs ml-2 hidden sm:inline">Brigade AFIS</span>
-            </div>
-          </div>
-
-          {/* Status service */}
-          {enService && sessionInfo && (
-            <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-red-300/25 bg-white/10">
-              <MapPin className="h-4 w-4 text-red-200" />
-              <span className="font-mono font-bold text-white">{sessionInfo.aeroport}</span>
-              {estAfis ? (
-                <span className="px-1.5 py-0.5 rounded text-xs bg-green-500/30 text-green-200 font-medium">AFIS</span>
-              ) : (
-                <span className="px-1.5 py-0.5 rounded text-xs bg-amber-500/30 text-amber-200 font-medium">Pompier</span>
-              )}
-              <span className="text-red-300 text-xs flex items-center gap-1">
-                <Clock className="h-3 w-3" />
-                {formatDistanceToNow(new Date(sessionInfo.started_at), { locale: fr })}
-              </span>
-            </div>
-          )}
-
-          {/* Navigation */}
-          <div className="hidden lg:flex items-center gap-1">
-            {links.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname === href || (href !== '/siavi' && pathname?.startsWith(href));
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
-                    isActive
-                      ? 'border-red-200/35 bg-white/20 text-white'
-                      : 'border-transparent text-red-100 hover:border-red-200/25 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{label}</span>
-                </Link>
-              );
-            })}
-            
-            {/* Liens admin */}
-            {adminLinks.map(({ href, label, icon: Icon }) => {
-              const isActive = pathname?.startsWith(href);
-              return (
-                <Link
-                  key={href}
-                  href={href}
-                  className={`relative flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-semibold transition-all ${
-                    isActive
-                      ? 'border-red-200/35 bg-white/20 text-white'
-                      : 'border-transparent text-red-100 hover:border-red-200/25 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span className="hidden sm:inline">{label}</span>
-                </Link>
-              );
-            })}
-
-            {/* Boutons switch admin */}
-            {isAdmin && (
-              <>
-                <Link
-                  href="/atc"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-transparent text-sm font-semibold text-red-100 hover:border-emerald-300/30 hover:bg-emerald-500/20 hover:text-emerald-200 transition-all"
-                  title="Espace ATC"
-                >
-                  <Radio className="h-4 w-4" />
-                  <span className="hidden sm:inline">ATC</span>
-                </Link>
-                <Link
-                  href="/logbook"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-transparent text-sm font-semibold text-red-100 hover:border-sky-300/30 hover:bg-sky-500/20 hover:text-sky-200 transition-all"
-                  title="Espace pilote"
-                >
-                  <Plane className="h-4 w-4" />
-                  <span className="hidden sm:inline">Pilote</span>
-                </Link>
-              </>
-            )}
-
-            {/* Déconnexion */}
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-transparent text-sm font-semibold text-red-100 hover:border-red-200/25 hover:bg-white/10 hover:text-white transition-all"
-            >
-              <LogOut className="h-4 w-4" />
+    <SpaceNavHeader className="border-slate-700/50 bg-[#0b0e1a] shadow-lg">
+      <div className="mx-auto flex min-h-14 max-w-screen-2xl flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
+        <nav aria-label="Navigation SIAVI" className="flex min-w-0 items-center gap-2">
+          <Link href="/siavi" aria-label="Console SIAVI" className="flex shrink-0 items-center gap-2 rounded-xl border border-red-800/40 bg-red-950/40 px-3 py-2 text-sm font-bold text-red-200">
+            <Flame className="h-4 w-4" /><span>SIAVI</span>
+          </Link>
+          <div ref={menuRef} className="relative">
+            <button ref={triggerRef} type="button" aria-expanded={open} aria-controls="siavi-navigation-menu" onClick={() => setOpen(!open)} className={cn(SPACE_NAV_BUTTON, open ? 'border-orange-500/50 bg-orange-950/50 text-orange-200' : idle)}>
+              {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />} Menu
+              {messagesNonLusCount > 0 && <span className="rounded-full bg-red-600 px-1.5 text-xs text-white">{messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}</span>}
             </button>
+            {open && <div id="siavi-navigation-menu" className="absolute left-0 top-full z-[60] mt-2 grid max-h-[calc(100dvh-5rem)] w-[min(20rem,calc(100vw-7rem))] gap-1 overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] p-2 shadow-2xl">
+              {links.map(({ href, label, icon: Icon }) => <Link key={href} href={href} onClick={() => setOpen(false)} aria-current={active(href) ? 'page' : undefined} className={cn(SPACE_NAV_BUTTON, 'justify-start', active(href) ? 'border-orange-500/50 bg-orange-950/50 text-orange-200' : idle)}>
+                <Icon className="h-4 w-4" />{label}
+                {href === '/siavi/messagerie' && messagesNonLusCount > 0 && <span className="ml-auto rounded-full bg-red-600 px-1.5 text-xs text-white">{messagesNonLusCount > 99 ? '99+' : messagesNonLusCount}</span>}
+              </Link>)}
+            </div>}
           </div>
-
-          <button
-            type="button"
-            onClick={() => setMobileOpen((o) => !o)}
-            className="lg:hidden p-2 rounded-lg border border-red-300/25 text-white"
-            aria-label="Menu SIAVI"
-          >
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </button>
+          <Link href="/siavi/medevac/nouveau" aria-label="Nouvelle mission MEDEVAC" className={cn(SPACE_NAV_BUTTON, idle, 'hidden sm:inline-flex')}><HeartPulse className="h-4 w-4" /><span className="hidden lg:inline">MEDEVAC</span></Link>
+        </nav>
+        <div className="order-3 flex w-full items-center justify-center gap-2 text-xs sm:order-none sm:w-auto" aria-label="État du service">
+          {enService && sessionInfo ? <div className="flex items-center gap-2 rounded-xl border border-emerald-800/60 bg-emerald-950/50 px-3 py-1.5 text-emerald-200">
+            <MapPin className="h-3.5 w-3.5" /><span className="font-mono font-bold">{sessionInfo.aeroport}</span>
+            <span className="rounded bg-slate-900 px-1.5 py-0.5 font-semibold">{estAfis ? 'AFIS' : 'Pompier'}</span>
+            <Clock className="h-3.5 w-3.5" /><span className="font-mono">{elapsed}</span>
+          </div> : <span className="text-slate-400">Hors service</span>}
         </div>
-        {mobileOpen && (
-          <div className="lg:hidden pb-3 grid grid-cols-2 gap-1">
-            {links.concat(adminLinks).map(({ href, label, icon: Icon }) => (
-              <Link
-                key={href}
-                href={href}
-                onClick={() => setMobileOpen(false)}
-                className="flex items-center gap-2 rounded-lg border border-red-800 bg-red-950 px-3 py-2 text-sm font-semibold text-red-100"
-              >
-                <Icon className="h-4 w-4" />
-                {label}
-              </Link>
-            ))}
-            {isAdmin && (
-              <>
-                <Link
-                  href="/atc"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2 rounded-lg border border-emerald-800 bg-emerald-950 px-3 py-2 text-sm font-semibold text-emerald-100"
-                >
-                  <Radio className="h-4 w-4" />
-                  ATC
-                </Link>
-                <Link
-                  href="/logbook"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex items-center gap-2 rounded-lg border border-sky-800 bg-sky-950 px-3 py-2 text-sm font-semibold text-sky-100"
-                >
-                  <Plane className="h-4 w-4" />
-                  Pilote
-                </Link>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                setMobileOpen(false);
-                void handleLogout();
-              }}
-              className="col-span-2 flex items-center justify-center gap-2 rounded-lg border border-red-700 bg-red-900 px-3 py-2 text-sm font-semibold text-red-50"
-            >
-              <LogOut className="h-4 w-4" />
-              Déconnexion
-            </button>
-          </div>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {isAdmin && <AdminSpaceSelector triggerClassName={cn(SPACE_NAV_BUTTON, idle)} />}
+          <button type="button" onClick={handleLogout} aria-label="Déconnexion" title="Déconnexion" className={cn(SPACE_NAV_BUTTON, idle, 'hover:text-red-300')}><LogOut className="h-4 w-4" /><span className="hidden xl:inline">Déconnexion</span></button>
+        </div>
       </div>
-    </nav>
+    </SpaceNavHeader>
   );
 }

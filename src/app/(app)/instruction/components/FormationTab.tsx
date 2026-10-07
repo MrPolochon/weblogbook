@@ -1,4 +1,5 @@
 'use client';
+import { instructionProgressPercent } from '@/lib/instruction-workspace';
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
@@ -31,6 +32,8 @@ export default function FormationTab({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const [studentSearch, setStudentSearch] = useState('');
+  const visibleStudents = eleves.filter(e => `${e.identifiant} ${e.formation_instruction_licence ?? ''}`.toLocaleLowerCase('fr').includes(studentSearch.trim().toLocaleLowerCase('fr')));
 
   const [addEleveIdentifiant, setAddEleveIdentifiant] = useState('');
   const [formationLicence, setFormationLicence] = useState(
@@ -317,7 +320,7 @@ export default function FormationTab({
           </div>
           <p className="text-sm text-slate-500">
             Rattache un compte <strong className="text-slate-400">existant</strong> par identifiant (aucun compte fictif).
-            L&apos;élève devient aussi votre référent d&apos;assignation pour les demandes de training et d&apos;examen.
+            Vous devenez son référent pour les demandes de training et d&apos;examen.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="min-w-0 space-y-1 text-sm text-slate-400">
@@ -367,14 +370,17 @@ export default function FormationTab({
           )}
         </div>
         {eleves.length === 0 && <p className="text-slate-500">Aucun élève rattaché.</p>}
-        {eleves.map((e) => {
+        {eleves.length > 0 && <label className="block space-y-1 text-sm text-slate-400">
+          <span>Rechercher un élève ou un parcours</span>
+          <input type="search" className="input w-full" value={studentSearch} onChange={event => setStudentSearch(event.target.value)} placeholder="Identifiant ou licence" />
+        </label>}
+        {eleves.length > 0 && visibleStudents.length === 0 && <p className="text-sm text-slate-400">Aucun élève ne correspond à cette recherche.</p>}
+        {visibleStudents.map((e) => {
           const licenceCode = e.formation_instruction_licence || ATC_INIT_LICENCE_CODE;
           const program = programs.find((p) => p.licenceCode === licenceCode) || null;
           const key = `${e.id}::${licenceCode}`;
           const completedSet = progressionByEleve.get(key) || new Set<string>();
-          const progressPct = program && program.modules.length > 0
-            ? Math.round((completedSet.size / program.modules.length) * 100)
-            : 0;
+          const progressPct = instructionProgressPercent(program, completedSet);
           return (
             <div key={e.id} className="rounded-xl border border-slate-700/50 bg-slate-800/20 p-5 space-y-4 transition-colors hover:border-slate-600/60">
               <div className="flex flex-wrap items-center justify-between gap-3">

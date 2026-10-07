@@ -3,6 +3,7 @@
 import { useEffect, useState, useTransition } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import SpaceNavHeader, { SPACE_NAV_BUTTON } from '@/components/SpaceNavHeader';
 import { createClient } from '@/lib/supabase/client';
 import {
   Wrench, LayoutDashboard, LogOut, MessageSquare,
@@ -88,8 +89,7 @@ export default function GroundNavBar({
     startTransition(() => router.refresh());
   }
 
-  const linkBase =
-    'flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold tracking-[0.01em] transition-all whitespace-nowrap flex-shrink-0 border';
+  const linkBase = SPACE_NAV_BUTTON;
   const linkActive =
     'border-emerald-800/60 bg-emerald-950/70 text-emerald-200 shadow-[0_8px_18px_rgba(2,6,23,0.24)]';
   const linkInactive =
@@ -98,8 +98,8 @@ export default function GroundNavBar({
     'bg-slate-950/86 border-slate-700/45 shadow-[0_20px_40px_rgba(2,6,23,0.45)]';
 
   return (
-    <header className={cn('sticky top-0 z-50 border-b backdrop-blur-xl', headerBg)}>
-      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-[4.5rem]">
+    <SpaceNavHeader className={headerBg}>
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-14">
 
         {/* Logo + navigation */}
         <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
@@ -221,6 +221,6 @@ export default function GroundNavBar({
           </div>
         )}
       </div>
-    </header>
+    </SpaceNavHeader>
   );
 }

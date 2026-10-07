@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import InstructionClient from './InstructionClient';
+import { resolveInstructionTab } from '@/lib/instruction-workspace';
 import type { AdminOpenDemande } from './types';
 import { INSTRUCTION_PROGRAMS, ATC_INIT_LICENCE_CODE } from '@/lib/instruction-programs';
 import { ALL_LICENCE_TYPES } from '@/lib/licence-types';
@@ -62,9 +63,12 @@ export default async function InstructionPage({ searchParams }: { searchParams: 
 
   const cap = await getInstructionCapabilities(admin, user.id, viewer.role);
   const activeSession = await getActiveInstructionSessionForAssignee(admin, user.id);
-  const requestedTab = ['espace','formation','examens','admin'].includes(searchParams.tab ?? '') ? searchParams.tab! : 'espace';
-  const selectedTab = activeSession && !(requestedTab === 'admin' && viewer.role === 'admin') ? (activeSession.kind === 'exam' ? 'examens' : 'espace') : requestedTab;
   const isManager = canAccessInstructionManagerTools(cap);
+  const selectedTab = resolveInstructionTab(searchParams.tab, {
+    isAdmin: viewer.role === 'admin',
+    isManager,
+    canViewExams: cap.canViewExaminerInbox || viewer.role === 'admin' || cap.types.has('FE') || cap.types.has('ATC FE'),
+  }, activeSession?.kind);
   const canViewExaminerInbox = cap.canViewExaminerInbox;
   const isAtcTrainingInstructor = cap.isAtcTrainingInstructor;
   const isPilotTrainingInstructor = cap.types.has(LICENCE_FI) || cap.types.has(LICENCE_FE);

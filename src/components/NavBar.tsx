@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import SpaceNavHeader, { SPACE_NAV_BUTTON } from '@/components/SpaceNavHeader';
 import {
   BookOpen, BookUser, LayoutDashboard, FileText, User, Users, LogOut, Radio, Shield,
   ScrollText, ChevronDown, Plane, Building2, Landmark, Package, Mail, Map, CalendarDays,
@@ -206,7 +207,7 @@ export default function NavBar({
 
   return (
     <>
-      <header className="sticky top-0 z-40 border-b border-slate-700/50 bg-[#0b0e1a]"
+      <SpaceNavHeader className="border-slate-700/50 bg-[#0b0e1a]"
         style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.7)' }}
       >
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-2 px-3 sm:px-4">
@@ -396,7 +397,7 @@ export default function NavBar({
             </button>
           </div>
         </div>
-      </header>
+      </SpaceNavHeader>
 
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/*  Dropdown Pilote (desktop) — portail                                */}
@@ -676,7 +677,7 @@ function NavLink({
       href={href}
       title={title}
       className={cn(
-        'flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold border transition-colors whitespace-nowrap shrink-0',
+        SPACE_NAV_BUTTON,
         active ? ACCENT[accent].active : ACCENT[accent].inactive,
       )}
     >

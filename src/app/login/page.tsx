@@ -9,6 +9,7 @@ import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 import PasswordlessLogin from '@/components/PasswordlessLogin';
+import HalloweenAmbience from '@/components/HalloweenAmbience';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -422,6 +423,7 @@ function LoginPageContent() {
 
   return (
     <div className="login-shell min-h-dvh relative flex items-center justify-center px-4 py-3 overflow-x-hidden bg-slate-950">
+      <HalloweenAmbience />
       {fond}
       {overlay}
       

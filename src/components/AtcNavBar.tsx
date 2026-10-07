@@ -2,6 +2,7 @@
 
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
+import SpaceNavHeader, { SPACE_NAV_BUTTON } from '@/components/SpaceNavHeader';
 import { createClient } from '@/lib/supabase/client';
 import {
   Radio, LayoutDashboard, LogOut, FileText, User, ScrollText, Mail, Moon, Sun,
@@ -14,7 +15,7 @@ import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
 import { useEffect, useState, useRef, useTransition } from 'react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
-import { ATC_NAV_BTN, atcNavIdle, atcNavOpen, formatElapsedClock } from '@/lib/atc-ui';
+import { atcNavIdle, atcNavOpen, formatElapsedClock } from '@/lib/atc-ui';
 
 function AtcSessionCompte({ aeroport, position, startedAt, isDark }: { aeroport: string; position: string; startedAt: string; isDark: boolean }) {
   const [now, setNow] = useState(() => new Date());
@@ -117,7 +118,7 @@ export default function AtcNavBar({
     item.href === '/atc' ? pathname === '/atc' : Boolean(pathname?.startsWith(item.href)),
   );
 
-  const linkBase = ATC_NAV_BTN;
+  const linkBase = SPACE_NAV_BUTTON;
   const linkActive = cn('atc-link-active', atcNavOpen(isDark));
   const linkInactive = atcNavIdle(isDark);
 
@@ -133,7 +134,7 @@ export default function AtcNavBar({
   const dropdownItemInactive = isDark ? 'text-slate-300 hover:bg-slate-800' : 'text-slate-700 hover:bg-slate-100';
 
   return (
-    <header className={cn('atc-header sticky top-0 z-50 border-b', headerBg)}>
+    <SpaceNavHeader className={cn('atc-header', headerBg)}>
       <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-14">
         <nav className="flex items-center gap-1.5 min-w-0">
           <Link href="/atc" className="hidden sm:flex items-center gap-2 pr-2 mr-1 border-r border-slate-700/30 shrink-0">
@@ -291,6 +292,6 @@ export default function AtcNavBar({
           )}
         </div>
       )}
-    </header>
+    </SpaceNavHeader>
   );
 }

@@ -36,7 +36,16 @@ export async function PATCH(request: Request) {
     // Si la clé 'completed' n'est pas dans le body, on conservera la valeur existante
     // (un PATCH partiel sur la note ne doit pas décocher le module).
     const hasCompletedKey = Object.prototype.hasOwnProperty.call(body, 'completed');
-    const completedIncoming = hasCompletedKey ? Boolean(body.completed) : undefined;
+    if (hasCompletedKey && typeof body.completed !== 'boolean') {
+      return NextResponse.json({ error: 'completed doit être un booléen.' }, { status: 400 });
+    }
+    if (!hasCompletedKey && !Object.prototype.hasOwnProperty.call(body, 'note')) {
+      return NextResponse.json({ error: 'Indiquez un module à valider ou une note à modifier.' }, { status: 400 });
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'note') && body.note !== null && typeof body.note !== 'string') {
+      return NextResponse.json({ error: 'La note doit être un texte.' }, { status: 400 });
+    }
+    const completedIncoming = hasCompletedKey ? body.completed as boolean : undefined;
     const hasNoteKey = Object.prototype.hasOwnProperty.call(body, 'note');
     const noteIncoming = hasNoteKey ? String(body.note ?? '').trim().slice(0, 4000) : undefined;
 
@@ -49,10 +58,13 @@ export async function PATCH(request: Request) {
 
     const { data: eleve } = await admin
       .from('profiles')
-      .select('id, instructeur_referent_id, formation_instruction_licence')
+      .select('id, instructeur_referent_id, formation_instruction_licence, formation_instruction_active')
       .eq('id', eleveId)
       .single();
     if (!eleve) return NextResponse.json({ error: 'Élève introuvable.' }, { status: 404 });
+    if (!eleve.formation_instruction_active) {
+      return NextResponse.json({ error: 'Cette formation est clôturée.' }, { status: 409 });
+    }
     if (eleve.instructeur_referent_id !== user.id && me?.role !== 'admin') {
       return NextResponse.json({ error: 'Cet élève n’est pas rattaché à vous.' }, { status: 403 });
     }
@@ -65,16 +77,16 @@ export async function PATCH(request: Request) {
 
     // Lire la ligne existante en une fois (utile pour la note ET pour completed).
     type ExistingRow = { note: string | null; completed: boolean | null; completed_at: string | null } | null;
-    const needsExistingRow = noteIncoming === undefined || completedIncoming === undefined;
     let existingRow: ExistingRow = null;
-    if (needsExistingRow) {
-      const { data } = await admin
+    {
+      const { data, error: readError } = await admin
         .from('instruction_progression_items')
         .select('note, completed, completed_at')
         .eq('eleve_id', eleveId)
         .eq('licence_code', licenceCode)
         .eq('module_code', moduleCode)
         .maybeSingle();
+      if (readError) return NextResponse.json({ error: 'Impossible de lire la progression actuelle.' }, { status: 503 });
       existingRow = (data as unknown as ExistingRow) ?? null;
     }
 
@@ -89,7 +101,7 @@ export async function PATCH(request: Request) {
     const completedAt: string | null =
       completedIncoming === undefined
         ? (existingRow?.completed_at ?? (completed ? new Date().toISOString() : null))
-        : (completed ? new Date().toISOString() : null);
+        : (completed ? (existingRow?.completed_at ?? new Date().toISOString()) : null);
 
     const payload = {
       eleve_id: eleveId,

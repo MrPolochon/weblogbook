@@ -57,9 +57,15 @@ export async function PATCH(
     }
 
     if (action === 'set_licence') {
+      if (!eleve.formation_instruction_active) {
+        return NextResponse.json({ error: 'Cette formation est clôturée.' }, { status: 409 });
+      }
       const licenceCode = String(body.licence_code || '').trim();
       if (!INSTRUCTION_LICENCE_CODES.includes(licenceCode)) {
         return NextResponse.json({ error: 'Licence invalide.' }, { status: 400 });
+      }
+      if (me?.role !== 'admin' && !canInstructorManageEleveForFormation(cap, licenceCode)) {
+        return NextResponse.json({ error: 'Vous n’êtes pas habilité pour le nouveau parcours.' }, { status: 403 });
       }
       const { error: setErr } = await admin.from('profiles').update({ formation_instruction_licence: licenceCode }).eq('id', eleveId);
       if (setErr) return NextResponse.json({ error: setErr.message }, { status: 400 });
