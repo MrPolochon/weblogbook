@@ -1486,3 +1486,26 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 @media (max-width: 640px) {
   .login-join-wanderer:hover { transform: translate(-50%, -12px) !important; left: clamp(75px, 50%, calc(100% - 75px)) !important; }
 }
+/* The pointer holds the frightened companion outside its hiding place. */
+.login-join-wanderer:hover {
+  background: #8540bb;
+  border-color: #fff0bd;
+}
+.login-join-wanderer:hover > span:last-child { animation: login-join-shiver .16s linear infinite; }
+.login-join-wanderer:hover .login-join-eyes { animation: login-join-shiver .13s linear infinite; gap: 6px; }
+.login-join-wanderer:hover .login-join-eyes i { transform: scale(1.3, 1.4); }
+.login-join-wanderer:hover .login-join-eyes i::after { transform: translateY(-2px) scale(.45); }
+.login-join-wanderer:hover::after {
+  content: '●'; position: absolute; top: 39px; left: calc(50% - 4px);
+  color: #241039; font-size: 12px; line-height: 8px;
+  transform: scale(.7, 1.4); pointer-events: none;
+}
+@keyframes login-join-shiver {
+  0%, 100% { translate: -1px 0; }
+  25% { translate: 1px -1px; }
+  50% { translate: -1px 1px; }
+  75% { translate: 1px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .login-join-wanderer:hover > span:last-child, .login-join-wanderer:hover .login-join-eyes { animation: none; }
+}
