@@ -14,7 +14,7 @@ test('Halloween audio schedules one loop, pauses in background and releases audi
   async resume() { this.state = 'running'; }
   async suspend() { this.state = 'suspended'; }
   async close() { this.state = 'closed'; }
-  createOscillator() { this.notes++; return { frequency: {}, connect() {}, start() {}, stop() {}, disconnect() {} }; }
+  createOscillator() { this.notes++; return { frequency: { setValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {}, start() {}, stop() {}, disconnect() {} }; }
   createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {}, exponentialRampToValueAtTime() {} }, connect() {}, disconnect() {} }; }
   createDelay() { return { delayTime: {}, connect() {} }; }
  };
@@ -29,6 +29,15 @@ test('Halloween audio schedules one loop, pauses in background and releases audi
   global.document.hidden = true; events.get('visibilitychange')(); assert.equal(ctx.state, 'suspended');
   schedule(); assert.equal(ctx.notes, 40);
   global.document.hidden = false; events.get('visibilitychange')(); await Promise.resolve(); assert.equal(ctx.state, 'running');
+  // Advance through the musical arc. The drop must be fuller, then return to calm.
+  const counts = [];
+  for (let bar = 2; bar < 21; bar++) {
+   const before = ctx.notes; ctx.currentTime = bar * 2.88 - 0.4; schedule(); counts[bar] = ctx.notes - before;
+  }
+  assert.ok(counts[7] > counts[2], 'the build adds rhythmic motion');
+  assert.ok(counts[8] > counts[2], 'the drop adds bass, drums and a lower lead');
+  assert.ok(counts[16] < counts[8], 'the reprise calms down');
+  assert.equal(counts[20], 20, 'the next cycle returns to the original music-box texture');
   cleanup(); assert.equal(ctx.state, 'closed'); assert.equal(cleared, 1); assert.equal(events.size, 0);
  } finally { Object.assign(global, saved); }
 });

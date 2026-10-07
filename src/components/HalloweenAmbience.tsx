@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-/** Original eight-bar miniature in A harmonic minor, synthesized locally. */
+/** Original music-box theme: introduction, build, drop, release and quiet reprise. */
 export default function HalloweenAmbience() {
   useEffect(() => {
     let context: AudioContext | null = null;
@@ -37,21 +37,66 @@ export default function HalloweenAmbience() {
       oscillator.stop(time + duration + 0.05);
       oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
     };
+    const drum = (time: number, volume: number, high = false) => {
+      if (!context || !output) return;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(high ? 240 : 120, time);
+      oscillator.frequency.exponentialRampToValueAtTime(high ? 80 : 38, time + 0.18);
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(volume, time + 0.006);
+      gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.35);
+      oscillator.connect(gain);
+      gain.connect(output);
+      oscillator.start(time);
+      oscillator.stop(time + 0.4);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    };
     const schedule = () => {
       if (!context || context.state !== 'running' || document.hidden) return;
       // Schedule against the audio clock so background pauses never stack loops.
       if (nextBarTime < context.currentTime) nextBarTime = context.currentTime + 0.1;
       while (nextBarTime < context.currentTime + 1) {
-        const bar = bars[barIndex % bars.length];
+        // A complete arc lasts about 58 seconds; the drop resolves before looping.
+        const section = barIndex % 20;
+        const building = section >= 4 && section < 8;
+        const dropping = section >= 8 && section < 12;
+        const releasing = section >= 12 && section < 16;
+        const quiet = section >= 16;
+        const intensity = building ? (section - 3) / 4 : dropping ? 1 : releasing ? (16 - section) / 4 : 0;
+        const bar = bars[(section < 16 ? section : section - 16) % bars.length];
         bar.melody.forEach((pitch, index) => {
           const time = nextBarTime + index * beat;
-          note(pitch, time, 1.5, 0.035);
-          note(pitch + 12, time, 0.65, 0.006); // Soft bell overtone.
+          note(pitch, time, quiet ? 2 : 1.5, quiet ? 0.024 : 0.035);
+          note(pitch + 12, time, 0.65, quiet ? 0.003 : 0.006); // Soft bell overtone.
+          if (dropping || releasing) note(pitch - 12, time, beat * 0.85, 0.022 * intensity, 'triangle', 0.04);
         });
-        bar.chord.forEach(pitch => note(pitch, nextBarTime, beat * 4, 0.007, 'sine', 0.3));
-        note(bar.chord[0] - 12, nextBarTime, beat * 3.8, 0.018, 'triangle', 0.1);
-        for (let index = 0; index < 8; index++) {
-          note(bar.chord[[0, 1, 2, 1, 0, 1, 2, 1][index]] + 12, nextBarTime + index * beat / 2, 0.7, 0.009);
+        bar.chord.forEach(pitch => note(pitch, nextBarTime, beat * 4, 0.007 + intensity * 0.003, 'sine', 0.3));
+        note(bar.chord[0] - 12, nextBarTime, beat * 3.8, quiet ? 0.01 : 0.018, 'triangle', 0.1);
+        const steps = quiet ? 4 : building && section >= 6 ? 16 : 8;
+        for (let index = 0; index < steps; index++) {
+          const pitch = bar.chord[[0, 1, 2, 1][index % 4]] + 12;
+          note(pitch, nextBarTime + index * beat * 4 / steps, 0.7, quiet ? 0.006 : 0.009 + intensity * 0.004);
+        }
+        if (building) {
+          const hits = section === 7 ? 8 : 4;
+          for (let index = 0; index < hits; index++) {
+            drum(nextBarTime + index * beat * 4 / hits, 0.008 + intensity * 0.012, true);
+          }
+          // A rising bell run announces the impact without changing the theme.
+          if (section === 7) [76, 80, 83, 88, 92, 95, 100, 104].forEach((pitch, index) => {
+            note(pitch, nextBarTime + index * beat / 2, 0.5, 0.01 + index * 0.001);
+          });
+        }
+        if (dropping) {
+          [0, 1.5, 2, 3.5].forEach(offset => {
+            drum(nextBarTime + offset * beat, 0.065);
+            note(bar.chord[0] - 24, nextBarTime + offset * beat, beat * 0.8, 0.035, 'sine', 0.02);
+          });
+          [1, 3].forEach(offset => drum(nextBarTime + offset * beat, 0.032, true));
+          // The final bar releases the rhythm, leaving the bell echo and harmony.
+          if (section === 11) note(81, nextBarTime + 3 * beat, beat * 3, 0.028);
         }
         nextBarTime += beat * 4;
         barIndex++;
