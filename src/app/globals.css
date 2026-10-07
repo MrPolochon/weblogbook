@@ -1440,13 +1440,13 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 .login-content:has(.login-join-button:hover) .login-join-wanderer, .login-content:has(.login-join-button:focus-visible) .login-join-wanderer { animation-play-state: paused; }
 @keyframes login-join-roam {
   0%, 100% { left: 48%; top: 65%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
-  6%, 20% { left: 0%; top: 65%; transform: translate(-80%, 0) rotate(-8deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 3; }
+  6%, 20% { left: 0%; top: 65%; transform: translate(-80%, 0) rotate(-8deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 1; }
   26%, 29% { left: 40%; top: 65%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
   30% { left: 60%; top: 35%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
-  36%, 50% { left: 100%; top: 35%; transform: translate(-20%, 0) rotate(8deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 3; }
+  36%, 50% { left: 100%; top: 35%; transform: translate(-20%, 0) rotate(8deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 1; }
   57%, 61% { left: 60%; top: 35%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
   62% { left: 55%; top: 45%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
-  69%, 85% { left: 85%; top: 24%; transform: translate(-50%, -70%) rotate(-4deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 3; }
+  69%, 85% { left: 85%; top: 24%; transform: translate(-50%, -70%) rotate(-4deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 1; }
   94% { left: 55%; top: 45%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
 }
 .login-join-wanderer:hover { animation-play-state: paused; }
@@ -1455,9 +1455,9 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
   .login-join-wanderer { max-width: 130px; }
   @keyframes login-join-roam {
     0%, 27%, 30%, 58%, 62%, 94%, 100% { left: 50%; top: 60%; transform: translate(-50%, 0); opacity: 0; visibility: hidden; pointer-events: none; z-index: 1; }
-    6%, 20% { left: 0%; top: 72%; transform: translate(0, 0) rotate(-5deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 3; }
-    36%, 50% { left: 100%; top: 40%; transform: translate(-100%, 0) rotate(5deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 3; }
-    69%, 85% { left: 75%; top: 28%; transform: translate(-50%, -70%); opacity: 1; visibility: visible; pointer-events: auto; z-index: 3; }
+    6%, 20% { left: 0%; top: 72%; transform: translate(0, 0) rotate(-5deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 1; }
+    36%, 50% { left: 100%; top: 40%; transform: translate(-100%, 0) rotate(5deg); opacity: 1; visibility: visible; pointer-events: auto; z-index: 1; }
+    69%, 85% { left: 75%; top: 28%; transform: translate(-50%, -70%); opacity: 1; visibility: visible; pointer-events: auto; z-index: 1; }
   }
 }
 @keyframes login-join-look { 0%, 100% { transform: translate(0, 0); } 15%, 30% { transform: translate(-3px, -1px); } 45%, 60% { transform: translate(3px, -1px); } 75%, 85% { transform: translate(0, -3px); } }
@@ -1482,3 +1482,9 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 .login-join-wanderer[data-frightened="true"] .login-join-mouth { height: 13px; opacity: 1; box-shadow: inset 0 -3px #e99aaa; }
 @keyframes login-join-shiver { 0%, 100% { transform: translate(-2px, 0) rotate(-2deg); } 50% { transform: translate(2px, 1px) rotate(2deg); } }
 @media (prefers-reduced-motion: reduce) { .login-join-wanderer[data-frightened="true"] .login-join-face { animation: none; } }
+
+/* The escape coordinates are outside the complete panel group, with a 28px gap. */
+.login-join-wanderer[data-frightened="true"] {
+ animation: none; left: var(--join-x) !important; top: var(--join-y) !important;
+ transform: none !important; z-index: 1 !important;
+}
