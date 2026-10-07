@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       excludeCredentials,
       authenticatorSelection: {
         ...(authenticatorAttachment ? { authenticatorAttachment } : {}),
-        residentKey: 'preferred',
+        residentKey: 'required',
         userVerification: 'required',
       },
     });

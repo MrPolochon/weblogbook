@@ -10,6 +10,7 @@ import EquipeTab from './EquipeTab';
 import ModalAvion from './ModalAvion';
 import GatesView from './GatesView';
 import type { ServiceType } from '@/lib/types';
+import GroundQueueSummary from '@/components/GroundQueueSummary';
 import { PLAN_VOL_SOL_SELECT, mapPlanVolSol, type PlanVolSol, type PlanVolSolRow } from '@/lib/ground/plans-vol';
 
 // ── Types exportés ────────────────────────────────────────────────────────────
@@ -251,6 +252,7 @@ export default function GroundDashboard({
 
   return (
     <div className="space-y-4">
+      <GroundQueueSummary aeroport={aeroport} gateQueue={Object.entries(demandes.filter(d=>d.statut==='pending').reduce<Record<string,number>>((counts,d)=>{const gate=plans.find(p=>p.id===d.plan_vol_id)?.porte || 'Porte non renseignée';counts[gate]=(counts[gate]??0)+1;return counts;},{})).map(([gate,pending])=>({gate,pending}))} />
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">

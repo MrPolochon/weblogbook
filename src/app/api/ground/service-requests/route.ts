@@ -25,7 +25,7 @@ export async function GET(request: Request) {
       pilote:profiles!ground_service_requests_pilote_id_fkey(identifiant),
       plan_vol:plans_vol!ground_service_requests_plan_vol_id_fkey(numero_vol, aeroport_depart, aeroport_arrivee)
     `)
-    .order('requested_at', { ascending: false });
+    .order('requested_at', { ascending: false }).limit(500);
 
   if (aeroport) query = query.eq('aeroport', aeroport);
   if (planVolId) query = query.eq('plan_vol_id', planVolId);

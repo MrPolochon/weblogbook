@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { toast } from 'sonner';
 import type { InstructionProgram } from '@/lib/instruction-programs';
 import {
@@ -10,14 +11,15 @@ import {
 } from 'lucide-react';
 import type { ExamRequestMine, ExamRequestAssigned, Eleve, TypeAvion, AvionTemp, AdminOpenDemande, ActiveInstructionSession, AdminStaffReassignPools, AdminExamTrainerConflicts } from './types';
 import MonEspaceTab from './components/MonEspaceTab';
-import FormationTab from './components/FormationTab';
-import ExamensTab from './components/ExamensTab';
-import AdminDemandesTab from './components/AdminDemandesTab';
-import AdminReferentsTab from './components/AdminReferentsTab';
+const FormationTab = dynamic(() => import('./components/FormationTab'));
+const ExamensTab = dynamic(() => import('./components/ExamensTab'));
+const AdminDemandesTab = dynamic(() => import('./components/AdminDemandesTab'));
+const AdminReferentsTab = dynamic(() => import('./components/AdminReferentsTab'));
 
 type TabId = 'espace' | 'formation' | 'examens' | 'admin';
 
 export default function InstructionClient({
+  initialTab = 'espace',
   loadError,
   viewerRole,
   viewerId: _viewerId,
@@ -53,6 +55,7 @@ export default function InstructionClient({
   initialIndisponible,
   activeSession: activeSessionProp = null,
 }: {
+  initialTab?: TabId;
   loadError?: string;
   viewerRole: string;
   viewerId: string;
@@ -103,7 +106,8 @@ export default function InstructionClient({
     return activeSessionProp.kind === 'exam' ? 'examens' : 'espace';
   }, [activeSessionProp]);
 
-  const [activeTab, setActiveTab] = useState<TabId>(() => lockedTab ?? 'espace');
+  const [activeTab, setActiveTab] = useState<TabId>(() => lockedTab ?? initialTab);
+  useEffect(() => { setActiveTab(lockedTab ?? initialTab); }, [initialTab, lockedTab]);
 
   useEffect(() => {
     if (lockedTab) setActiveTab(lockedTab);
@@ -125,7 +129,7 @@ export default function InstructionClient({
       );
       return;
     }
-    setActiveTab(tabId);
+    startTransition(() => router.push('/instruction?tab=' + tabId));
   }
 
   const instructionTitreOptions = useMemo(() => {
@@ -199,6 +203,12 @@ export default function InstructionClient({
       )}
 
       {/* ===== HUD Header aviation ===== */}
+      <section className="rounded-xl border border-sky-800 bg-slate-900 p-4 space-y-2 text-sm">
+        <h2 className="font-semibold text-sky-200">Prochaine étape de votre dossier</h2>
+        <p>{activeSessionProp ? 'Terminez votre session active avant de changer de parcours.' : myFormationActive ? `Module suivant : ${myProgram?.modules.find(m=>!myCompletedSet.has(m.code))?.title || 'Demander un examen avec votre référent'}.` : 'Choisissez un training ou une demande d’examen dans Mon Espace.'}</p>
+        {myInstructorIdentifiant && <p className="text-slate-400">Référent : {myInstructorIdentifiant}. Convenez d’un créneau avant de démarrer la session.</p>}
+        {examRequestsMine.some(r=>['assigne','accepte'].includes(r.statut) && Date.now()-Date.parse(r.updated_at)>7*86400000) && <p className="text-amber-300">Une demande attend depuis plus de 7 jours : contactez votre examinateur pour convenir d’un créneau.</p>}
+      </section>
       <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />

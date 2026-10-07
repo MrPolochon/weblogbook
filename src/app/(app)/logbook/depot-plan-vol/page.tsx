@@ -6,7 +6,7 @@ import { ArrowLeft, Plane, Radio, Compass, Navigation2 } from 'lucide-react';
 import DepotPlanVolForm, { type AvionArmeeItem } from './DepotPlanVolForm';
 import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 
-export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string } }) {
+export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string; duplicate?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -14,6 +14,9 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
   if (profile?.role === 'atc') redirect('/logbook');
 
   const missionId = searchParams?.mission || '';
+  const { data: initialDraft } = searchParams?.duplicate && /^[a-f0-9-]{36}$/i.test(searchParams.duplicate)
+    ? await supabase.from('plans_vol').select('aeroport_depart,aeroport_arrivee,temps_prev_min,type_vol,route_ifr,niveau_croisiere,intentions_vol').eq('id',searchParams.duplicate).eq('pilote_id',user.id).maybeSingle()
+    : { data: null };
 
   // Vérifier si le pilote a déjà un plan actif (accepté, en cours, etc.)
   // Inclure 'en_pause' et 'planifie_suivant' pour bloquer la création d'un autre plan
@@ -251,6 +254,8 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
       </div>
 
       <DepotPlanVolForm 
+        draftKey={`flight-draft:${user.id}`}
+        initialDraft={initialDraft ?? undefined}
         compagniesDisponibles={compagniesDisponibles}
         inventairePersonnel={inventairePersonnel}
         avionsParCompagnie={avionsParCompagnie}

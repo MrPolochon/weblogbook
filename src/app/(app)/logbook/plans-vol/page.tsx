@@ -420,6 +420,7 @@ export default async function MesPlansVolPage() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  <Link href={`/logbook/depot-plan-vol?duplicate=${p.id}`} className="px-3 py-1.5 rounded-lg border border-sky-700 text-sky-200 text-sm">Reprendre cette route</Link>
                   <Link
                     href={`/logbook/nouveau?plan=${p.id}`}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"

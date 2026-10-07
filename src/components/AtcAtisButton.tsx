@@ -1,5 +1,9 @@
 'use client';
 
+import { getSharedAtisOverview, subscribeAtisPolling } from '@/lib/atis-overview-client';
+import AtisDraftPreview from '@/components/AtisDraftPreview';
+import { fetchJson } from '@/lib/fetch-json';
+
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   Radio,
@@ -136,7 +140,7 @@ interface AtcAtisButtonProps {
 const CODE_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const ATIS_VALID_MINUTES = 60;
 const ATIS_WARN_MINUTES = 50;
-const POLL_MS = 5000;
+
 
 type Tab = 'status' | 'config' | 'data';
 
@@ -329,14 +333,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   const fetchOverview = useCallback(async () => {
     setOverviewLoading(true);
     try {
-      const res = await fetch('/api/atc/atis/overview', { cache: 'no-store' });
-      const data: OverviewResponse | { error?: string } = await res.json();
-      if (res.ok && 'instances' in data) {
+      const data = await getSharedAtisOverview<OverviewResponse>();
+      if ('instances' in data) {
         setOverview(data);
         setOverviewLastFetch(Date.now());
         setRetryCount(0);
       } else {
-        setError((data as { error?: string }).error || `Erreur ${res.status}`);
+        setError('État ATIS indisponible.');
       }
     } catch {
       setError('Erreur réseau (overview)');
@@ -367,11 +370,13 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
     }
   }, []);
 
+  const dataInFlight = useRef(false);
   const fetchAtisData = useCallback(async () => {
+    if (dataInFlight.current) return null;
+    dataInFlight.current = true;
     try {
-      const res = await fetch('/api/atc/atis/atis-data');
-      const data = await res.json();
-      if (res.ok && !data?.error) {
+      const data = await fetchJson<AtisData & { tma_airports?: Array<{ icao?: string; name?: string; runways?: string; condition?: string; approach?: string }> }>('/api/atc/atis/atis-data');
+      {
         let nextTma = tmaDraft;
         if (Array.isArray(data.tma_airports) && data.tma_airports.length) {
           const hasLocalRunways = tmaDraft.some((a) => a.included && a.runways.trim());
@@ -398,7 +403,9 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
         return data as AtisData;
       }
     } catch {
-      /* ignore */
+      setError('Les données ATIS n’ont pas pu être actualisées. Le brouillon a été conservé.');
+    } finally {
+      dataInFlight.current = false;
     }
     return null;
   }, [tmaDraft, tmaCatalog, atisKind]);
@@ -407,9 +414,7 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
   // Polling
   // ---------------------------------------------------------------------------
   useEffect(() => {
-    fetchOverview();
-    const itv = setInterval(fetchOverview, POLL_MS);
-    return () => clearInterval(itv);
+    return subscribeAtisPolling(() => { void fetchOverview(); });
   }, [fetchOverview]);
 
   useEffect(() => {
@@ -420,10 +425,10 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
   useEffect(() => {
     if (isOpen && tab === 'data') {
-      if (broadcasting && !atisDirty) void fetchAtisData();
+      if (document.visibilityState !== 'hidden' && broadcasting && !atisDirty) void fetchAtisData();
       const itv = setInterval(() => {
-        if (broadcasting && !atisDirty) void fetchAtisData();
-      }, POLL_MS);
+        if (document.visibilityState !== 'hidden' && broadcasting && !atisDirty) void fetchAtisData();
+      }, 5000);
       return () => clearInterval(itv);
     }
   }, [isOpen, tab, fetchAtisData, broadcasting, atisDirty]);
@@ -893,6 +898,17 @@ export default function AtcAtisButton({ aeroport, position, userId }: AtcAtisBut
 
       {/* Body */}
       <div className={`flex-1 overflow-y-auto p-4 space-y-3 text-base ${isDark ? 'text-slate-100' : 'text-slate-100'}`}>
+        <ol className="grid grid-cols-3 gap-2 text-xs" aria-label="Étapes de préparation ATIS">
+          <li><button type="button" onClick={()=>setTab('config')} className="w-full rounded border border-slate-600 p-2">1. Serveur et salon {targetBotConfigured ? '✓' : ''}</button></li>
+          <li><button type="button" onClick={()=>setTab('data')} className="w-full rounded border border-slate-600 p-2">2. {atisKind==='tma'?'FIR et pistes TMA':'Piste et météo'} {draftReady ? '✓' : ''}</button></li>
+          <li><button type="button" onClick={()=>setTab('status')} className="w-full rounded border border-slate-600 p-2">3. Contrôler et diffuser</button></li>
+        </ol>
+        {tab === 'data' && <AtisDraftPreview ready={draftReady} text={[
+          atisKind === 'tma' ? tmaIntroPreview(myFir ?? aeroportCode, tmaDraft) : `${aeroportCode} information ${atisData?.information_code || 'Alpha'}.`,
+          atisKind === 'tma' ? '' : `Runway ${atisData?.runway || 'not set'}. Expected approach ${atisData?.expected_approach || 'not set'}.`,
+          `Wind ${atisData?.wind || 'not set'}. Visibility ${atisData?.cavok ? 'CAVOK' : atisData?.visibility || 'not set'}. Temperature ${atisData?.temperature || 'not set'}. QNH ${atisData?.qnh || 'not set'}.`,
+          atisData?.remarks || '',
+        ].filter(Boolean).join('\n')} />}
         {error && (
           <p
             className={`text-sm font-medium px-3 py-2 rounded-lg border ${

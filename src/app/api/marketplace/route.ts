@@ -2,9 +2,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { isChefDeBrigade, getSiaviCompte } from '@/lib/siavi/permissions';
-import { refreshMarketplaceRuptures, isTypeAvionEnRupture } from '@/lib/marketplace/ruptures';
+import { isTypeAvionEnRupture } from '@/lib/marketplace/ruptures';
 
 // GET - Liste des avions disponibles à l'achat
 export async function GET() {
@@ -14,7 +14,6 @@ export async function GET() {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
-    await refreshMarketplaceRuptures(admin);
     const { data, error } = await admin.from('types_avion')
       .select('*')
       .gt('prix', 0)
@@ -36,7 +35,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const rl = rateLimit(`marketplace:${user.id}`, 10, 60_000);
+    const rl = await rateLimitShared(`marketplace:${user.id}`, 10, 60_000);
     if (!rl.allowed) return NextResponse.json({ error: 'Trop d\'achats, réessayez dans une minute' }, { status: 429 });
 
     const body = await req.json();

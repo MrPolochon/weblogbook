@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
-    const rl = rateLimit(`recrutement-post:${user.id}`, 10, 60_000);
+    const rl = await rateLimitShared(`recrutement-post:${user.id}`, 10, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: 'Trop d’invitations. Réessayez dans une minute.' }, { status: 429 });
     }

@@ -364,17 +364,19 @@ export async function finaliserContributions(
   montantTotal: number
 ): Promise<void> {
   // Mettre à jour le score du GC actif
-  await admin
+  const { error: scoreError } = await admin
     .from('ground_crew_service_contributions')
     .update({ score_minijeu: scoreMiniJeu })
     .eq('service_request_id', serviceRequestId)
     .eq('user_id', userId);
+  if (scoreError) throw new Error('Enregistrement du score indisponible.');
 
   // Récupérer toutes les contributions
-  const { data: contributions } = await admin
+  const { data: contributions, error: contributionsError } = await admin
     .from('ground_crew_service_contributions')
     .select('user_id, score_minijeu')
     .eq('service_request_id', serviceRequestId);
+  if (contributionsError) throw new Error('Contributions indisponibles.');
 
   if (!contributions || contributions.length === 0) return;
 
@@ -385,11 +387,12 @@ export async function finaliserContributions(
 
   // Mettre à jour les montants perçus
   for (const { user_id, montant } of distribution) {
-    await admin
+    const { error: paymentError } = await admin
       .from('ground_crew_service_contributions')
       .update({ montant_percu: montant, completed_at: new Date().toISOString() })
       .eq('service_request_id', serviceRequestId)
       .eq('user_id', user_id);
+    if (paymentError) throw new Error('Répartition du paiement indisponible.');
   }
 }
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { refreshMarketplaceRuptures } from '@/lib/marketplace/ruptures';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,9 @@ async function run() {
     admin.rpc('regenerer_passagers_aeroport'),
     admin.rpc('regenerer_cargo_aeroport'),
   ]);
+  await refreshMarketplaceRuptures(admin);
+  // Expired anonymous challenges have no further authentication value.
+  await admin.from('passkey_login_challenges').delete().lt('expires_at', new Date(Date.now()-86400000).toISOString());
   return {
     passagers: pax.error ? { ok: false as const, error: pax.error.message } : { ok: true as const },
     cargo: cargo.error ? { ok: false as const, error: cargo.error.message } : { ok: true as const },

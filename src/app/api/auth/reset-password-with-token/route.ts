@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 /**
  * POST body: { token: string, new_password: string }
@@ -10,7 +10,7 @@ import { rateLimit } from '@/lib/rate-limit';
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
-    const { allowed } = rateLimit(`reset-pwd:${ip}`, 5, 15 * 60 * 1000);
+    const { allowed } = await rateLimitShared(`reset-pwd:${ip}`, 5, 15 * 60 * 1000);
     if (!allowed) {
       return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans quelques minutes.' }, { status: 429 });
     }

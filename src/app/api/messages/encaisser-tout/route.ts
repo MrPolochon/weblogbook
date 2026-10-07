@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { getComptePersonnelCanonique, ensureComptePersonnel } from '@/lib/felitz/ensure-comptes';
 import {
   CHEQUE_MESSAGE_TYPES,
@@ -16,7 +16,7 @@ export async function POST() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const rl = rateLimit(`encaisser:${user.id}`, 5, 60_000);
+    const rl = await rateLimitShared(`encaisser:${user.id}`, 5, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: 'Trop de requêtes, réessayez dans une minute' }, { status: 429 });
     }

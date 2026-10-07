@@ -21,7 +21,7 @@ import {
 } from '@/lib/instruction-admin-staff-pools';
 import type { AdminExamTrainerConflicts, AdminStaffReassignPools } from '@/lib/instruction-admin-staff-pools';
 
-export default async function InstructionPage() {
+export default async function InstructionPage({ searchParams }: { searchParams: { tab?: string; history?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -61,6 +61,9 @@ export default async function InstructionPage() {
   };
 
   const cap = await getInstructionCapabilities(admin, user.id, viewer.role);
+  const activeSession = await getActiveInstructionSessionForAssignee(admin, user.id);
+  const requestedTab = ['espace','formation','examens','admin'].includes(searchParams.tab ?? '') ? searchParams.tab! : 'espace';
+  const selectedTab = activeSession && !(requestedTab === 'admin' && viewer.role === 'admin') ? (activeSession.kind === 'exam' ? 'examens' : 'espace') : requestedTab;
   const isManager = canAccessInstructionManagerTools(cap);
   const canViewExaminerInbox = cap.canViewExaminerInbox;
   const isAtcTrainingInstructor = cap.isAtcTrainingInstructor;
@@ -74,7 +77,7 @@ export default async function InstructionPage() {
 
   const canGrantTitreInstructionFlight = viewer.role === 'admin' || cap.types.has('FE');
   const canGrantTitreInstructionAtc = viewer.role === 'admin' || cap.types.has('ATC FE');
-  const showTitreDelivrance = canGrantTitreInstructionFlight || canGrantTitreInstructionAtc;
+  const showTitreDelivrance = selectedTab === 'examens' && (canGrantTitreInstructionFlight || canGrantTitreInstructionAtc);
   const titresCiblesPilotesQuery = showTitreDelivrance
     ? viewer.role === 'admin'
       ? admin.from('profiles').select('id, identifiant').order('identifiant', { ascending: true })
@@ -88,7 +91,9 @@ export default async function InstructionPage() {
 
   // Batch all independent queries together
   const [typesAvionResult, instructorProfileResult, examMineResult, progressionResult, elevesResult, titresCiblesResult] = await Promise.all([
-    admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true }),
+    selectedTab === 'examens' || selectedTab === 'formation' || activeSession
+      ? admin.from('types_avion').select('id, nom, constructeur, code_oaci').order('ordre', { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
     viewer.instructeur_referent_id
       ? admin.from('profiles').select('identifiant').eq('id', viewer.instructeur_referent_id).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
@@ -104,7 +109,7 @@ export default async function InstructionPage() {
           .eq('eleve_id', user.id)
           .eq('licence_code', viewer.formation_instruction_licence)
       : Promise.resolve({ data: [] as Array<Record<string, unknown>>, error: null }),
-    isManager
+    isManager && selectedTab === 'formation'
       ? admin
           .from('profiles')
           .select('id, identifiant, formation_instruction_active, formation_instruction_licence, created_at')
@@ -160,7 +165,7 @@ export default async function InstructionPage() {
 
   const isStaffAdmin = viewer.role === 'admin';
 
-  const examAssignedResult = canViewExaminerInbox
+  const examAssignedResult = canViewExaminerInbox && selectedTab === 'examens'
     ? await admin
         .from('instruction_exam_requests')
         .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant)')
@@ -168,7 +173,7 @@ export default async function InstructionPage() {
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
 
-  const examStaffOpenResult = isStaffAdmin
+  const examStaffOpenResult = isStaffAdmin && selectedTab === 'admin'
     ? await admin
         .from('instruction_exam_requests')
         .select('id, requester_id, licence_code, instructeur_id, statut, message, response_note, resultat, dossier_conserve, licence_creee_id, created_at, updated_at, requester:profiles!instruction_exam_requests_requester_id_fkey(identifiant), instructeur:profiles!instruction_exam_requests_instructeur_id_fkey(identifiant)')
@@ -176,7 +181,7 @@ export default async function InstructionPage() {
         .order('created_at', { ascending: false })
     : { data: [] as Array<Record<string, unknown>>, error: null };
 
-  const [pilotStaffOpenResult, atcStaffOpenResult] = isStaffAdmin
+  const [pilotStaffOpenResult, atcStaffOpenResult] = isStaffAdmin && selectedTab === 'admin'
     ? await Promise.all([
         admin
           .from('instruction_pilot_training_requests')
@@ -236,7 +241,6 @@ export default async function InstructionPage() {
 
   const loadError = errors.length > 0 ? errors.join(' · ') : undefined;
 
-  const activeSession = await getActiveInstructionSessionForAssignee(admin, user.id);
 
   const titresCiblesPilotes = (titresCiblesResult.data || []) as Array<{ id: string; identifiant: string }>;
 
@@ -252,7 +256,7 @@ export default async function InstructionPage() {
   let adminOpenDemandes: AdminOpenDemande[] = [];
   let adminStaffPools: AdminStaffReassignPools = EMPTY_POOLS;
   let adminExamTrainerConflicts: AdminExamTrainerConflicts = {};
-  if (isStaffAdmin) {
+  if (isStaffAdmin && selectedTab === 'admin') {
     const adminProfileIds = new Set<string>();
     for (const r of examStaffOpen || []) {
       if (r.requester_id) adminProfileIds.add(r.requester_id as string);
@@ -352,6 +356,7 @@ export default async function InstructionPage() {
 
   return (
     <InstructionClient
+      initialTab={selectedTab as 'espace' | 'formation' | 'examens' | 'admin'}
       loadError={loadError}
       viewerRole={viewer.role}
       viewerId={viewer.id}

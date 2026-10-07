@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { applyRateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 /**
  * GET /api/notifications
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
-    const rl = applyRateLimit(request, 'notifications', user.id);
+    const rl = await rateLimitShared('notifications:' + user.id, 30, 60000);
     if (!rl.allowed) {
       return NextResponse.json(
         { error: 'Trop de requêtes' },

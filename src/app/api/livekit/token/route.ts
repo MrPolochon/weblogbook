@@ -3,7 +3,7 @@ import { AccessToken } from 'livekit-server-sdk';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createBrowserClient } from '@supabase/supabase-js';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders });
     }
 
-    const rl = rateLimit(`livekit:${user.id}`, 20, 60_000);
+    const rl = await rateLimitShared(`livekit:${user.id}`, 20, 60_000);
     if (!rl.allowed) return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429, headers: corsHeaders });
 
     const body = await request.json();

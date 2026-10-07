@@ -985,6 +985,12 @@ export async function envoyerChequesVol(
   }
 
   console.log(`${logRef} envoyerChequesVol terminé ✓ (salaire=${salaireEffectif}, revenuCompagnie=${revenuLocataire}, taxes=${taxesReellementPrelevees})`);
+  // Store the actual distribution for future dashboards; never invent historical net income.
+  const { error: revenueError } = await admin.from('plans_vol').update({
+    revenue_effectif: revenuEffectif,
+    revenue_net: revenuLocataire,
+  }).eq('id', plan.id);
+  if (revenueError) console.error(`${logRef} Traçabilité des revenus indisponible:`, revenueError.message);
   return {
     success: true,
     revenus: {

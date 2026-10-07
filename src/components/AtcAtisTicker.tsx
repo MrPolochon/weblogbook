@@ -1,11 +1,13 @@
 'use client';
 
+import { getSharedAtisOverview, subscribeAtisPolling } from '@/lib/atis-overview-client';
+
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 
 const TICKER_INTERVAL_MS = 30000;
-const POLL_INTERVAL_MS = 8000;
+
 
 interface OverviewLite {
   any_broadcasting?: boolean;
@@ -25,9 +27,8 @@ export default function AtcAtisTicker() {
   const fetchStatus = async () => {
     try {
       // Utilise l'endpoint consolide /overview qui retourne deja le focused atis_text.
-      const res = await fetch('/api/atc/atis/overview');
-      const data: OverviewLite = await res.json();
-      if (res.ok) {
+      const data = await getSharedAtisOverview<OverviewLite>();
+      {
         // Champ legacy "broadcasting" = focused mine ou 1ere active.
         // Pour le ticker, on utilise any_broadcasting pour afficher le texte
         // meme si l'ATC ne controle aucun ATIS (info pour les autres).
@@ -41,9 +42,7 @@ export default function AtcAtisTicker() {
   };
 
   useEffect(() => {
-    fetchStatus();
-    const interval = setInterval(fetchStatus, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    return subscribeAtisPolling(() => { void fetchStatus(); });
   }, []);
 
   const toggleTicker = async () => {

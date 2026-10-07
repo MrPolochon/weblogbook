@@ -9,6 +9,7 @@ import {
   hasDiscordOAuthConfig,
 } from '@/lib/discord-link';
 import { refreshDiscordLinkState, upsertDiscordLinkState } from '@/lib/discord-link-service';
+import { createSessionFromVerifiedIdentity } from '@/lib/auth/session-from-identity';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,7 @@ type DiscordUserResponse = {
 };
 
 function clearDiscordCookies(response: NextResponse) {
+  response.cookies.set('discord_oauth_login', '', { path: '/', maxAge: 0 });
   response.cookies.set(DISCORD_OAUTH_STATE_COOKIE, '', { path: '/', maxAge: 0 });
   response.cookies.set(DISCORD_OAUTH_RETURN_COOKIE, '', { path: '/', maxAge: 0 });
 }
@@ -49,9 +51,9 @@ export async function GET(request: Request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) return NextResponse.redirect(new URL('/login', request.url));
-
   const cookieStore = await cookies();
+  const loginMode = cookieStore.get('discord_oauth_login')?.value === '1';
+  if (!user && !loginMode) return NextResponse.redirect(new URL('/login', request.url));
   const expectedState = cookieStore.get(DISCORD_OAUTH_STATE_COOKIE)?.value;
   const cookieReturnTo = cookieStore.get(DISCORD_OAUTH_RETURN_COOKIE)?.value || '/discord-obligatoire';
   // Empêche les open redirects : '//attaquant.com' commence par '/' mais résout sur un autre host.
@@ -100,6 +102,20 @@ export async function GET(request: Request) {
       .select('user_id')
       .eq('discord_user_id', discordUser.id)
       .maybeSingle();
+
+    if (loginMode) {
+      if (!existing?.user_id) {
+        const res = NextResponse.redirect(new URL('/login?message=discord-not-linked', request.url));
+        clearDiscordCookies(res);
+        return res;
+      }
+      await createSessionFromVerifiedIdentity(existing.user_id);
+      const res = NextResponse.redirect(new URL('/login?step=verify', request.url));
+      clearDiscordCookies(res);
+      res.cookies.set('pending_login_verification','1',{path:'/',sameSite:'lax',secure:requestUrl.protocol==='https:',maxAge:600});
+      return res;
+    }
+    if (!user) return redirectWithError('oauth_invalid');
 
     if (existing?.user_id && existing.user_id !== user.id) {
       return redirectWithError('already_linked');

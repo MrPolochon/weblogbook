@@ -193,6 +193,7 @@ async function runMiddleware(request: NextRequest) {
   const isCalendrier = pathname === '/calendrier' || pathname === '/api/calendrier';
   const isAuthCallback = pathname.startsWith('/auth/');
   const isApiPublic =
+    pathname === '/api/webhooks/resend' ||
     pathname === '/api/setup' ||
     pathname === '/api/has-admin' ||
     pathname === '/api/site-config' ||

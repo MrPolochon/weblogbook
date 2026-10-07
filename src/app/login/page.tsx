@@ -6,8 +6,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { identifiantToEmail } from '@/lib/constants';
 import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
-import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Waves, Wind, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays } from 'lucide-react';
+import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
+import PasswordlessLogin from '@/components/PasswordlessLogin';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
 
@@ -30,247 +31,6 @@ function isSafeRedirectPath(p: string | null | undefined): p is string {
   return typeof p === 'string' && p.startsWith('/') && !p.startsWith('//') && !p.includes('\\');
 }
 
-/* ── Étoiles scintillantes ── */
-// Stable on server and client to avoid replacing the page during hydration.
-function decorValue(seed: number) {
-  return ((seed * 9301 + 49297) % 233280) / 233280;
-}
-
-function TwinklingStars() {
-  const stars = useMemo(() =>
-    Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      left: decorValue(i * 7) * 100,
-      top: decorValue(i * 7 + 1) * 55,
-      size: 1 + decorValue(i * 7 + 2) * 1.5,
-      duration: 2 + decorValue(i * 7 + 3) * 4,
-      delay: decorValue(i * 7 + 4) * 6,
-    })), []);
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {stars.map((s) => (
-        <div key={s.id} className="absolute rounded-full bg-white animate-twinkle"
-          style={{ left: `${s.left}%`, top: `${s.top}%`, width: `${s.size}px`, height: `${s.size}px`, animationDuration: `${s.duration}s`, animationDelay: `${s.delay}s` }} />
-      ))}
-    </div>
-  );
-}
-
-/* ── Nuages en deux couches parallax ── */
-function ParallaxClouds() {
-  const layer1 = useMemo(() => Array.from({ length: 5 }, (_, i) => ({
-    id: i, size: 80 + decorValue(i * 11) * 80, top: 8 + decorValue(i * 11 + 1) * 35,
-    duration: 30 + decorValue(i * 11 + 2) * 25, delay: decorValue(i * 11 + 3) * -40, opacity: 0.04 + decorValue(i * 11 + 4) * 0.04,
-  })), []);
-  const layer2 = useMemo(() => Array.from({ length: 4 }, (_, i) => ({
-    id: i + 10, size: 50 + decorValue(i * 13 + 50) * 60, top: 15 + decorValue(i * 13 + 51) * 45,
-    duration: 50 + decorValue(i * 13 + 52) * 30, delay: decorValue(i * 13 + 53) * -55, opacity: 0.02 + decorValue(i * 13 + 54) * 0.03,
-  })), []);
-  const CloudSVG = ({ w, h }: { w: number; h: number }) => (
-    <svg viewBox="0 0 160 80" width={w} height={h} className="fill-white">
-      <ellipse cx="40" cy="55" rx="35" ry="22" />
-      <ellipse cx="75" cy="45" rx="42" ry="28" />
-      <ellipse cx="115" cy="52" rx="32" ry="20" />
-      <ellipse cx="90" cy="62" rx="38" ry="16" />
-      <ellipse cx="55" cy="60" rx="28" ry="14" />
-    </svg>
-  );
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {[...layer1, ...layer2].map((c) => (
-        <div key={c.id} className="absolute animate-cloud"
-          style={{ top: `${c.top}%`, opacity: c.opacity, animationDuration: `${c.duration}s`, animationDelay: `${c.delay}s` }}>
-          <CloudSVG w={c.size} h={c.size * 0.5} />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Avions multiples avec traînées de condensation ── */
-function MultipleAircrafts() {
-  const planes = useMemo(() => [
-    { id: 1, top: '9%',  size: 18, duration: 22, delay: 0,   dir: 1, angle: -8,  color: 'white/50', contrailW: 180 },
-    { id: 2, top: '18%', size: 12, duration: 38, delay: -12, dir: 1, angle: -5,  color: 'cyan-100/40', contrailW: 140 },
-    { id: 3, top: '28%', size: 9,  duration: 55, delay: -28, dir: -1, angle: 6, color: 'white/30', contrailW: 100 },
-    { id: 4, top: '14%', size: 14, duration: 30, delay: -18, dir: 1, angle: -10, color: 'amber-100/40', contrailW: 160 },
-  ], []);
-
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      {planes.map((p) => (
-        <div key={p.id} className="absolute w-full"
-          style={{ top: p.top, animation: `${p.dir > 0 ? 'plane-drift' : 'plane-drift-rev'} ${p.duration}s linear ${p.delay}s infinite` }}>
-          <div className="flex items-center" style={{ transform: `rotate(${p.dir > 0 ? p.angle : -p.angle}deg)` }}>
-            {p.dir < 0 && (
-              <div className="h-px bg-gradient-to-l from-white/50 to-transparent animate-contrail-fade"
-                style={{ width: p.contrailW, animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s` }} />
-            )}
-            <Plane className={`shrink-0 text-${p.color}`} style={{ width: p.size, height: p.size, transform: p.dir < 0 ? 'scaleX(-1)' : undefined }} />
-            {p.dir > 0 && (
-              <div className="h-px bg-gradient-to-r from-white/50 to-transparent animate-contrail-fade"
-                style={{ width: p.contrailW, animationDuration: `${p.duration}s`, animationDelay: `${p.delay}s` }} />
-            )}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Radar en coin bas-gauche ── */
-function RadarCorner() {
-  const blips = useMemo(() => [
-    { cx: 48, cy: 32, delay: '0.5s' },
-    { cx: 62, cy: 55, delay: '1.8s' },
-    { cx: 30, cy: 50, delay: '3.2s' },
-    { cx: 55, cy: 42, delay: '2.4s' },
-  ], []);
-  return (
-    <div className="absolute bottom-20 left-6 pointer-events-none hidden sm:block" style={{ opacity: 0.22 }}>
-      <svg width="90" height="90" viewBox="0 0 90 90">
-        {/* Cercles concentriques */}
-        {[40, 30, 20, 10].map((r) => (
-          <circle key={r} cx="45" cy="45" r={r} fill="none" stroke="#22d3ee" strokeWidth="0.6" opacity="0.6" />
-        ))}
-        {/* Crosshairs */}
-        <line x1="45" y1="5" x2="45" y2="85" stroke="#22d3ee" strokeWidth="0.5" opacity="0.4" />
-        <line x1="5" y1="45" x2="85" y2="45" stroke="#22d3ee" strokeWidth="0.5" opacity="0.4" />
-        {/* Sweep */}
-        <g style={{ transformOrigin: '45px 45px', animation: 'radar-rotate 4s linear infinite' }}>
-          <line x1="45" y1="45" x2="45" y2="5" stroke="#22d3ee" strokeWidth="1.5" opacity="0.9" />
-          <path d="M45 45 L55 10 A40 40 0 0 0 45 5 Z" fill="url(#sweep)" opacity="0.35" />
-          <defs>
-            <radialGradient id="sweep" cx="50%" cy="100%" r="100%">
-              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
-            </radialGradient>
-          </defs>
-        </g>
-        {/* Blips */}
-        {blips.map((b, i) => (
-          <circle key={i} cx={b.cx} cy={b.cy} r="2.5" fill="#4ade80"
-            style={{ animation: `radar-blip 4s ease-out ${b.delay} infinite` }} />
-        ))}
-        {/* Cadre */}
-        <circle cx="45" cy="45" r="42" fill="none" stroke="#22d3ee" strokeWidth="1" opacity="0.5" />
-      </svg>
-      <p className="text-[8px] font-mono text-cyan-300/60 text-center mt-1 tracking-widest">RADAR</p>
-    </div>
-  );
-}
-
-/* ── HUD overlay : grille, niveaux de vol, indicateurs ── */
-function HUDOverlay() {
-  return (
-    <div className="absolute inset-0 pointer-events-none overflow-hidden">
-      {/* Scanline très subtile */}
-      <div className="absolute left-0 right-0 h-px bg-gradient-to-r from-transparent via-cyan-400/12 to-transparent animate-hud-scanline" />
-      {/* Lignes de niveaux de vol horizontales */}
-      {[22, 38, 52, 66].map((pct, i) => (
-        <div key={i} className="absolute left-0 right-0 h-px animate-altitude-pulse"
-          style={{ top: `${pct}%`, background: 'linear-gradient(90deg,transparent 0%,rgba(34,211,238,0.15) 20%,rgba(34,211,238,0.08) 80%,transparent 100%)',
-            animationDelay: `${i * 1.1}s` }} />
-      ))}
-      {/* Labels FL discrets */}
-      <div className="absolute left-3 top-[22%] text-[8px] font-mono text-cyan-400/20 tracking-widest">FL 300</div>
-      <div className="absolute left-3 top-[38%] text-[8px] font-mono text-cyan-400/20 tracking-widest">FL 200</div>
-      <div className="absolute left-3 top-[52%] text-[8px] font-mono text-cyan-400/20 tracking-widest">FL 100</div>
-      {/* Coins HUD */}
-      {[
-        'top-4 left-4 border-t border-l',
-        'top-4 right-4 border-t border-r',
-        'bottom-4 left-4 border-b border-l',
-        'bottom-4 right-4 border-b border-r',
-      ].map((cls, i) => (
-        <div key={i} className={`absolute w-8 h-8 border-cyan-400/15 ${cls}`} />
-      ))}
-      {/* Cap magnétique en haut */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex items-center gap-1 opacity-20">
-        {['270','280','290','300','N','310','320','330','340'].map((h, i) => (
-          <span key={i} className={`text-[7px] font-mono ${h === 'N' ? 'text-amber-300 text-[9px] font-bold' : 'text-cyan-300'} tracking-wider`}>{h}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Lumières de navigation (bord de piste) ── */
-function NavigationLights() {
-  const lights = useMemo(() => Array.from({ length: 22 }, (_, i) => {
-    const type = i % 4 === 0 ? 'red' : i % 4 === 2 ? 'green' : 'white';
-    return { id: i, left: (i / 21) * 100, type, delay: `${(i * 0.15) % 2}s` };
-  }), []);
-  const colorMap = { red: '#ef4444', green: '#22c55e', white: '#e2e8f0' };
-  const animMap = { red: 'animate-nav-red', green: 'animate-nav-green', white: 'animate-nav-white' };
-  return (
-    <div className="absolute bottom-0 left-0 right-0 h-12 pointer-events-none">
-      <div className="absolute bottom-4 left-0 right-0 flex justify-between px-4">
-        {lights.map((l) => (
-          <div key={l.id} className={`rounded-full ${animMap[l.type as keyof typeof animMap]}`}
-            style={{ width: 3, height: 3, background: colorMap[l.type as keyof typeof colorMap],
-              boxShadow: `0 0 6px 2px ${colorMap[l.type as keyof typeof colorMap]}`, animationDelay: l.delay }} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── Balises VOR ── */
-function VORBeacons() {
-  const beacons = useMemo(() => [
-    { left: '12%', top: '72%', label: 'IRF' },
-    { left: '82%', top: '65%', label: 'ITK' },
-    { left: '48%', top: '80%', label: 'IPP' },
-  ], []);
-  return (
-    <div className="absolute inset-0 pointer-events-none hidden sm:block">
-      {beacons.map((b, i) => (
-        <div key={b.label} className="absolute" style={{ left: b.left, top: b.top }}>
-          <div className="relative flex items-center justify-center">
-            <div className="absolute rounded-full border border-cyan-400/30 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${decorValue(i)}s` }} />
-            <div className="absolute rounded-full border border-cyan-400/20 w-8 h-8 animate-vor-pulse" style={{ animationDelay: `${0.8 + decorValue(i + 10)}s` }} />
-            <div className="w-1.5 h-1.5 rounded-full bg-cyan-400/50" />
-          </div>
-          <p className="text-[7px] font-mono text-cyan-300/30 text-center mt-1 tracking-widest">{b.label}</p>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-/* ── Déco été (soleil + vagues + palmiers) ── */
-function SummerUpdateDecor() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none">
-      <div className="absolute -top-20 -right-16 h-72 w-72 rounded-full bg-gradient-to-br from-amber-200/35 via-orange-300/20 to-transparent blur-2xl" />
-      <div className="absolute right-8 top-10 hidden sm:flex h-24 w-24 items-center justify-center rounded-full border border-amber-200/30 bg-amber-300/10 shadow-[0_0_80px_rgba(251,191,36,0.35)] backdrop-blur-sm">
-        <Sun className="h-12 w-12 text-amber-200/80 animate-pulse-soft" />
-      </div>
-      <div className="absolute -bottom-20 left-0 right-0 h-48 bg-gradient-to-t from-cyan-500/25 via-sky-400/10 to-transparent" />
-      <div className="absolute bottom-6 left-1/2 flex w-[120vw] -translate-x-1/2 items-center justify-center gap-8 text-cyan-100/20">
-        {Array.from({ length: 9 }, (_, i) => (
-          <Waves key={i} className="h-10 w-24 animate-float" style={{ animationDelay: `${i * 0.18}s` }} />
-        ))}
-      </div>
-      {/* Palmiers décoratifs */}
-      <div
-        className="animate-palm-sway"
-        aria-hidden="true"
-        style={{ position: 'absolute', bottom: 0, left: '-8px', fontSize: '64px', opacity: 0.18, transformOrigin: 'bottom center' }}
-      >🌴</div>
-      <div
-        className="animate-palm-sway"
-        aria-hidden="true"
-        style={{ position: 'absolute', bottom: 0, right: '-8px', fontSize: '64px', opacity: 0.18, transform: 'scaleX(-1)', transformOrigin: 'bottom center', animationDelay: '1.5s' }}
-      >🌴</div>
-      {/* Traînées de condensation */}
-      <div className="contrail c1" aria-hidden="true" />
-      <div className="contrail c2" aria-hidden="true" />
-    </div>
-  );
-}
-
 /** Fallback local si l'API /login-logo est indisponible */
 const LOGIN_LOGO_FALLBACKS = ['/mixou-bg.png', '/ptfs-logo.jpg', '/ptfs-map.png'];
 async function fetchLogoImage(): Promise<string> {
@@ -288,9 +48,9 @@ function LoginPageFallback() {
   return (
     <div className="min-h-screen relative flex items-center justify-center">
       <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: 'url(/mixou-bg.png)' }} />
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-950/80 via-cyan-950/55 to-orange-950/45" />
-      <SummerUpdateDecor />
-      <HUDOverlay />
+      <div className="absolute inset-0 bg-slate-950/90" />
+
+
       <p className="relative z-10 text-amber-100">Chargement…</p>
     </div>
   );
@@ -314,6 +74,7 @@ function LoginPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [identifiant, setIdentifiant] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<LoginMode>('pilote');
   const [step, setStep] = useState<LoginStep>('form');
   const [emailMasked, setEmailMasked] = useState<string>('');
@@ -656,29 +417,21 @@ function LoginPageContent() {
     />
   );
   const overlay = (
-    <div className="absolute inset-0 bg-gradient-to-br from-sky-950/80 via-cyan-950/55 to-orange-950/45" />
+    <div className="absolute inset-0 bg-slate-950/90" />
   );
 
   return (
-    <div className="min-h-dvh relative flex items-start sm:items-center justify-center px-4 pt-8 pb-6 sm:p-4 overflow-x-hidden animate-page-reveal">
+    <div className="min-h-dvh relative flex items-start sm:items-center justify-center px-4 py-8 sm:p-8 overflow-x-hidden bg-slate-950">
       {fond}
       {overlay}
       
-      {/* Animations d'arrière-plan — thème aviation réaliste */}
-      <SummerUpdateDecor />
-      <TwinklingStars />
-      <ParallaxClouds />
-      <MultipleAircrafts />
-      <HUDOverlay />
-      <RadarCorner />
-      <VORBeacons />
-      <NavigationLights />
+
       
-      <div className="relative z-10 w-full max-w-md">
+      <div className="relative z-10 w-full max-w-lg">
         {/* Logo / Titre */}
         <div className="text-center mb-4 sm:mb-8">
           <div
-            className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-3 sm:mb-4 animate-zoom-bounce hover:animate-float overflow-hidden"
+            className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 mb-3 sm:mb-4  overflow-hidden"
             style={{ border: '1px solid rgba(56,130,255,0.3)', borderRadius: '12px', background: 'rgba(56,130,255,0.15)' }}
           >
             {logoImg ? (
@@ -699,7 +452,7 @@ function LoginPageContent() {
             )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
-          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Système de gestion des vols · Saison estivale</p>
+          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Votre réseau aérien, un seul compte</p>
         </div>
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
@@ -712,7 +465,7 @@ function LoginPageContent() {
               onClick={() => setMode('pilote')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
                 mode === 'pilote'
-                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                  ? 'bg-sky-500 text-white'
                   : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
               }`}
             >
@@ -724,7 +477,7 @@ function LoginPageContent() {
               onClick={() => setMode('atc')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
                 mode === 'atc'
-                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                  ? 'bg-sky-500 text-white'
                   : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
               }`}
             >
@@ -736,7 +489,7 @@ function LoginPageContent() {
               onClick={() => setMode('siavi')}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
                 mode === 'siavi'
-                  ? 'bg-gradient-to-r from-cyan-400 via-sky-400 to-amber-300 text-slate-950 shadow-lg shadow-cyan-400/30'
+                  ? 'bg-sky-500 text-white'
                   : 'text-cyan-100/65 hover:text-cyan-50 hover:bg-white/10'
               }`}
             >
@@ -811,27 +564,30 @@ function LoginPageContent() {
 
         {/* Formulaire : identifiant / mot de passe */}
         {step === 'form' && (
-          <div className="card backdrop-blur-xl bg-slate-900/60 border-cyan-200/15 shadow-2xl shadow-cyan-950/40 animate-init animate-reveal-blur delay-500">
+          <div className="card bg-slate-900 border-slate-700">
             <div className="mb-5 px-1 py-2">
               <span
                 className="inline-flex items-center gap-1"
                 style={{ background: 'rgba(56,130,255,0.1)', border: '0.5px solid rgba(56,130,255,0.2)', borderRadius: '4px', fontSize: '9px', color: '#6aa0ff', letterSpacing: '0.06em', padding: '2px 6px' }}
               >
                 <Sun className="shrink-0" style={{ width: '9px', height: '9px' }} />
-                BRIEFING ÉTÉ
+                CONNEXION SÉCURISÉE
               </span>
-              <p className="mt-2 text-sm text-cyan-50/80">Bienvenue à bord. Choisissez votre espace et connectez-vous pour rejoindre le réseau.</p>
+              <p className="mt-2 text-sm text-cyan-50/80">Choisissez votre espace. Utilisez les mêmes identifiants pour accéder à vos activités.</p>
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <label className="label text-slate-200">Identifiant</label>
+                <label htmlFor="login-username" className="label text-slate-200">Identifiant</label>
                 <div className="relative">
                   <User
                     className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
                     style={{ left: '9px', color: 'rgba(200,210,230,0.25)', width: '13px', height: '13px' }}
                   />
                   <input
+                    id="login-username"
                     type="text"
+                    autoCapitalize="none"
+                    spellCheck={false}
                     className="input bg-slate-900/50 pl-[30px]"
                     value={identifiant}
                     onChange={(e) => setIdentifiant(e.target.value)}
@@ -842,26 +598,28 @@ function LoginPageContent() {
                 </div>
               </div>
               <div>
-                <label className="label text-slate-200">Mot de passe</label>
+                <label htmlFor="login-password" className="label text-slate-200">Mot de passe</label>
                 <div className="relative">
                   <Lock
                     className="absolute top-1/2 -translate-y-1/2 pointer-events-none"
                     style={{ left: '9px', color: 'rgba(200,210,230,0.25)', width: '13px', height: '13px' }}
                   />
                   <input
-                    type="password"
-                    className="input bg-slate-900/50 pl-[30px]"
+                    id="login-password"
+                    type={showPassword ? "text" : "password"}
+                    className="input bg-slate-900/50 pl-[30px] pr-12"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
                     required
                     autoComplete="current-password"
                   />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? "Masquer le mot de passe" : "Afficher le mot de passe"} aria-pressed={showPassword} className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">{showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</button>
                 </div>
               </div>
               {error && (
                 <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 backdrop-blur-sm">
-                  <p className="text-red-400 text-sm font-medium">{error}</p>
+                  <p role="alert" className="text-red-400 text-sm font-medium">{error}</p>
                 </div>
               )}
               <button
@@ -901,6 +659,7 @@ function LoginPageContent() {
                 </button>
               </p>
             </form>
+            <PasswordlessLogin redirectTo={redirectTo} />
           </div>
         )}
 
@@ -1224,7 +983,7 @@ function LoginPageContent() {
                     Reconnexion mensuelle : validation par email obligatoire.
                   </span>
                 )}
-                Un code de confirmation a été envoyé à <strong className="text-slate-200">{emailMasked || 'votre adresse'}</strong>. Saisissez-le ci-dessous pour valider la connexion.
+                Un code de confirmation a été demandé pour <strong className="text-slate-200">{emailMasked || 'votre adresse'}</strong>. Saisissez-le ci-dessous pour valider la connexion. Vérifiez aussi les indésirables et que cette adresse est toujours accessible.
               </p>
             </div>
             <form onSubmit={handleCodeSubmit} className="space-y-5">

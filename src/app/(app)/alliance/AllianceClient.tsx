@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { fetchJson } from '@/lib/fetch-json';
 import {
   Users, Building2, Crown, Settings, Landmark, Loader2,
   Megaphone, Plane, Wallet, ShieldCheck, UserMinus, ArrowRightLeft,
@@ -177,15 +178,17 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
     m => m.role === 'president' || (m.role === 'vice_president' && virementViceAutorise)
   );
 
-  useEffect(() => {
-    fetch('/api/alliances').then(r => r.json()).then(d => setAlliances(Array.isArray(d) ? d : [])).catch(() => setAlliances([])).finally(() => setLoading(false));
+  const loadList = useCallback(async () => {
+    setLoading(true); setError('');
+    try { const data = await fetchJson<Alliance[]>('/api/alliances'); if (!Array.isArray(data)) throw new Error('Liste des alliances indisponible.'); setAlliances(data); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Chargement impossible.'); }
+    finally { setLoading(false); }
   }, []);
+  useEffect(() => { void loadList(); }, [loadList]);
 
   const loadDetail = useCallback(async (id: string) => {
-    const res = await fetch(`/api/alliances/${id}`);
-    if (!res.ok) return;
-    const data = await res.json();
-    setDetail(data);
+    try { setDetail(await fetchJson<AllianceDetail>(`/api/alliances/${id}`)); setError(''); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Alliance indisponible.'); }
   }, []);
 
   useEffect(() => {
@@ -227,7 +230,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
     return (
       <div className="space-y-8 animate-fade-in">
         <Header />
-        {error && <Alert type="error">{error}</Alert>}
+        {error && <Alert type="error">{error}<button type="button" className="ml-3 underline" onClick={() => void loadList()}>Réessayer</button></Alert>}
         {success && <Alert type="success">{success}</Alert>}
         <div className="rounded-2xl border border-slate-700/40 bg-slate-800/20 p-10 text-center flex flex-col items-center gap-4">
           <div className="h-16 w-16 rounded-2xl bg-violet-500/10 ring-2 ring-violet-500/20 flex items-center justify-center">
@@ -465,7 +468,7 @@ export default function AllianceClient({ compagniesSansAlliance, pdgCompagnieIds
         </div>
       )}
 
-      {error && <Alert type="error">{error}</Alert>}
+      {error && <Alert type="error">{error}<button type="button" className="ml-3 underline" onClick={() => void loadList()}>Réessayer</button></Alert>}
       {success && <Alert type="success">{success}</Alert>}
 
       {/* === NAV TABS PILLS STICKY === */}

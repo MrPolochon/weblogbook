@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse, NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { fetchAllFelitzVirements } from '@/lib/felitz/utils';
 import { canVirementCompteAllianceFelitz } from '@/lib/co-pdg-utils';
 import { virerFelitzAvecTrace } from '@/lib/felitz/atomic';
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const rl = rateLimit(`virement:${user.id}`, 10, 60_000);
+    const rl = await rateLimitShared(`virement:${user.id}`, 10, 60_000);
     if (!rl.allowed) return NextResponse.json({ error: 'Trop de virements, réessayez dans une minute' }, { status: 429 });
 
     const body = await req.json();

@@ -56,7 +56,8 @@ export async function completeLoginVerification(
     trackingUpdate.last_email_verification_at = now;
   }
 
-  await admin.from('user_login_tracking').upsert(trackingUpdate, { onConflict: 'user_id' });
+  const { error: trackingError } = await admin.from('user_login_tracking').upsert(trackingUpdate, { onConflict: 'user_id' });
+  if (trackingError) return { ok: false, error: 'Vérification temporairement indisponible. Réessayez.', status: 503 };
   await admin.from('login_verification_codes').delete().eq('user_id', userId);
 
   try {

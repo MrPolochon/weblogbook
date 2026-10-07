@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual, createHash } from 'crypto';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { createClient } from '@/lib/supabase/server';
 import { requireSiteAdmin } from '@/lib/calendrier/staff';
 
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     const ip = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
-    const rl = rateLimit(`verify-superadmin:${staff.id}:${ip}`, 5, 60_000);
+    const rl = await rateLimitShared(`verify-superadmin:${staff.id}:${ip}`, 5, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans une minute.' }, { status: 429 });
     }

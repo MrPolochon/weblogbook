@@ -6,6 +6,7 @@ import { calculerPaiementService } from '@/lib/ground/pricing';
 import { emettreChequesServiceGround } from '@/lib/ground/cheques';
 import { finaliserContributions, getActiveTeam } from '@/lib/ground/teams';
 import type { ServiceStatut, ServiceType } from '@/lib/types';
+import { canTransitionGroundService } from '@/lib/ground/service-workflow';
 
 export async function PATCH(
   request: Request,
@@ -20,9 +21,8 @@ export async function PATCH(
 
   const { data: profile } = await admin.from('profiles').select('role, ground_crew, identifiant').eq('id', user.id).single();
   const isGroundCrew = Boolean(profile?.ground_crew) || profile?.role === 'admin';
-  const isPilote = profile?.role === 'pilote' || profile?.role === 'instructeur' || profile?.role === 'admin';
 
-  const body = await request.json() as {
+  const body = await request.json().catch(() => ({})) as {
     statut?: ServiceStatut;
     score_minijeu?: number;
     notes?: string;
@@ -46,7 +46,7 @@ export async function PATCH(
 
   // Cas pilote_confirme : seul le pilote propriétaire peut confirmer
   if (body.pilote_confirme === true && !body.statut) {
-    if (!isPilote && existingRequest.pilote_id !== user.id) {
+    if (existingRequest.pilote_id !== user.id) {
       return NextResponse.json({ error: 'Non autorisé' }, { status: 403 });
     }
     const { data: updated, error } = await admin
@@ -77,6 +77,13 @@ export async function PATCH(
     }
   }
 
+  if (body.statut === existingRequest.statut) return NextResponse.json({ request: existingRequest });
+  if (!body.statut || !canTransitionGroundService(existingRequest.statut, body.statut)) {
+    return NextResponse.json({ error: 'Transition de service non autorisée. Actualisez la demande.' }, { status: 409 });
+  }
+  if (body.score_minijeu !== undefined && (typeof body.score_minijeu !== 'number' || !Number.isFinite(body.score_minijeu) || body.score_minijeu < 0 || body.score_minijeu > 1)) {
+    return NextResponse.json({ error: 'Score de mini-jeu invalide.' }, { status: 400 });
+  }
   const updates: Record<string, unknown> = { statut: body.statut };
 
   if (body.statut === 'accepted' && isGroundCrew) {
@@ -86,6 +93,7 @@ export async function PATCH(
 
   if (body.statut === 'completed') {
     updates.completed_at = new Date().toISOString();
+    updates.completed_by = user.id;
 
     // Services sans mini-jeu (marshalling/repoussage) : score fixe à 1.0
     const noMinigameTypes: ServiceType[] = ['marshalling', 'repoussage'];
@@ -102,16 +110,20 @@ export async function PATCH(
   }
 
   if (body.notes) updates.notes = body.notes;
+  if (body.pilote_confirme !== undefined && existingRequest.pilote_id !== user.id) return NextResponse.json({ error: 'Seul le pilote peut confirmer son service.' }, { status: 403 });
   if (body.pilote_confirme !== undefined) updates.pilote_confirme = body.pilote_confirme;
 
   const { data: updated, error } = await admin
     .from('ground_service_requests')
     .update(updates)
     .eq('id', id)
+    .eq('statut', existingRequest.statut)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  if (!updated) return NextResponse.json({ error: 'Cette demande vient d’être prise en charge ou modifiée. Actualisez.' }, { status: 409 });
 
   if (body.statut === 'completed' && updated) {
     try {
@@ -138,6 +150,8 @@ export async function PATCH(
         montantPaye: Number(updated.montant_paye) || 0,
         numeroVol: planVol?.numero_vol ?? null,
       });
+      const { error: markError } = await admin.from('ground_service_requests').update({ cheques_emitted_at: new Date().toISOString() }).eq('id',id).is('cheques_emitted_at',null);
+      if (markError) throw markError;
     } catch (e) {
       console.error('[ground] chèques / contributions:', e);
     }

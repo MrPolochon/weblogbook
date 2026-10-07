@@ -12,12 +12,13 @@ export async function storeWebAuthnChallenge(
 ): Promise<void> {
   const expiresAt = new Date(Date.now() + CHALLENGE_TTL_MS).toISOString();
   await admin.from('webauthn_challenges').delete().eq('user_id', userId).eq('type', type);
-  await admin.from('webauthn_challenges').insert({
+  const { error } = await admin.from('webauthn_challenges').insert({
     user_id: userId,
     challenge,
     type,
     expires_at: expiresAt,
   });
+  if (error) throw new Error('Impossible de préparer la vérification.');
 }
 
 export async function consumeWebAuthnChallenge(
@@ -40,6 +41,8 @@ export async function consumeWebAuthnChallenge(
     return null;
   }
 
-  await admin.from('webauthn_challenges').delete().eq('id', data.id);
-  return data.challenge as string;
+  const { data: consumed, error } = await admin.from('webauthn_challenges').delete().eq('id', data.id)
+    .gt('expires_at', new Date().toISOString()).select('challenge').maybeSingle();
+  if (error || !consumed) return null;
+  return consumed.challenge as string;
 }

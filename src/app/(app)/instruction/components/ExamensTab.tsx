@@ -48,6 +48,7 @@ export default function ExamensTab({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const lockedSessionRef = useRef<HTMLDivElement | null>(null);
   const isLocked = sessionLock?.kind === 'exam';
 
@@ -381,11 +382,13 @@ export default function ExamensTab({
               <span className="ml-auto text-xs px-2.5 py-1 rounded-full bg-rose-500/10 text-rose-300 font-medium">{examRequestsAssigned.length}</span>
             )}
           </div>
+          <label className="flex gap-2 text-sm text-slate-400 my-3"><input type="checkbox" checked={showHistory} onChange={e=>setShowHistory(e.target.checked)} />Inclure les examens terminés et refusés</label>
           {examRequestsAssigned.length === 0 ? (
             <p className="text-slate-500">Aucune demande assignée.</p>
           ) : (
             <div className="space-y-3">
               {examRequestsAssigned
+                .filter(r => showHistory || ['assigne','accepte','en_cours'].includes(r.statut))
                 .filter((r) => !isLocked || r.id === sessionLock?.id)
                 .map((r) => {
                 const requester = Array.isArray(r.requester) ? r.requester[0] : r.requester;

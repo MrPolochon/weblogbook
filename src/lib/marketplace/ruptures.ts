@@ -4,7 +4,7 @@
 // Chaque type d'avion peut entrer en rupture de stock pour une
 // duree aleatoire entre 6h et 3j. Pendant ce temps, l'avion ne
 // peut pas etre achete. Le tirage est fait cote serveur lors de
-// chaque chargement du marketplace (lazy refresh), throttle a
+// la tâche planifiée du marché, avec
 // un tirage par avion par heure pour eviter le spam.
 //
 // Probabilite par tirage (toutes les heures) :
@@ -29,7 +29,7 @@ type AvionRow = {
  *  - tire des nouvelles ruptures pour les avions disponibles dont
  *    le prochain_check est echu, avec une probabilite calibree.
  *
- * Idempotent et safe a appeler depuis n'importe quelle requete GET.
+ * Réservé à la tâche planifiée ; écritures conditionnelles contre les courses.
  */
 export async function refreshMarketplaceRuptures(admin: SupabaseClient): Promise<void> {
   try {
@@ -38,7 +38,8 @@ export async function refreshMarketplaceRuptures(admin: SupabaseClient): Promise
       .select('id, rupture_fin_at, prochain_check_rupture_at')
       .gt('prix', 0);
 
-    if (error || !avions) return;
+    if (error) throw new Error(error.message);
+    if (!avions) return;
 
     const now = Date.now();
     const updates: Array<PromiseLike<unknown>> = [];
@@ -84,14 +85,20 @@ export async function refreshMarketplaceRuptures(admin: SupabaseClient): Promise
       }
 
       if (Object.keys(patch).length === 0) continue;
-      updates.push(admin.from('types_avion').update(patch).eq('id', a.id));
+      let query = admin.from('types_avion').update(patch).eq('id', a.id);
+      query = a.prochain_check_rupture_at === null ? query.is('prochain_check_rupture_at', null) : query.eq('prochain_check_rupture_at', a.prochain_check_rupture_at);
+      query = a.rupture_fin_at === null ? query.is('rupture_fin_at', null) : query.eq('rupture_fin_at', a.rupture_fin_at);
+      updates.push(query);
     }
 
     if (updates.length > 0) {
-      await Promise.all(updates);
+      const results = await Promise.all(updates) as Array<{ error?: { message: string } | null }>;
+      const failed = results.find(r => r.error);
+      if (failed?.error) throw new Error(failed.error.message);
     }
   } catch (e) {
     console.error('[marketplace] refreshMarketplaceRuptures:', e);
+    throw e;
   }
 }
 

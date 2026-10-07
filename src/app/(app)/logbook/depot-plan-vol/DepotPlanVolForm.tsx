@@ -78,6 +78,8 @@ export interface AvionArmeeItem {
 }
 
 interface Props {
+  draftKey: string;
+  initialDraft?: { aeroport_depart: string; aeroport_arrivee: string; temps_prev_min: number | null; type_vol: string; route_ifr: string | null; niveau_croisiere: string | number | null; intentions_vol: string | null };
   compagniesDisponibles: Compagnie[];
   inventairePersonnel: InventaireItem[];
   avionsParCompagnie?: Record<string, AvionIndividuel[]>;
@@ -103,6 +105,8 @@ function isVolLocalRoute(depart: string, arrivee: string): boolean {
 }
 
 export default function DepotPlanVolForm({
+  draftKey,
+  initialDraft,
   compagniesDisponibles,
   inventairePersonnel,
   avionsParCompagnie = {},
@@ -176,6 +180,25 @@ export default function DepotPlanVolForm({
   const [manualRoutePart, setManualRoutePart] = useState('');
   const [sidCustomMode, setSidCustomMode] = useState(false);
   const [starCustomMode, setStarCustomMode] = useState(false);
+  useEffect(() => {
+    if (!initialDraft) return;
+    setAeroportDepart(initialDraft.aeroport_depart); setAeroportArrivee(initialDraft.aeroport_arrivee);
+    setTempsPrevMin(String(initialDraft.temps_prev_min ?? '')); setTypeVol(initialDraft.type_vol==='IFR'?'IFR':'VFR');
+    setRouteIfr(initialDraft.route_ifr ?? ''); setNiveauCroisiere(String(initialDraft.niveau_croisiere ?? '')); setIntentionsVol(initialDraft.intentions_vol ?? '');
+  }, [initialDraft]);
+  function saveDraft() {
+    try { localStorage.setItem(draftKey,JSON.stringify({ aeroport_depart,aeroport_arrivee,temps_prev_min,type_vol,route_ifr,niveau_croisiere,intentions_vol,numero_vol })); toast.success('Brouillon enregistré sur cet appareil.'); }
+    catch { toast.error('Le brouillon ne peut pas être enregistré sur cet appareil.'); }
+  }
+  function restoreDraft() {
+    try {
+      const data = JSON.parse(localStorage.getItem(draftKey) || 'null');
+      if (!data || typeof data!=='object') { toast.info('Aucun brouillon enregistré.'); return; }
+      const text=(key:string)=>typeof data[key]==='string'?data[key].slice(0,1000):'';
+      setAeroportDepart(text('aeroport_depart'));setAeroportArrivee(text('aeroport_arrivee'));setTempsPrevMin(text('temps_prev_min'));setTypeVol(data.type_vol==='IFR'?'IFR':'VFR');setRouteIfr(text('route_ifr'));setNiveauCroisiere(text('niveau_croisiere'));setIntentionsVol(text('intentions_vol'));setNumeroVol(text('numero_vol'));
+      toast.success('Brouillon restauré. Vérifiez la flotte et la disponibilité avant dépôt.');
+    } catch { toast.error('Brouillon illisible.'); }
+  }
 
   // Get selected company
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
@@ -772,6 +795,7 @@ export default function DepotPlanVolForm({
           .catch(() => {});
       }
       
+      try { localStorage.removeItem(draftKey); } catch { /* appareil indisponible */ }
       router.push('/logbook/plans-vol');
       startTransition(() => router.refresh());
     } catch (err: unknown) {
@@ -828,6 +852,7 @@ export default function DepotPlanVolForm({
           .catch(() => {});
       }
       
+      try { localStorage.removeItem(draftKey); } catch { /* appareil indisponible */ }
       router.push('/logbook/plans-vol');
       startTransition(() => router.refresh());
     } catch (err: unknown) {
@@ -846,6 +871,7 @@ export default function DepotPlanVolForm({
 
   return (
     <>
+    <div className="flex flex-wrap gap-3 mb-4 text-sm"><button type="button" onClick={saveDraft} className="rounded-lg border border-sky-700 p-2">Enregistrer le brouillon</button><button type="button" onClick={restoreDraft} className="rounded-lg border border-slate-700 p-2">Restaurer mon brouillon</button><button type="button" onClick={()=>{try{localStorage.removeItem(draftKey);toast.success('Brouillon supprimé.');}catch{toast.error('Suppression impossible.');}}} className="p-2 text-slate-400">Supprimer le brouillon</button></div>
     {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
 
     {(avionType?.nom || selectedInventaire?.types_avion?.nom) && aeroport_depart && (

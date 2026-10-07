@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendLoginCodeEmail } from '@/lib/email';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { randomInt } from 'crypto';
 import { getClientIp, normalizeIp } from '@/lib/ip-utils';
 
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { allowed } = rateLimit(`send-code:${user.id}`, 5, 10 * 60 * 1000);
+    const { allowed } = await rateLimitShared(`send-code:${user.id}`, 5, 10 * 60 * 1000);
     if (!allowed) {
       return NextResponse.json({ error: 'Trop de demandes de code. Réessayez dans quelques minutes.' }, { status: 429 });
     }
@@ -40,14 +40,14 @@ export async function POST(req: NextRequest) {
     const currentIp = getClientIp(req);
     const { data: tracking } = await admin
       .from('user_login_tracking')
-      .select('last_login_ip')
+      .select('last_login_ip,last_email_verification_at')
       .eq('user_id', user.id)
       .maybeSingle();
     // Normaliser l'IP lue en base (peut contenir l'ancien format ::ffff:x.x.x.x)
     const previousIp = tracking?.last_login_ip ? normalizeIp(tracking.last_login_ip) : null;
 
     // Même IP que la précédente connexion : pas d'envoi de code par email
-    if (previousIp != null && currentIp != null && previousIp === currentIp) {
+    if (previousIp != null && currentIp != null && previousIp === currentIp && tracking?.last_email_verification_at && Date.now() - Date.parse(tracking.last_email_verification_at) <= 30 * 86400000) {
       await admin.from('user_login_tracking').upsert(
         { user_id: user.id, last_login_ip: currentIp, last_login_at: new Date().toISOString() },
         { onConflict: 'user_id' }
@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     const code = generateSixDigitCode();
     const expiresAt = new Date(Date.now() + CODE_EXPIRY_MINUTES * 60 * 1000);
 
-    await admin.from('login_verification_codes').upsert(
+    const { error: saveCodeError } = await admin.from('login_verification_codes').upsert(
       {
         user_id: user.id,
         code,
@@ -109,6 +109,11 @@ export async function POST(req: NextRequest) {
       },
       { onConflict: 'user_id' }
     );
+
+    if (saveCodeError) {
+      console.error('[send-login-code] Impossible de stocker le code:', saveCodeError.message);
+      return NextResponse.json({ error: 'Impossible de préparer la vérification. Réessayez.' }, { status: 503 });
+    }
 
     console.log('[send-login-code] Tentative envoi code vers:', maskEmail(email), '— user:', user.id);
     const { ok, error } = await sendLoginCodeEmail(email, code);

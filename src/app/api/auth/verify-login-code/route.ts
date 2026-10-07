@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { completeLoginVerification } from '@/lib/auth/complete-login-verification';
 
 /**
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { allowed } = rateLimit(`verify-code:${user.id}`, 10, 15 * 60 * 1000);
+    const { allowed } = await rateLimitShared(`verify-code:${user.id}`, 10, 15 * 60 * 1000);
     if (!allowed) {
       return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans quelques minutes.' }, { status: 429 });
     }

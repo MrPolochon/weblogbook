@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import AdminOperations from '@/components/AdminOperations';
 import {
   Users, Clock, Building2, Plane, FileText, Shield, Award, Landmark,
   Receipt, UserPlus, Store, MapPin, AlertTriangle, GraduationCap, Lock,
@@ -151,6 +152,8 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
+      <AdminOperations />
+
       {/* ── Hero header ── */}
       <div className="relative overflow-hidden rounded-2xl shadow-xl">
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-800 via-slate-900 to-slate-950">

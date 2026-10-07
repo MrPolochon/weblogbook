@@ -1,5 +1,7 @@
 {
-  "regions": ["sfo1"],
+  "regions": [
+    "sfo1"
+  ],
   "crons": [
     {
       "path": "/api/cron/support-tickets",
@@ -32,6 +34,10 @@
     {
       "path": "/api/cron/calendrier-announce",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/ground-payments",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

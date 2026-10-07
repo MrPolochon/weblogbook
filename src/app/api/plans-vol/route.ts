@@ -6,7 +6,7 @@ import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplemen
 import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
 import { heureDepartToIso } from '@/lib/heure-depart';
 import { getMissionById, getMissionCooldownForUser } from '@/lib/armee';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { STATUTS_PLAN_OCCUPES, hasOccupiedPlan, isCompanyMember } from '@/lib/plans-vol/crew';
 import { notifyUser } from '@/lib/notifications';
 
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-    const rl = rateLimit(`plans-vol-post:${user.id}`, 8, 60_000);
+    const rl = await rateLimitShared(`plans-vol-post:${user.id}`, 8, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: 'Trop de dépôts. Réessayez dans une minute.' }, { status: 429 });
     }

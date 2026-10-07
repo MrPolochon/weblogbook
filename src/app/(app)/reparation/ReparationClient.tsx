@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
+import { fetchJson } from '@/lib/fetch-json';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 import { calculerPrixHangar } from '@/lib/compagnie-utils';
@@ -60,6 +61,8 @@ interface Demande {
   commentaire_compagnie: string | null;
   commentaire_entreprise: string | null;
   created_at: string;
+  entreprise_transit_eta_at?: string | null;
+  retour_transit_eta_at?: string | null;
   compagnie: { id: string; nom: string } | null;
   avion: { id: string; immatriculation: string; nom_bapteme: string | null } | null;
   /** Présent quand statut = en_reparation | mini_jeux : les 4 jeux assignés sont complétés */
@@ -117,6 +120,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
   const compagnieId = searchParams.get('compagnie_id') || '';
 
   const [loading, setLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [entreprises, setEntreprises] = useState<Entreprise[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [tab, setTab] = useState<Tab>('dashboard');
@@ -132,18 +136,15 @@ export default function ReparationClient({ userId }: { userId: string }) {
 
   useEffect(() => {
     if (demander && avionId && compagnieId) {
-      fetch('/api/reparation/catalogue').then(r => r.json()).then(d => setCatalogue(Array.isArray(d) ? d : [])).catch(() => setCatalogue([])).finally(() => setLoading(false));
+      fetchJson<CatalogueEntreprise[]>('/api/reparation/catalogue').then(d => { if (!Array.isArray(d)) throw new Error('Catalogue indisponible.'); setCatalogue(d); }).catch(e => setError(e.message || 'Catalogue indisponible.')).finally(() => setLoading(false));
     } else {
-      fetch('/api/reparation/entreprises').then(r => r.json()).then(d => setEntreprises(Array.isArray(d) ? d : [])).catch(() => {}).finally(() => setLoading(false));
+      fetchJson<Entreprise[]>('/api/reparation/entreprises').then(d => { if (!Array.isArray(d)) throw new Error('Liste indisponible.'); setEntreprises(d); }).catch(e => setError(e.message || 'Liste indisponible.')).finally(() => setLoading(false));
     }
-  }, [demander, avionId, compagnieId]);
+  }, [demander, avionId, compagnieId, loadAttempt]);
 
   const loadDetail = useCallback(async (id: string) => {
-    const res = await fetch(`/api/reparation/entreprises/${id}`);
-    if (res.ok) {
-      setError('');
-      setDetail(await res.json());
-    }
+    try { setDetail(await fetchJson<Detail>(`/api/reparation/entreprises/${id}`)); setError(''); }
+    catch (e) { setError(e instanceof Error ? e.message : 'Entreprise indisponible.'); }
   }, []);
 
   useEffect(() => {
@@ -181,7 +182,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
             <p className="text-slate-400 mt-1 text-sm">Choisissez une entreprise et un hangar pour envoyer votre avion en réparation.</p>
           </div>
         </div>
-        {error && <p className="text-red-400 text-sm animate-fade-in">{error}</p>}
+        {error && <p role="alert" className="text-red-400 text-sm">{error} <button type="button" className="underline ml-2" onClick={() => { setError(''); detail ? void loadDetail(detail.id) : setLoadAttempt(a => a + 1); }}>Réessayer</button></p>}
         {success && <p className="text-emerald-400 text-sm animate-fade-in">{success}</p>}
 
         {!selectedEntId ? (
@@ -425,7 +426,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
         </div>
       </header>
 
-      {error && <p className="text-red-400 text-sm animate-fade-in">{error}</p>}
+      {error && <p role="alert" className="text-red-400 text-sm">{error} <button type="button" className="underline ml-2" onClick={() => { setError(''); detail ? void loadDetail(detail.id) : setLoadAttempt(a => a + 1); }}>Réessayer</button></p>}
       {success && <p className="text-emerald-400 text-sm animate-fade-in">{success}</p>}
 
       {/* === NAV TABS PILLS === */}
@@ -537,6 +538,11 @@ function DashboardTab({ detail }: { detail: Detail }) {
                     </div>
                   )}
                   <StatutBadge statut={d.statut} />
+                  <div className="text-xs text-slate-400 text-right">
+                    <p>{d.prix_total == null ? 'Devis à établir' : `${Number(d.prix_total).toLocaleString('fr-FR')} F$`}</p>
+                    <p>{['payee','retour_transit','completee'].includes(d.statut) ? 'Payé' : d.statut === 'facturee' ? 'Paiement attendu' : 'Non facturé'}</p>
+                    {(d.entreprise_transit_eta_at || d.retour_transit_eta_at) && <p>ETA : {new Date((d.statut === 'retour_transit' ? d.retour_transit_eta_at : d.entreprise_transit_eta_at)!).toLocaleString('fr-FR')}</p>}
+                  </div>
                 </div>
               );
             })}

@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { sendPasswordResetLinkEmail } from '@/lib/email';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { OFFICIAL_SITE_URL } from '@/lib/site-url';
 
 const TOKEN_EXPIRY_HOURS = 24;
@@ -27,7 +27,7 @@ function randomToken(): string {
 export async function POST(req: NextRequest) {
   try {
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
-    const { allowed } = rateLimit(`forgot-password:${ip}`, 5, 15 * 60 * 1000);
+    const { allowed } = await rateLimitShared(`forgot-password:${ip}`, 5, 15 * 60 * 1000);
     if (!allowed) {
       return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans quelques minutes.' }, { status: 429 });
     }

@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { logActivity, getClientIp } from '@/lib/activity-log';
-import { applyRateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 // GET - Récupérer les messages de l'utilisateur
 export async function GET(req: NextRequest) {
@@ -128,7 +128,7 @@ export async function POST(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const rl = applyRateLimit(req, 'messages', user.id);
+    const rl = await rateLimitShared('messages:' + user.id, 20, 60000);
     if (!rl.allowed) {
       return NextResponse.json(
         { error: 'Trop de messages envoyés. Réessayez dans une minute.' },

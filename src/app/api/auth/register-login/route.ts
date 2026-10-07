@@ -34,12 +34,13 @@ export async function POST(req: NextRequest) {
       .maybeSingle();
 
     const previousIp = tracking?.last_login_ip ? normalizeIp(tracking.last_login_ip) : null;
-    const requireCode = !previousIp || (ip != null && ip !== previousIp);
+    const changedIp = !previousIp || (ip != null && ip !== previousIp);
 
     const lastEmailAt =
       (tracking?.last_email_verification_at as string | null | undefined) ??
       (await getLastEmailVerificationAt(admin, user.id));
-    const forceEmail = requireCode && needsMonthlyEmailVerification(lastEmailAt);
+    const forceEmail = needsMonthlyEmailVerification(lastEmailAt);
+    const requireCode = changedIp || forceEmail;
     const hasPasskeys = await userHasPasskeys(admin, user.id);
 
     if (!requireCode) {

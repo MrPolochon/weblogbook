@@ -1,0 +1,219 @@
+{
+  "findings": [
+    [
+      "Sécurité",
+      "P0",
+      "RLS manquant sur les refus d’examen",
+      "Le tableau de bord signale instruction_exam_request_refusals sans RLS. Vérifier les droits anon/authenticated puis restreindre la lecture aux personnes autorisées.",
+      "À proposer",
+      "Supabase Advisor · 06/10/2026"
+    ],
+    [
+      "Sécurité",
+      "P0",
+      "Vues exposées avec les droits du propriétaire",
+      "aeroport_passagers et aeroport_cargo sont signalées SECURITY DEFINER. Examiner leurs dépendances et adopter security_invoker si les droits de lecture le permettent. Une alerte ne prouve pas à elle seule une fuite.",
+      "À proposer",
+      "Supabase Advisor · 06/10/2026"
+    ],
+    [
+      "Pilote",
+      "P1",
+      "Carnet non paginé",
+      "Le carnet charge tous les vols puis calcule les heures en mémoire. Séparer les agrégats SQL de la liste paginée, conserver un export complet et ajouter recherche/date/statut.",
+      "À proposer",
+      "src/app/(app)/logbook/page.tsx"
+    ],
+    [
+      "Pilote",
+      "P2",
+      "Tableau de départ",
+      "Créer une liste des prochaines actions : plan actif, confirmation copilote, formation et chèques. Préremplir un plan depuis un vol précédent et enregistrer le brouillon.",
+      "À proposer",
+      "src/app/(app)/logbook/page.tsx"
+    ],
+    [
+      "Compagnies",
+      "P1",
+      "Pilotage par rentabilité",
+      "Ajouter marge par liaison, coût de réparation, trésorerie disponible, flotte immobilisée et prévision de remboursement. La donnée net des plans est actuellement vide : instrumenter avant de prédire.",
+      "À proposer",
+      "src/app/(app)/ma-compagnie/MaCompagnieClient.tsx · diagnostic SQL"
+    ],
+    [
+      "Alliances",
+      "P1",
+      "Une panne peut apparaître comme une liste vide",
+      "Le chargement transforme certaines erreurs en tableau vide. Afficher un message et Réessayer, puis proposer suivi des fonds, demandes à valider et comptes rendus de transferts.",
+      "À proposer",
+      "src/app/(app)/alliance/AllianceClient.tsx:181"
+    ],
+    [
+      "Réparations",
+      "P1",
+      "Erreurs masquées et prévision insuffisante",
+      "Les chargements catalogue/entreprises masquent des erreurs. Ajouter une vue des avions par statut, ETA, devis, facture et paiement ; valider strictement les tarifs numériques côté serveur.",
+      "À proposer",
+      "src/app/(app)/reparation/ReparationClient.tsx:135 · src/app/api/reparation/tarifs/route.ts"
+    ],
+    [
+      "Admin",
+      "P1",
+      "Santé opérationnelle",
+      "Le dashboard admin sait compter les actions ; ajouter erreurs d’email, erreurs API, files bloquées et anomalies économiques. Les 324 erreurs PostgreSQL affichées doivent être triées dans les logs, leur cause n’est pas établie.",
+      "À proposer",
+      "src/app/(app)/admin/page.tsx · Supabase dashboard"
+    ],
+    [
+      "Instruction",
+      "P1",
+      "Suivi de dossier et charge de page",
+      "Les formations/examens sont chargés sur une grande page avec plusieurs lots de requêtes. Charger par onglet, distinguer ouvert/historique, afficher prochaine étape, disponibilités et rappels avant échéance.",
+      "À proposer",
+      "src/app/(app)/instruction/page.tsx · InstructionClient.tsx"
+    ],
+    [
+      "ATC",
+      "P1",
+      "Trois contrôles indépendants de l’ATIS",
+      "Le bouton interroge toutes les 5 s, le bandeau toutes les 8 s et l’alerte toutes les 12 s : environ 24,5 requêtes/minute par onglet ouvert, hors interactions. Partager un fournisseur d’état, suspendre hors visibilité et empêcher les appels superposés.",
+      "À proposer",
+      "src/components/AtcAtisButton.tsx · AtcAtisTicker.tsx · AtcAtisDesyncBanner.tsx"
+    ],
+    [
+      "ATIS normal / TMA",
+      "P1",
+      "Configuration guidée et tests de bout en bout",
+      "La validation de piste et la coexistence aéroport/TMA existent. Ajouter un assistant serveur/salon/type/FIR/pistes, aperçu texte/audio, contrôle des permissions vocales et tests de reprise/timeout/deux contrôleurs.",
+      "À proposer",
+      "src/app/api/atc/atis/start/route.ts · src/components/AtcAtisButton.tsx"
+    ],
+    [
+      "Ground Crew",
+      "P0",
+      "Confirmation du mauvais propriétaire",
+      "La condition permettait à un profil pilote de confirmer une autre demande. La confirmation est maintenant limitée au pilote propriétaire ; deux tests vérifient refus et autorisation.",
+      "Corrigé localement",
+      "src/app/api/ground/service-requests/[id]/route.ts"
+    ],
+    [
+      "Ground Crew",
+      "P1",
+      "Concurrence et paiements",
+      "La mise à jour ne compare pas le statut lu ; les chèques utilisent une recherche avant insertion. Vérifier l’unicité en base, imposer les transitions et verrouiller la prise en charge pour éviter deux agents concurrents. Ajouter délais médian/p95 et file par porte.",
+      "À proposer",
+      "src/app/api/ground/service-requests/[id]/route.ts · src/lib/ground/cheques.ts"
+    ],
+    [
+      "Marché",
+      "P1",
+      "Coût d’entrée trop élevé pour beaucoup de pilotes",
+      "Huit petits avions civils baissent de 20 %. Ajustement fondé sur les soldes observés, sans prétendre connaître leur rentabilité. Conserver une grille stable ; évaluer cargo/gros-porteurs quand les revenus sont tracés.",
+      "Appliqué en base",
+      "supabase/market_prices_20261006.sql"
+    ],
+    [
+      "Marché",
+      "P1",
+      "Ruptures déclenchées par consultation",
+      "Le catalogue met à jour les ruptures pendant le chargement. Déplacer le tirage vers une tâche planifiée avec verrou conditionnel et afficher le retour en stock. Les tirages concurrents ne doivent pas écraser leurs échéances.",
+      "À proposer",
+      "src/lib/marketplace/ruptures.ts"
+    ],
+    [
+      "Connexion",
+      "P1",
+      "Page allégée et accessible",
+      "Décors animés retirés, contraste renforcé, accès aux espaces clarifié, labels reliés aux champs, bouton afficher/masquer et alerte accessible. Mot de passe, passkey en deuxième étape et vérification email restent disponibles.",
+      "Corrigé localement",
+      "src/app/login/page.tsx"
+    ],
+    [
+      "Connexion",
+      "P2",
+      "Moyens de connexion",
+      "Les passkeys actuelles exigent une session obtenue après le mot de passe : ce ne sont pas encore des connexions sans mot de passe. Proposer une vraie entrée passkey avec challenge anonyme lié au credential, puis Discord lié au compte existant, sans fusion automatique par email.",
+      "À proposer",
+      "src/app/api/auth/passkeys/authenticate/options/route.ts"
+    ],
+    [
+      "Emails",
+      "P1",
+      "Configuration et traçabilité",
+      "En production, refuser l’expéditeur de test ; ajouter version texte et identifiant de message fournisseur. Ne plus envoyer un code si son enregistrement échoue. Accepté par le fournisseur ne signifie pas livré dans la boîte.",
+      "Corrigé localement",
+      "src/lib/email.ts · src/app/api/auth/send-login-code/route.ts"
+    ],
+    [
+      "Emails",
+      "P1",
+      "Délivrabilité à vérifier",
+      "Le DNS consulté ne retourne pas de TXT DMARC pour le domaine racine. Vérifier le domaine réellement utilisé dans EMAIL_FROM, SPF/DKIM/DMARC, les refus/suppressions et événements delivered/bounced/delayed chez le prestataire. La cause par destinataire reste à confirmer.",
+      "À proposer",
+      "DNS public · https://resend.com/docs/knowledge-base/how-do-i-avoid-gmails-spam-folder"
+    ],
+    [
+      "Sécurité",
+      "P1",
+      "Limitation des tentatives par serveur",
+      "Le rate limiter utilise une Map en mémoire, donc le compteur n’est pas partagé entre instances Vercel. Utiliser un compteur atomique partagé, surtout pour les codes de connexion et achats.",
+      "À proposer",
+      "src/lib/rate-limit.ts"
+    ]
+  ],
+  "prices": [
+    [
+      "Piper Cub",
+      150000,
+      120000
+    ],
+    [
+      "Piper Cub Amphibie",
+      180000,
+      144000
+    ],
+    [
+      "Cessna 172",
+      200000,
+      160000
+    ],
+    [
+      "Piper PA-28",
+      250000,
+      200000
+    ],
+    [
+      "Cessna 172 Amphibie",
+      270000,
+      216000
+    ],
+    [
+      "Cessna 182",
+      300000,
+      240000
+    ],
+    [
+      "Diamond DA50",
+      350000,
+      280000
+    ],
+    [
+      "Cessna 182 Amphibie",
+      400000,
+      320000
+    ]
+  ],
+  "observations": {
+    "cpu": 2,
+    "ram": 57,
+    "connections": "37/60",
+    "postgresErrors24h": 324,
+    "personalMedian": 12654,
+    "companyMedian": 1691687,
+    "personalMean": 455175,
+    "closedPlans": 515,
+    "closedPlansWithNet": 0,
+    "debits30d": 44306857,
+    "credits30d": 36585484
+  }
+}

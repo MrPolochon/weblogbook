@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse, NextRequest } from 'next/server';
 import { buildLogbookPdf, buildLogbookPdfFilename, type LogbookPdfVol } from '@/lib/logbook-pdf';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
     }
-    const rl = rateLimit(`logbook-export:${user.id}`, 5, 60_000);
+    const rl = await rateLimitShared(`logbook-export:${user.id}`, 5, 60_000);
     if (!rl.allowed) {
       return NextResponse.json({ error: 'Trop d’exports. Réessayez dans une minute.' }, { status: 429 });
     }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit-shared';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -155,7 +155,7 @@ async function requireAdmin() {
 export async function GET() {
   const auth = await requireAdmin();
   if (auth.error) return auth.error;
-  const rl = rateLimit(`storage-orphans:${auth.user.id}`, 6, 60_000);
+  const rl = await rateLimitShared(`storage-orphans:${auth.user.id}`, 6, 60_000);
   if (!rl.allowed) {
     return NextResponse.json({ error: 'Trop de scans. Réessayez dans une minute.' }, { status: 429 });
   }

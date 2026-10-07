@@ -46,12 +46,19 @@ export async function PATCH(req: Request) {
   const isPdg = ent && String(ent.pdg_id) === String(user.id);
   if (!ent || (!isPdg && !isAdmin)) return NextResponse.json({ error: 'Seul le PDG peut modifier les tarifs' }, { status: 403 });
 
+  const price = prix_par_point === undefined ? 1000 : Number(prix_par_point);
+  const duration = duree_estimee_par_point === undefined ? 2 : Number(duree_estimee_par_point);
+  const validNumberInput = (value: unknown) => value === undefined || typeof value === 'number' || typeof value === 'string' && /^\d+(?:\.\d+)?$/.test(value.trim());
+  if (!validNumberInput(prix_par_point) || !validNumberInput(duree_estimee_par_point)) return NextResponse.json({ error: 'Tarif et durée doivent être des nombres.' }, { status: 400 });
+  if (!Number.isFinite(price) || price < 0 || price > Number.MAX_SAFE_INTEGER || !Number.isFinite(duration) || duration < 1 || duration > Number.MAX_SAFE_INTEGER || prix_par_point === null || duree_estimee_par_point === null) {
+    return NextResponse.json({ error: 'Prix positif ou nul et durée supérieure ou égale à une minute requis.' }, { status: 400 });
+  }
   const { error } = await admin.from('reparation_tarifs').upsert(
     {
       entreprise_id,
       type_avion_id: null,
-      prix_par_point: Math.max(0, Number(prix_par_point) || 1000),
-      duree_estimee_par_point: Math.max(1, Number(duree_estimee_par_point) || 2),
+      prix_par_point: price,
+      duree_estimee_par_point: duration,
     },
     { onConflict: 'entreprise_id' }
   );

@@ -20,7 +20,7 @@ async function chequeDejaEmis(
   userId: string,
   numero: string,
 ): Promise<boolean> {
-  const { data } = await admin
+  const { data, error } = await admin
     .from('messages')
     .select('id')
     .eq('destinataire_id', userId)
@@ -28,6 +28,7 @@ async function chequeDejaEmis(
     .eq('cheque_numero_vol', numero)
     .limit(1)
     .maybeSingle();
+  if (error) throw new Error('Vérification des chèques indisponible.');
   return Boolean(data?.id);
 }
 
@@ -49,6 +50,7 @@ async function emettreChequeGc(
 
   let compte = await getComptePersonnelCanonique(admin, params.userId);
   if (!compte) compte = await ensureComptePersonnel(admin, params.userId);
+  if (!compte) throw new Error('Compte du bénéficiaire indisponible.');
 
   const label = SERVICE_LABELS[params.serviceType] ?? params.serviceType;
   const vol = params.numeroVol ? ` · vol ${params.numeroVol}` : '';
@@ -74,8 +76,9 @@ async function emettreChequeGc(
   });
 
   if (error) {
+    if (error.code === '23505') return false;
     console.error('[ground/cheques] insertion échouée:', error.message);
-    return false;
+    throw new Error('Émission du chèque indisponible.');
   }
   return true;
 }
@@ -96,10 +99,11 @@ export async function emettreChequesServiceGround(
     numeroVol?: string | null;
   },
 ): Promise<void> {
-  const { data: contributions } = await admin
+  const { data: contributions, error: contributionsError } = await admin
     .from('ground_crew_service_contributions')
     .select('user_id, montant_percu')
     .eq('service_request_id', params.serviceRequestId);
+  if (contributionsError) throw new Error('Contributions indisponibles.');
 
   const parts = (contributions ?? [])
     .map((c) => ({ userId: String(c.user_id), montant: Math.round(Number(c.montant_percu) || 0) }))

@@ -17,17 +17,19 @@ const VOL_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   'en_attente': { label: 'Attente', className: 'bg-amber-500/15 text-amber-400 border border-amber-500/25', icon: <Timer className="h-3 w-3" /> },
 };
 
-export default async function LogbookPage() {
+export default async function LogbookPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
   const admin = createAdminClient();
 
-  // Profile + all flight data in a single parallel batch
-  const [{ data: profile }, { data: vols }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }, { data: plansActifs }, chequesAEncaisser] = await Promise.all([
-    supabase.from('profiles').select('heures_initiales_minutes, blocked_until, role').eq('id', user.id).single(),
-    admin.from('vols').select(`
+  const param = (key: string) => typeof searchParams[key] === 'string' ? searchParams[key] as string : '';
+  const page = Math.min(10000, Math.max(1, Math.floor(Number(param('page')) || 1)));
+  const status = ['validé', 'en_attente', 'refusé'].includes(param('statut')) ? param('statut') : '';
+  const search = param('q').replace(/[^\p{L}\p{N}\s-]/gu, '').trim().slice(0, 60);
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(param('date')) && !Number.isNaN(Date.parse(param('date'))) ? param('date') : '';
+  let flightsQuery = admin.from('vols').select(`
       id, pilote_id, copilote_id, instructeur_id, duree_minutes, depart_utc, arrivee_utc, statut, compagnie_libelle, type_vol, role_pilote, callsign,
       aeroport_depart, aeroport_arrivee, instruction_type,
       refusal_count, refusal_reason,
@@ -35,7 +37,15 @@ export default async function LogbookPage() {
       instructeur:profiles!vols_instructeur_id_fkey(identifiant),
       pilote:profiles!vols_pilote_id_fkey(identifiant),
       copilote:profiles!vols_copilote_id_fkey(id,identifiant)
-    `).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},instructeur_id.eq.${user.id}`).neq('type_vol', 'Vol militaire').in('statut', ['en_attente', 'validé', 'refusé']).order('depart_utc', { ascending: false }),
+    `, { count: 'exact' }).or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},instructeur_id.eq.${user.id}`).neq('type_vol', 'Vol militaire').in('statut', ['en_attente', 'validé', 'refusé']);
+  if (status) flightsQuery = flightsQuery.eq('statut', status);
+  if (date) flightsQuery = flightsQuery.gte('depart_utc', date + 'T00:00:00Z');
+  if (search) flightsQuery = flightsQuery.or(`callsign.ilike.%${search}%,compagnie_libelle.ilike.%${search}%,aeroport_depart.ilike.%${search}%,aeroport_arrivee.ilike.%${search}%`);
+  const summaryPromise = admin.rpc('logbook_summary', { p_user_id: user.id });
+  // Profile + bounded flight data in a single parallel batch
+  const [{ data: profile }, { data: vols, count: filteredCount, error: flightsError }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }, { data: plansActifs }, chequesAEncaisser, summaryResult] = await Promise.all([
+    supabase.from('profiles').select('heures_initiales_minutes, blocked_until, role').eq('id', user.id).single(),
+    flightsQuery.order('depart_utc', { ascending: false }).order('id', { ascending: false }).range((page - 1) * 30, page * 30 - 1),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),
@@ -45,6 +55,7 @@ export default async function LogbookPage() {
     admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null),
     admin.from('plans_vol').select('id, numero_vol, statut, code_transpondeur').eq('pilote_id', user.id).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']).order('created_at', { ascending: false }).limit(8),
     countChequesAEncaisser(admin, user.id),
+    summaryPromise,
   ]);
 
   const isAdmin = profile?.role === 'admin';
@@ -53,25 +64,16 @@ export default async function LogbookPage() {
     ? new Date(profile.blocked_until) > new Date()
     : false;
 
-  const totalValides = (vols || []).filter((v) => v.statut === 'validé');
-  const volsEnAttente = (vols || []).filter((v) => v.statut === 'en_attente');
-  const volsRefuses = (vols || []).filter((v) => v.statut === 'refusé');
-  const totalMinutes =
-    (profile?.heures_initiales_minutes ?? 0) +
-    totalValides.reduce((s, v) => s + (v.duree_minutes || 0), 0);
-
-  // Calculs statistiques
+  const summary = summaryResult.data as { total: number; validated: number; pending: number; refused: number; minutes: number; types: string[] } | null;
+  const totalValides = summary?.validated ?? 0;
+  const volsEnAttente = summary?.pending ?? 0;
+  const volsRefuses = summary?.refused ?? 0;
+  const totalMinutes = (profile?.heures_initiales_minutes ?? 0) + (summary?.minutes ?? 0);
   const heures = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
-
-  // Types de vol uniques pour le filtre PDF
-  const typesVolUniques = Array.from(
-    new Set(
-      (vols || [])
-        .map((v) => (v.type_vol ?? '').trim())
-        .filter((t): t is string => Boolean(t))
-    )
-  ).sort();
+  const typesVolUniques = (summary?.types ?? []).filter(Boolean).sort();
+  const pageCount = Math.max(1, Math.ceil((filteredCount ?? 0) / 30));
+  const pageUrl = (target: number) => '/logbook?' + new URLSearchParams({ page: String(target), q: search, statut: status, date }).toString();
 
   return (
     <div className="space-y-6">
@@ -97,7 +99,7 @@ export default async function LogbookPage() {
             <p className="text-sky-100/80 text-sm">Gérez vos vols, suivez votre progression et exportez votre carnet en PDF.</p>
             <p className="text-sky-200/70 text-xs mt-2 flex items-center gap-1.5">
               <span className="status-dot status-dot-success animate-hud-blink"></span>
-              {totalValides.length} vol{totalValides.length > 1 ? 's' : ''} validé{totalValides.length > 1 ? 's' : ''} · {heures}h{minutes.toString().padStart(2, '0')} de vol cumulé
+              {totalValides} vol{totalValides > 1 ? 's' : ''} validé{totalValides > 1 ? 's' : ''} · {heures}h{minutes.toString().padStart(2, '0')} de vol cumulé
             </p>
           </div>
           <div className="flex flex-wrap gap-2 items-start">
@@ -147,6 +149,12 @@ export default async function LogbookPage() {
         chequesAEncaisser={chequesAEncaisser}
       />
 
+      <div className="flex flex-wrap gap-3 text-sm">
+        <a href="#confirmations" className="rounded-lg border border-amber-700 p-3">Confirmations : {(volsEnAttentePilote?.length ?? 0) + (volsEnAttenteCopilote?.length ?? 0) + (volsEnAttenteInstructeur?.length ?? 0)}</a>
+        <Link href="/instruction" className="rounded-lg border border-sky-700 p-3">Formation et prochaines étapes</Link>
+        <Link href="/messagerie" className="rounded-lg border border-emerald-700 p-3">Chèques : {chequesAEncaisser}</Link>
+      </div>
+      <div id="confirmations" />
       {/* Statistiques */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-enter">
         <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-5 transition-all duration-300 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5">
@@ -170,7 +178,7 @@ export default async function LogbookPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-sky-400/80 text-xs font-semibold uppercase tracking-wider">Vols validés</p>
-              <p className="text-3xl font-bold text-sky-400 mt-1 tabular-nums animate-ticker-pop">{totalValides.length}</p>
+              <p className="text-3xl font-bold text-sky-400 mt-1 tabular-nums animate-ticker-pop">{totalValides}</p>
             </div>
             <div className="p-2.5 rounded-xl bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors group-hover:scale-110 duration-300">
               <CheckCircle2 className="h-5 w-5 text-sky-400" />
@@ -182,7 +190,7 @@ export default async function LogbookPage() {
         </div>
 
         <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-5 transition-all duration-300 hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-0.5">
-          {volsEnAttente.length > 0 && (
+          {volsEnAttente > 0 && (
             <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
               <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
@@ -191,7 +199,7 @@ export default async function LogbookPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-amber-400/80 text-xs font-semibold uppercase tracking-wider">En attente</p>
-              <p className="text-3xl font-bold text-amber-400 mt-1 tabular-nums animate-ticker-pop">{volsEnAttente.length}</p>
+              <p className="text-3xl font-bold text-amber-400 mt-1 tabular-nums animate-ticker-pop">{volsEnAttente}</p>
             </div>
             <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors group-hover:scale-110 duration-300">
               <Timer className="h-5 w-5 text-amber-400" />
@@ -206,7 +214,7 @@ export default async function LogbookPage() {
           <div className="flex items-start justify-between">
             <div>
               <p className="text-purple-400/80 text-xs font-semibold uppercase tracking-wider">Total vols</p>
-              <p className="text-3xl font-bold text-purple-400 mt-1 tabular-nums animate-ticker-pop">{vols?.length || 0}</p>
+              <p className="text-3xl font-bold text-purple-400 mt-1 tabular-nums animate-ticker-pop">{summary?.total ?? 0}</p>
             </div>
             <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors group-hover:scale-110 duration-300">
               <TrendingUp className="h-5 w-5 text-purple-400" />
@@ -214,10 +222,10 @@ export default async function LogbookPage() {
           </div>
           <div className="mt-3 pt-3 border-t border-purple-500/10 flex items-center justify-between gap-2 text-xs text-slate-500">
             <span>Tous statuts</span>
-            {volsRefuses.length > 0 && (
+            {volsRefuses > 0 && (
               <span className="text-red-400/80 inline-flex items-center gap-1">
                 <XCircle className="h-3 w-3" />
-                {volsRefuses.length} refusé{volsRefuses.length > 1 ? 's' : ''}
+                {volsRefuses} refusé{volsRefuses > 1 ? 's' : ''}
               </span>
             )}
           </div>
@@ -238,12 +246,23 @@ export default async function LogbookPage() {
             )}
           </h2>
         </div>
+        <form className="flex flex-wrap gap-3 mb-4" action="/logbook">
+          <input name="q" aria-label="Rechercher une route, compagnie ou callsign" placeholder="Route, compagnie, callsign" defaultValue={search} className="rounded-lg bg-slate-900 border border-slate-700 p-2" />
+          <select name="statut" aria-label="Statut des vols" defaultValue={status} className="rounded-lg bg-slate-900 border border-slate-700 p-2"><option value="">Tous les statuts</option><option value="validé">Validés</option><option value="en_attente">En attente</option><option value="refusé">Refusés</option></select>
+          <label className="text-sm text-slate-400">Depuis le <input type="date" name="date" defaultValue={date} className="rounded-lg bg-slate-900 border border-slate-700 p-2" /></label>
+          <button className="rounded-lg bg-sky-700 px-4 py-2">Filtrer</button><Link href="/logbook" className="p-2 underline">Réinitialiser</Link>
+        </form>
+        {(flightsError || summaryResult.error) && <p role="alert" className="text-amber-300 mb-4">Le carnet ou ses statistiques n’ont pas pu être chargés. <Link href={pageUrl(page)} className="underline">Réessayer</Link></p>}
+        <nav aria-label="Pages du carnet" className="flex justify-between items-center mb-4 text-sm">
+          <span>{filteredCount ?? 0} vols · page {page} / {pageCount} · export PDF complet</span>
+          <div className="flex gap-4">{page > 1 && <Link href={pageUrl(page-1)}>Précédente</Link>}{page < pageCount && <Link href={pageUrl(page+1)}>Suivante</Link>}</div>
+        </nav>
         {!vols || vols.length === 0 ? (
           <div className="text-center py-12 animate-fade-in">
             <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4 animate-float">
               <Plane className="h-8 w-8 text-slate-500" />
             </div>
-            <p className="text-slate-400 text-base font-medium">Aucun vol enregistré</p>
+            <p className="text-slate-400 text-base font-medium">Aucun vol dans cette sélection</p>
             <p className="text-slate-500 text-sm mt-1">Commencez par déposer un plan de vol ou enregistrez un vol directement.</p>
             <Link
               href="/logbook/nouveau"
