@@ -1464,48 +1464,21 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 @keyframes login-join-blink { 0%, 42%, 46%, 94%, 98%, 100% { transform: scaleY(1); } 44%, 96% { transform: scaleY(.12); } }
 @media (max-width: 640px) { .login-join-wanderer { font-size: 12px; padding: 10px 12px; } }
 @media (prefers-reduced-motion: reduce) { .login-join-wanderer { display: none; } .login-join-eyes i, .login-join-eyes i::after { animation: none; } }
-/* Startled by the pointer, the companion steps into view until it leaves. */
-.login-join-wanderer { transition: transform .22s ease-out, box-shadow .22s ease-out; cursor: pointer; }
-.login-join-wanderer:hover {
-  animation-play-state: paused;
-  transform: translate(-50%, -12px) rotate(0deg) scale(1.08) !important;
-  opacity: 1 !important;
-  visibility: visible !important;
-  pointer-events: auto !important;
-  z-index: 5 !important;
-  box-shadow: 0 10px 30px #160727aa, 0 0 30px #e9b5ff99;
+
+/* Freeze the actual position; only the face trembles, so the link stays under the pointer. */
+.login-join-wanderer { cursor: pointer; }
+.login-join-wanderer[data-frightened="true"] {
+ animation-play-state: paused; opacity: 1 !important; visibility: visible !important;
+ pointer-events: auto !important; z-index: 5 !important;
+ background: #9147c7; border-color: #fff0bd;
+ box-shadow: 0 8px 28px #160727aa, 0 0 28px #e9b5ff99;
 }
-.login-join-wanderer:hover .login-join-eyes i { animation: none; transform: scale(1.2); }
-.login-join-wanderer:hover .login-join-eyes i::after { animation: none; transform: translateY(-2px) scale(.65); }
-@media (max-width: 640px) {
-  .login-join-wanderer:hover { transform: translate(-50%, -12px) rotate(0deg) !important; }
-}
-@media (prefers-reduced-motion: reduce) { .login-join-wanderer { transition: none; } }
-/* Keep the pointer inside the hit area while the startled pose moves outward. */
-.login-join-wanderer:hover::before { content: ''; position: absolute; inset: -36px -70px; }
-@media (max-width: 640px) {
-  .login-join-wanderer:hover { transform: translate(-50%, -12px) !important; left: clamp(75px, 50%, calc(100% - 75px)) !important; }
-}
-/* The pointer holds the frightened companion outside its hiding place. */
-.login-join-wanderer:hover {
-  background: #8540bb;
-  border-color: #fff0bd;
-}
-.login-join-wanderer:hover > span:last-child { animation: login-join-shiver .16s linear infinite; }
-.login-join-wanderer:hover .login-join-eyes { animation: login-join-shiver .13s linear infinite; gap: 6px; }
-.login-join-wanderer:hover .login-join-eyes i { transform: scale(1.3, 1.4); }
-.login-join-wanderer:hover .login-join-eyes i::after { transform: translateY(-2px) scale(.45); }
-.login-join-wanderer:hover::after {
-  content: '●'; position: absolute; top: 39px; left: calc(50% - 4px);
-  color: #241039; font-size: 12px; line-height: 8px;
-  transform: scale(.7, 1.4); pointer-events: none;
-}
-@keyframes login-join-shiver {
-  0%, 100% { translate: -1px 0; }
-  25% { translate: 1px -1px; }
-  50% { translate: -1px 1px; }
-  75% { translate: 1px 0; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .login-join-wanderer:hover > span:last-child, .login-join-wanderer:hover .login-join-eyes { animation: none; }
-}
+.login-join-face { display: flex; flex-direction: column; align-items: center; gap: 5px; pointer-events: none; }
+.login-join-mouth { display: block; width: 10px; height: 0; opacity: 0; background: #210b34; border-radius: 50%; }
+.login-join-wanderer[data-frightened="true"] .login-join-face { animation: login-join-shiver .12s linear infinite; }
+.login-join-wanderer[data-frightened="true"] .login-join-eyes { gap: 7px; }
+.login-join-wanderer[data-frightened="true"] .login-join-eyes i { animation: none; transform: scale(1.25, 1.35); }
+.login-join-wanderer[data-frightened="true"] .login-join-eyes i::after { animation: none; transform: translateY(-2px) scale(.4); }
+.login-join-wanderer[data-frightened="true"] .login-join-mouth { height: 13px; opacity: 1; box-shadow: inset 0 -3px #e99aaa; }
+@keyframes login-join-shiver { 0%, 100% { transform: translate(-2px, 0) rotate(-2deg); } 50% { transform: translate(2px, 1px) rotate(2deg); } }
+@media (prefers-reduced-motion: reduce) { .login-join-wanderer[data-frightened="true"] .login-join-face { animation: none; } }
