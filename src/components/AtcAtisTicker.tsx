@@ -5,6 +5,7 @@ import { getSharedAtisOverview, subscribeAtisPolling } from '@/lib/atis-overview
 import { useState, useEffect } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
+import CopyAtisButton from '@/components/CopyAtisButton';
 
 const TICKER_INTERVAL_MS = 30000;
 
@@ -74,6 +75,7 @@ export default function AtcAtisTicker() {
         <span className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-400'}`}>
           {broadcasting ? (tickerVisible ? 'Chargement ATIS...' : 'Ticker ATIS masqué') : 'ATIS inactif'}
         </span>
+        <CopyAtisButton text={atisText} />
         <button
           onClick={toggleTicker}
           disabled={loading || !broadcasting}
@@ -112,6 +114,7 @@ export default function AtcAtisTicker() {
           <span className={`text-sm font-mono ${isDark ? 'text-slate-200' : 'text-slate-300'}`}>{atisText}</span>
         </div>
       </div>
+      <CopyAtisButton text={atisText} />
       <button
         onClick={toggleTicker}
         disabled={loading}

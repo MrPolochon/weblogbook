@@ -2,6 +2,7 @@
 
 import { getSharedAtisOverview, subscribeAtisPolling } from '@/lib/atis-overview-client';
 import AtisDraftPreview from '@/components/AtisDraftPreview';
+import CopyAtisButton from '@/components/CopyAtisButton';
 import { fetchJson } from '@/lib/fetch-json';
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
@@ -1867,6 +1868,7 @@ function InstanceCard({
         </>
       )}
 
+      {inst.atis_text?.trim() && <CopyAtisButton text={inst.atis_text} />}
       {!inst.broadcasting && inst.config.configured && (
         <div className={`text-xs ${textMuted} flex items-center gap-1.5`}>
           <Volume2 className="h-3 w-3" />
