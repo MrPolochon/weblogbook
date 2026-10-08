@@ -1737,7 +1737,7 @@ export default function DepotPlanVolForm({
             <label className="label">Heure de départ (UTC) <span className="text-red-400">*</span></label>
             <div className="relative">
               <input
-                type="time"
+                type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
                 className={`input w-full pr-10 font-mono tabular-nums ${fieldErrors.heure_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={heure_depart}
                 onChange={(e) => { setHeureDepart(e.target.value); setFieldErrors(p => ({ ...p, heure_depart: '' })); }}

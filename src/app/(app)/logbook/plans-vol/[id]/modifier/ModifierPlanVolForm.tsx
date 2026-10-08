@@ -170,7 +170,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           <label className="label">Heure de départ (UTC)</label>
           <div className="relative max-w-[160px]">
             <input
-              type="time"
+              type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
               className="input w-full pr-10 font-mono tabular-nums"
               value={heure_depart}
               onChange={(e) => setHeureDepart(e.target.value)}

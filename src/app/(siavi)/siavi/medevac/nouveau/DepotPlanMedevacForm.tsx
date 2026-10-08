@@ -411,7 +411,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
                 </label>
                 <div className="relative">
                   <input
-                    type="time"
+                    type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
                     value={seg.heure_depart}
                     onChange={e => updateSegment(index, { heure_depart: e.target.value })}
                     placeholder="14:30"

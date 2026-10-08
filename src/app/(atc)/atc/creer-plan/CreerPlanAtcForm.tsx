@@ -312,7 +312,7 @@ export default function CreerPlanAtcForm({ sessionAeroport, sessionPosition }: P
             </label>
             <div className="relative">
               <input
-                type="time"
+                type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
                 value={heure_depart}
                 onChange={(e) => setHeureDepart(e.target.value)}
                 placeholder="14:30"

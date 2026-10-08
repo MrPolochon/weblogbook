@@ -247,9 +247,10 @@ export function mergeTmaDraft(
 function tmaRunwayPhrase(a: TmaAirportDraft, lang: 'en' | 'fr'): string {
   const cond = RUNWAY_CONDITIONS.find((c) => c.id === a.condition)?.[lang] ?? a.condition;
   const bits = [a.runways.trim(), cond];
-  if (a.approach?.trim()) bits.push(a.approach.trim());
   const loc = lang === 'fr' ? `en service à ${a.nom}` : `in service at ${a.nom}`;
-  return `${bits.join(', ')}, ${loc}`;
+  const approach = a.approach?.trim().replace(/\s+approach$/i, '');
+  const expected = approach ? (lang === 'fr' ? `, approche ${approach} prévue` : ` expect ${approach} approach`) : '';
+  return `${bits.join(', ')}, ${loc}${expected}`;
 }
 
 export function composeTmaRunwayEn(airports: TmaAirportDraft[]): string {
