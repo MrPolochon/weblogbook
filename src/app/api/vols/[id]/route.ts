@@ -4,8 +4,9 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { addMinutes, parseISO } from 'date-fns';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
-import { applyMissionOnAdminDecision, canValidateVolMilitaire, TYPE_VOL_MILITAIRE, updateVolMilitaire } from '@/lib/armee';
+import { decideVolMilitaire, canValidateVolMilitaire, TYPE_VOL_MILITAIRE, updateVolMilitaire } from '@/lib/armee';
 import { isQualifiedFlightInstructorInLogbook } from '@/lib/instruction-permissions';
+import { militaryRpcError } from '@/lib/armee/validation';
 
 export async function PATCH(
   request: Request,
@@ -48,11 +49,11 @@ export async function PATCH(
         updates.refusal_count = ((vol as { refusal_count?: number }).refusal_count ?? 0) + 1;
       }
 
-      const missionFx = await applyMissionOnAdminDecision(vol, body.statut);
-      if (!missionFx.ok) {
-        return NextResponse.json({ error: missionFx.error }, { status: missionFx.status });
+      if (isVolMilitaire) {
+        const result = await decideVolMilitaire(id, body.statut, user.id, body.refusal_reason);
+        if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+        return NextResponse.json({ ok: true });
       }
-      Object.assign(updates, missionFx.data);
 
       const writer = canValidateMil && !isAdmin ? createAdminClient() : supabase;
       const { error } = await writer.from('vols').update(updates).eq('id', id);
@@ -91,8 +92,9 @@ export async function PATCH(
       return NextResponse.json({ ok: true });
     }
 
-    // ===== Branche modification vol militaire (préférer PATCH /api/armee/vols/[id]) =====
-    if (body.type_vol === 'Vol militaire' || body._edit_militaire) {
+    // Identifier le type enregistré : le client ne peut pas convertir un vol Armée via la route civile.
+    const { data: storedFlight } = await supabase.from('vols').select('type_vol').eq('id', id).single();
+    if (storedFlight?.type_vol === TYPE_VOL_MILITAIRE || body.type_vol === TYPE_VOL_MILITAIRE || body._edit_militaire) {
       const result = await updateVolMilitaire(id, body, { userId: user.id, isAdmin });
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
 
@@ -289,6 +291,9 @@ export async function DELETE(
       if (!isAdmin && !isInstructeur) return NextResponse.json({ error: 'Pour un vol d\'instruction, seul l\'instructeur peut supprimer le vol.' }, { status: 403 });
     } else if (isVolMilitaire) {
       if (!isAdmin && !isPiloteOrCopilote && !isChefEscadron) return NextResponse.json({ error: 'Vous ne pouvez supprimer que vos propres vols militaires.' }, { status: 403 });
+      const { error } = await admin.rpc('delete_armee_vol', { p_actor: user.id, p_vol_id: id });
+      if (error) { const failure = militaryRpcError(error); return NextResponse.json({ error: failure.error }, { status: failure.status }); }
+      return NextResponse.json({ ok: true });
     } else {
       if (!isAdmin && !isPiloteOrCopilote) return NextResponse.json({ error: 'Vous ne pouvez supprimer que vos propres vols.' }, { status: 403 });
     }

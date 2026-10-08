@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { canAccessEspaceMilitaire, isBlocked } from '@/lib/armee';
+import { readAllMilitaryRows } from '@/lib/armee/read-all';
 import MilitaireClient from './MilitaireClient';
 import type { MilitaireStats, VolMilitaireRow } from './types';
 
@@ -33,31 +34,32 @@ export default async function MilitairePage() {
   const userBlocked = isBlocked(profile);
 
   const [
-    { data: vols1 },
-    { data: eqData },
-    { count: flotteActive },
-    { data: compteMilitaire },
+    vols1,
+    eqData,
+    { count: flotteActive, error: fleetError },
+    { data: compteMilitaire, error: accountError },
   ] = await Promise.all([
-    admin.from('vols')
+    readAllMilitaryRows((from, to) => admin.from('vols')
       .select(SELECT_VOLS)
       .eq('type_vol', 'Vol militaire')
       .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id},chef_escadron_id.eq.${user.id}`)
       .in('statut', ['en_attente', 'validé', 'refusé'])
-      .order('depart_utc', { ascending: false }),
-    admin.from('vols_equipage_militaire').select('vol_id').eq('profile_id', user.id),
+      .order('depart_utc', { ascending: false }).order('id').range(from, to)),
+    readAllMilitaryRows((from, to) => admin.from('vols_equipage_militaire').select('vol_id').eq('profile_id', user.id).order('vol_id').range(from, to)),
     admin.from('armee_avions').select('*', { count: 'exact', head: true }).eq('detruit', false),
     admin.from('felitz_comptes').select('proprietaire_id').eq('type', 'militaire').maybeSingle(),
   ]);
+  if (fleetError || accountError) throw new Error('Impossible de charger la flotte ou le commandement Armée.');
 
   const volIdsEq = Array.from(new Set((eqData || []).map((r) => r.vol_id)));
   let vols2: typeof vols1 = [];
   if (volIdsEq.length > 0) {
-    const { data } = await admin.from('vols')
+    const data = await readAllMilitaryRows((from, to) => admin.from('vols')
       .select(SELECT_VOLS)
       .eq('type_vol', 'Vol militaire')
       .in('id', volIdsEq)
       .in('statut', ['en_attente', 'validé', 'refusé'])
-      .order('depart_utc', { ascending: false });
+      .order('depart_utc', { ascending: false }).order('id').range(from, to));
     vols2 = data || [];
   }
 

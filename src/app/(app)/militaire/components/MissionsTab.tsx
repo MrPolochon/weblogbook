@@ -15,6 +15,7 @@ type MissionWithCooldown = ArmeeMission & {
   cooldown?: MissionCooldownInfo;
   gradeLocked?: boolean;
   requiredGradeLabel?: string;
+  pending?: boolean;
 };
 
 const MISSION_STYLES: Record<string, string> = {
@@ -27,17 +28,22 @@ const MISSION_STYLES: Record<string, string> = {
 export default function MissionsTab() {
   const [missions, setMissions] = useState<MissionWithCooldown[]>(ARME_MISSIONS);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     (async () => {
       try {
         const res = await fetch('/api/armee/missions');
-        if (!res.ok) return;
+        if (!res.ok) throw new Error('Impossible de vérifier les disponibilités. Réessayez.');
         const data = (await res.json()) as MissionWithCooldown[];
-        if (!cancelled && Array.isArray(data)) setMissions(data);
-      } catch {
-        /* catalogue statique en fallback */
+        if (!Array.isArray(data)) throw new Error('Réponse de mission invalide.');
+        if (!cancelled) setMissions(data);
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : 'Chargement impossible.');
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -45,13 +51,20 @@ export default function MissionsTab() {
     return () => {
       cancelled = true;
     };
+  }, [refresh]);
+
+  useEffect(() => {
+    const update = () => { if (document.visibilityState === 'visible') setRefresh(n => n + 1); };
+    const timer = setInterval(update, 60_000);
+    window.addEventListener('focus', update);
+    return () => { clearInterval(timer); window.removeEventListener('focus', update); };
   }, []);
 
   return (
     <div className="space-y-6">
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 px-4 py-3 text-sm text-slate-400 space-y-1">
         <p>
-          Récompenses Felitz ajustées selon le retard à la validation.
+          Récompenses versées au compte Armée, avec ponctualité calculée au dépôt du dossier.
           Cooldown <strong className="text-slate-300 font-medium">par pilote</strong>, bonus de série à partir de 3 jours d&apos;ops.
         </p>
         <p>Certaines missions exigent un grade minimum (progression par missions validées).</p>
@@ -63,12 +76,15 @@ export default function MissionsTab() {
           Chargement des disponibilités…
         </div>
       )}
+      {error && <div role="alert" className="rounded-xl border border-red-500/30 p-4 text-red-200">
+        {error} <button type="button" className="underline ml-2" onClick={() => setRefresh(n => n + 1)}>Réessayer</button>
+      </div>}
 
       <div className="grid gap-4 sm:grid-cols-2">
         {missions.map((m) => {
           const gradeLocked = Boolean(m.gradeLocked);
           const cooldownBlocked = m.cooldown?.available === false && !gradeLocked;
-          const available = !gradeLocked && m.cooldown?.available !== false;
+          const available = !loading && !error && Boolean(m.cooldown?.available) && !gradeLocked && !m.pending;
           const remaining = m.cooldown?.remainingMinutes ?? 0;
           return (
             <article
@@ -150,7 +166,7 @@ export default function MissionsTab() {
                 ) : (
                   <div className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border border-slate-700/50 text-slate-500 text-sm">
                     <Lock className="h-3.5 w-3.5" />
-                    {gradeLocked ? 'Grade insuffisant' : 'Cooldown en cours'}
+                    {loading ? 'Vérification en cours' : error ? 'Disponibilité non vérifiée' : m.pending ? 'Dossier déjà ouvert — voir le carnet' : gradeLocked ? 'Grade insuffisant' : 'Délai en cours'}
                   </div>
                 )}
               </div>

@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { addMinutes, parseISO } from 'date-fns';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
@@ -11,8 +10,7 @@ import {
   rollMissionRewardBase,
 } from './missions';
 import { canEditVolMilitaire } from './permissions';
-import { computeMissionReward, missionLabel, nextMissionStatusOnRefusal, resolveRewardBase } from './rewards';
-import { applyStreakBonus, computeOpsStreak, uniqueUtcDatesDesc } from './streaks';
+import { createMilitaryFlightSchema, updateMilitaryFlightSchema, militaryRpcError } from './validation';
 import type {
   AarTag,
   CreateVolMilitaireInput,
@@ -26,7 +24,7 @@ export type ServiceResult<T> =
   | { ok: false; status: number; error: string };
 
 function parseDepartUtc(du: string): Date | null {
-  const depStr = /Z$/.test(String(du)) ? String(du) : String(du) + 'Z';
+  const depStr = /(Z|[+-]\d{2}:\d{2})$/.test(String(du)) ? String(du) : String(du) + 'Z';
   const dep = parseISO(depStr);
   return Number.isNaN(dep.getTime()) ? null : dep;
 }
@@ -89,7 +87,7 @@ export async function getMissionCooldownForUser(
   userId: string,
   cooldownMinutes: number,
 ): Promise<MissionCooldownInfo> {
-  const { data: last } = await admin
+  const { data: last, error } = await admin
     .from('armee_missions_log')
     .select('created_at')
     .eq('mission_id', missionId)
@@ -98,6 +96,7 @@ export async function getMissionCooldownForUser(
     .limit(1)
     .maybeSingle();
 
+  if (error) throw new Error('Impossible de vérifier le délai de mission. Réessayez.');
   if (!last?.created_at) {
     return { missionId, available: true, remainingMinutes: 0, lastCompletedAt: null };
   }
@@ -132,6 +131,12 @@ export async function listMissionsWithCooldown(userId: string | null) {
   const admin = createAdminClient();
   const missionsDone = await countMissionsCompleted(userId);
   const userGrade = getGradeForMissionCount(missionsDone);
+  const { data: open, error: openError } = await admin.from('vols').select('mission_id')
+    .eq('type_vol', TYPE_VOL_MILITAIRE).eq('pilote_id', userId)
+    .is('mission_reward_final', null).not('mission_id', 'is', null)
+    .or('statut.eq.en_attente,and(statut.eq.refusé,mission_status.neq.echec)');
+  if (openError) throw new Error('Impossible de vérifier les dossiers ouverts.');
+  const pending = new Set((open || []).map(v => v.mission_id));
 
   return Promise.all(
     ARME_MISSIONS.map(async (m) => {
@@ -139,7 +144,8 @@ export async function listMissionsWithCooldown(userId: string | null) {
       const gradeOk = gradeMeetsMinimum(userGrade, m.minGrade);
       return {
         ...m,
-        cooldown: gradeOk ? cooldown : { ...cooldown, available: false },
+        cooldown: gradeOk && !pending.has(m.id) ? cooldown : { ...cooldown, available: false },
+        pending: pending.has(m.id),
         gradeLocked: !gradeOk,
         userGradeLabel: userGrade.label,
         requiredGradeLabel: getGradeById(m.minGrade).label,
@@ -152,6 +158,9 @@ export async function createVolMilitaire(
   input: CreateVolMilitaireInput,
   ctx: { userId: string; supabase: { from: AdminClient['from'] } },
 ): Promise<ServiceResult<{ id: string }>> {
+  const parsed = createMilitaryFlightSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, status: 400, error: 'Formulaire invalide : durée entière de 1 à 1 440 minutes, participants et champs requis à vérifier.' };
+  input = parsed.data;
   const admin = createAdminClient();
   const {
     armee_avion_id: armeeAvionId,
@@ -186,7 +195,7 @@ export async function createVolMilitaire(
   if (!ad || !CODES_OACI_VALIDES.has(String(ad).toUpperCase()) || !aa || !CODES_OACI_VALIDES.has(String(aa).toUpperCase())) {
     return { ok: false, status: 400, error: 'Aéroports de départ et d\'arrivée requis (code OACI valide).' };
   }
-  const dmNum = typeof dm === 'number' ? dm : parseInt(String(dm), 10);
+  const dmNum = dm;
   if (isNaN(dmNum) || dmNum < 1 || !du || !cb) {
     return { ok: false, status: 400, error: 'Champs requis manquants ou invalides.' };
   }
@@ -211,7 +220,8 @@ export async function createVolMilitaire(
       return { ok: false, status: 400, error: 'Le plan de vol ne correspond pas à la mission sélectionnée.' };
     }
 
-    const cooldown = await getMissionCooldownForUser(admin, mission.id, ctx.userId, mission.cooldownMinutes);
+    const beneficiaryId = eoe === 'autre' && rp === 'Co-pilote' && pidB ? pidB : ctx.userId;
+    const cooldown = await getMissionCooldownForUser(admin, mission.id, beneficiaryId, mission.cooldownMinutes);
     if (!cooldown.available) {
       return {
         ok: false,
@@ -220,7 +230,7 @@ export async function createVolMilitaire(
       };
     }
 
-    const missionsDone = await countMissionsCompleted(ctx.userId);
+    const missionsDone = await countMissionsCompleted(beneficiaryId);
     const userGrade = getGradeForMissionCount(missionsDone);
     if (!gradeMeetsMinimum(userGrade, mission.minGrade)) {
       const required = getGradeById(mission.minGrade);
@@ -312,20 +322,14 @@ export async function createVolMilitaire(
     created_by_user_id: null,
   };
 
-  const { data, error } = await admin.from('vols').insert(row).select('id').single();
-  if (error) return { ok: false, status: 400, error: error.message };
-
-  if (isEscadrilleOuEscadron) {
-    const equipageIds: string[] = Array.isArray(equipageIdsBody)
-      ? equipageIdsBody.filter((x): x is string => typeof x === 'string' && x.length > 0)
-      : [];
-    const tous = Array.from(new Set([ctx.userId, ...equipageIds]));
-    if (tous.length > 0) {
-      await admin.from('vols_equipage_militaire').insert(tous.map((pid) => ({ vol_id: data.id, profile_id: pid })));
-    }
-  }
-
-  return { ok: true, data: { id: data.id } };
+  const { data, error } = await admin.rpc('save_armee_vol', {
+    p_actor: ctx.userId, p_vol_id: null, p_row: row,
+    p_equipage: isEscadrilleOuEscadron ? Array.from(new Set([ctx.userId, ...(equipageIdsBody || [])])) : [],
+    p_cooldown: mission?.cooldownMinutes || 0,
+    p_min_missions: mission ? getGradeById(mission.minGrade).minMissions : 0,
+  });
+  if (error) return militaryRpcError(error);
+  return { ok: true, data: { id: data as string } };
 }
 
 export async function updateVolMilitaire(
@@ -333,10 +337,13 @@ export async function updateVolMilitaire(
   input: UpdateVolMilitaireInput,
   ctx: { userId: string; isAdmin: boolean },
 ): Promise<ServiceResult<{ id: string }>> {
+  const parsed = updateMilitaryFlightSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, status: 400, error: 'Formulaire invalide : vérifiez la durée, les participants et les champs requis.' };
+  input = parsed.data;
   const admin = createAdminClient();
   const { data: volMil } = await admin
     .from('vols')
-    .select('id, pilote_id, copilote_id, chef_escadron_id, statut, type_vol, mission_id')
+    .select('id, pilote_id, copilote_id, chef_escadron_id, statut, type_vol, mission_id, mission_reward_final, mission_status, mission_refusals')
     .eq('id', volId)
     .single();
 
@@ -421,111 +428,35 @@ export async function updateVolMilitaire(
   if (milCopiloteId !== undefined) milUpdates.copilote_id = milCopiloteId || null;
   if (milChefId !== undefined) milUpdates.chef_escadron_id = milChefId || null;
 
-  const { error: milErr } = await admin.from('vols').update(milUpdates).eq('id', volId);
-  if (milErr) return { ok: false, status: 400, error: milErr.message };
-
-  if (milEquipageIds !== undefined) {
-    await admin.from('vols_equipage_militaire').delete().eq('vol_id', volId);
-    const ids = Array.isArray(milEquipageIds)
-      ? Array.from(new Set(milEquipageIds.filter((x): x is string => typeof x === 'string' && x.length > 0)))
-      : [];
-    if (ids.length > 0) {
-      await admin.from('vols_equipage_militaire').insert(ids.map((pid) => ({ vol_id: volId, profile_id: pid })));
-    }
-  }
-
+  const mission = getMissionById(volMil.mission_id);
+  const { error: milErr } = await admin.rpc('save_armee_vol', {
+    p_actor: ctx.userId, p_vol_id: volId, p_row: milUpdates,
+    p_equipage: milEquipageIds === undefined ? null : Array.from(new Set([volMil.pilote_id, ...(milEquipageIds || [])])),
+    p_cooldown: mission?.cooldownMinutes || 0,
+    p_min_missions: mission ? getGradeById(mission.minGrade).minMissions : 0,
+  });
+  if (milErr) return militaryRpcError(milErr);
   return { ok: true, data: { id: volId } };
 }
 
-type VolForValidation = {
-  id: string;
-  pilote_id: string;
-  type_vol: string;
-  mission_id: string | null;
-  mission_titre: string | null;
-  mission_reward_base: number | null;
-  mission_reward_final: number | null;
-  mission_refusals: number | null;
-  arrivee_utc: string | null;
-};
-
-/**
- * Applique les effets mission lors d'une validation/refus (admin ou PDG militaire).
- * Retourne les champs à merger dans l'update `vols`.
- */
-export async function applyMissionOnAdminDecision(
-  vol: VolForValidation,
+/** Validation, paiement et journal sont une seule transaction côté base. */
+export async function decideVolMilitaire(
+  volId: string,
   decision: 'validé' | 'refusé',
+  actorId: string,
+  reason?: string | null,
 ): Promise<ServiceResult<Record<string, unknown>>> {
-  if (vol.type_vol !== TYPE_VOL_MILITAIRE || !vol.mission_id) {
-    return { ok: true, data: {} };
-  }
-
-  if (decision === 'refusé') {
-    const next = nextMissionStatusOnRefusal(vol.mission_refusals ?? 0);
-    return { ok: true, data: next };
-  }
-
-  // déjà payé
-  if (vol.mission_reward_final) return { ok: true, data: {} };
-
   const admin = createAdminClient();
-  const base = resolveRewardBase(vol.mission_id, vol.mission_reward_base);
-  const { finalReward: rewardAfterDelay, delayMinutes } = computeMissionReward(base, vol.arrivee_utc);
-
-  const { data: priorLogs } = await admin
-    .from('armee_missions_log')
-    .select('created_at')
-    .eq('user_id', vol.pilote_id)
-    .order('created_at', { ascending: false });
-
-  const today = format(new Date(), 'yyyy-MM-dd');
-  const dates = uniqueUtcDatesDesc((priorLogs || []).map((l) => l.created_at as string));
-  const streakDays = computeOpsStreak(dates, today);
-  const streak = applyStreakBonus(rewardAfterDelay, streakDays);
-  const finalReward = streak.finalReward;
-
-  const { data: compteMilitaire } = await admin
-    .from('felitz_comptes')
-    .select('id, solde')
-    .eq('type', 'militaire')
-    .single();
-
-  if (!compteMilitaire) {
-    return { ok: false, status: 400, error: 'Compte militaire introuvable (mission non payée).' };
-  }
-
-  await admin.rpc('crediter_compte_safe', { p_compte_id: compteMilitaire.id, p_montant: finalReward });
-
+  const { data: vol, error: readError } = await admin.from('vols').select('mission_id').eq('id', volId).single();
+  if (readError || !vol) return { ok: false, status: 404, error: 'Vol introuvable' };
   const mission = getMissionById(vol.mission_id);
-  const streakNote =
-    streak.streakBonusAmount > 0
-      ? ` (+${streak.streakBonusPercent}% série ${streak.streakDays}j)`
-      : '';
-  await admin.from('felitz_transactions').insert({
-    compte_id: compteMilitaire.id,
-    type: 'credit',
-    montant: finalReward,
-    libelle: `Mission militaire: ${missionLabel(mission, vol.mission_titre || vol.mission_id)}${streakNote}`,
+  const { data, error } = await admin.rpc('decide_armee_vol', {
+    p_actor: actorId, p_vol_id: volId, p_decision: decision,
+    p_reason: typeof reason === 'string' ? reason.slice(0, 2000) : null,
+    p_cooldown: mission?.cooldownMinutes || 0,
   });
-
-  await admin.from('armee_missions_log').insert({
-    mission_id: vol.mission_id,
-    user_id: vol.pilote_id,
-    reward: finalReward,
-    streak_bonus: streak.streakBonusAmount,
-  });
-
-  return {
-    ok: true,
-    data: {
-      mission_reward_final: finalReward,
-      mission_delay_minutes: delayMinutes,
-      mission_status: 'valide',
-      mission_streak_days: streak.streakDays,
-      mission_streak_bonus: streak.streakBonusAmount,
-    },
-  };
+  if (error) return militaryRpcError(error);
+  return { ok: true, data: data as Record<string, unknown> };
 }
 
 /**

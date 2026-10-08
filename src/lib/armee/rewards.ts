@@ -4,15 +4,15 @@ import { getMissionById } from './missions';
 
 /**
  * Récompense finale = base × max(0.2, 1 − 1% par minute de retard vs arrivee_utc prévue).
- * Le retard est mesuré à l'instant de la validation admin.
+ * Le retard est mesuré à l'instant du dépôt, indépendamment de la validation.
  */
 export function computeMissionReward(
   base: number,
   arriveeUtc: string | null | undefined,
-  validatedAt: Date = new Date(),
+  submittedAt: Date = new Date(),
 ): MissionRewardResult {
-  const arrivee = arriveeUtc ? new Date(arriveeUtc).getTime() : validatedAt.getTime();
-  const delayMinutes = Math.max(0, Math.round((validatedAt.getTime() - arrivee) / 60_000));
+  const arrivee = arriveeUtc ? new Date(arriveeUtc).getTime() : submittedAt.getTime();
+  const delayMinutes = Math.max(0, Math.round((submittedAt.getTime() - arrivee) / 60_000));
   const coeff = Math.max(0.2, 1 - delayMinutes * 0.01);
   const finalReward = Math.max(0, Math.round(base * coeff));
   return { base, finalReward, delayMinutes, coeff };

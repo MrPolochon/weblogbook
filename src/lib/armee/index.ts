@@ -10,7 +10,7 @@ export * from './briefings';
 export {
   createVolMilitaire,
   updateVolMilitaire,
-  applyMissionOnAdminDecision,
+  decideVolMilitaire,
   getMissionCooldownForUser,
   listMissionsWithCooldown,
   submitMissionAar,

@@ -25,7 +25,7 @@ export type VolMilitaireRow = {
   equipage: { profile_id: string }[] | null;
 };
 
-export type MilitaireTabId = 'vue' | 'missions' | 'carnet';
+export type MilitaireTabId = 'vue' | 'missions' | 'carnet' | 'operations' | 'flotte';
 
 export type MilitaireStats = {
   totalMinutesValides: number;

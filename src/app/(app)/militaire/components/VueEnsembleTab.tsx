@@ -39,15 +39,19 @@ export default function VueEnsembleTab({
   const [savingBrief, setSavingBrief] = useState(false);
   const [briefMsg, setBriefMsg] = useState<string | null>(null);
   const [loadingOps, setLoadingOps] = useState(true);
+  const [opsError, setOpsError] = useState<string | null>(null);
+  const [retry, setRetry] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
+    setLoadingOps(true); setOpsError(null);
     (async () => {
       try {
         const [statsRes, briefRes] = await Promise.all([
           fetch('/api/armee/stats?period=week'),
           fetch('/api/armee/briefing'),
         ]);
+        if (!statsRes.ok || !briefRes.ok) throw new Error('Certaines données opérationnelles n’ont pas pu être chargées.');
         if (statsRes.ok) {
           const data = await statsRes.json();
           if (!cancelled) {
@@ -70,8 +74,8 @@ export default function VueEnsembleTab({
             }
           }
         }
-      } catch {
-        /* ignore */
+      } catch (e) {
+        if (!cancelled) setOpsError(e instanceof Error ? e.message : 'Chargement impossible.');
       } finally {
         if (!cancelled) setLoadingOps(false);
       }
@@ -79,7 +83,7 @@ export default function VueEnsembleTab({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [retry]);
 
   async function saveBriefing() {
     setSavingBrief(true);
@@ -103,6 +107,7 @@ export default function VueEnsembleTab({
 
   return (
     <div className="space-y-6">
+      {opsError && <p role="alert" className="rounded-lg border border-red-500/30 p-3 text-red-200">{opsError} <button type="button" className="underline ml-2" onClick={() => setRetry(n => n + 1)}>Réessayer</button></p>}
       {isBlocked && blockedUntil && (
         <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 flex items-start gap-3">
           <AlertCircle className="h-5 w-5 text-red-400 shrink-0 mt-0.5" />
@@ -133,17 +138,22 @@ export default function VueEnsembleTab({
                 En tant que {PDG_MILITAIRE_ROLE.shortLabel}, vous publiez le briefing visible par tous les pilotes militaires.
               </p>
               <input
+                aria-label="Titre du briefing"
+                maxLength={150}
                 className="input w-full"
                 value={briefDraft.titre}
                 onChange={(e) => setBriefDraft((d) => ({ ...d, titre: e.target.value }))}
                 placeholder="Titre du briefing"
               />
               <textarea
+                aria-label="Consignes du briefing"
+                maxLength={10000}
                 className="input w-full min-h-[100px]"
                 value={briefDraft.contenu}
                 onChange={(e) => setBriefDraft((d) => ({ ...d, contenu: e.target.value }))}
                 placeholder="Ordres du jour, zones sensibles, consignes…"
               />
+              <button type="button" className="text-sm text-amber-200 underline" disabled={savingBrief} onClick={() => setBriefDraft(d => ({ ...d, contenu: `${d.contenu}${d.contenu ? '\n\n' : ''}OBJECTIF\n\nÉQUIPAGE ET APPAREILS\n\nROUTE ET HORAIRES UTC\n\nCONSIGNES OPÉRATIONNELLES\n\nCOMPTE RENDU ATTENDU\n`.slice(0, 10000) }))}>Ajouter la trame de briefing</button>
               <label className="flex items-center gap-2 text-sm text-slate-300">
                 <input
                   type="checkbox"
@@ -160,7 +170,7 @@ export default function VueEnsembleTab({
               >
                 {savingBrief ? 'Enregistrement…' : 'Enregistrer le briefing'}
               </button>
-              {briefMsg && <p className="text-xs text-slate-400">{briefMsg}</p>}
+              {briefMsg && <p role="status" className="text-xs text-slate-400">{briefMsg}</p>}
             </div>
           )}
         </div>
@@ -335,7 +345,7 @@ export default function VueEnsembleTab({
           </p>
           {pilot && pilot.totalFelitzEarned > 0 && (
             <p className="text-xs text-emerald-400/80">
-              {pilot.totalFelitzEarned.toLocaleString('fr-FR')} F$ gagnés en missions (compte Armée)
+              {pilot.totalFelitzEarned.toLocaleString('fr-FR')} F$ versés au compte Armée grâce à vos missions
             </p>
           )}
           {stats.volsRefuses > 0 && (

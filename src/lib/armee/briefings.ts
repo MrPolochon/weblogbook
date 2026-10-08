@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/admin';
+import { militaryRpcError } from './validation';
 
 export type ArmeeBriefing = {
   titre: string;
@@ -16,12 +17,13 @@ const DEFAULT: ArmeeBriefing = {
 
 export async function getActiveBriefing(): Promise<ArmeeBriefing | null> {
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from('armee_briefing')
     .select('titre, contenu, actif, updated_at')
     .eq('id', 1)
     .maybeSingle();
 
+  if (error) throw new Error('Impossible de charger le briefing.');
   if (!data || !data.actif || !String(data.contenu || '').trim()) return null;
   return {
     titre: data.titre || DEFAULT.titre,
@@ -33,12 +35,13 @@ export async function getActiveBriefing(): Promise<ArmeeBriefing | null> {
 
 export async function getBriefingForAdmin(): Promise<ArmeeBriefing> {
   const admin = createAdminClient();
-  const { data } = await admin
+  const { data, error } = await admin
     .from('armee_briefing')
     .select('titre, contenu, actif, updated_at')
     .eq('id', 1)
     .maybeSingle();
 
+  if (error) throw new Error('Impossible de charger le briefing.');
   if (!data) return DEFAULT;
   return {
     titre: data.titre || DEFAULT.titre,
@@ -53,17 +56,14 @@ export async function updateBriefing(
   updatedBy: string,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const admin = createAdminClient();
-  const { error } = await admin
-    .from('armee_briefing')
-    .upsert({
-      id: 1,
-      titre: input.titre.trim() || DEFAULT.titre,
-      contenu: input.contenu.trim(),
-      actif: input.actif,
-      updated_at: new Date().toISOString(),
-      updated_by: updatedBy,
-    });
+  if (input.titre.trim().length > 150 || input.contenu.length > 10000 || (input.actif && !input.contenu.trim())) {
+    return { ok: false, error: 'Titre limité à 150 caractères, contenu à 10 000 caractères. Un briefing publié doit contenir des consignes.' };
+  }
+  const { error } = await admin.rpc('save_armee_briefing', {
+    p_actor: updatedBy, p_title: input.titre.trim() || DEFAULT.titre,
+    p_content: input.contenu.trim(), p_active: input.actif,
+  });
 
-  if (error) return { ok: false, error: error.message };
+  if (error) return militaryRpcError(error);
   return { ok: true };
 }

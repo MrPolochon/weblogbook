@@ -1,8 +1,7 @@
 import { format, subDays } from 'date-fns';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getGradeForMissionCount, type ArmeeGrade } from './grades';
-import { computeOpsStreak, uniqueUtcDatesDesc } from './streaks';
-import { TYPE_VOL_MILITAIRE } from './types';
+import { computeOpsStreak } from './streaks';
 
 export type PilotMilitaryStats = {
   missionsCompleted: number;
@@ -32,34 +31,23 @@ export type HonorBoard = {
 export async function getPilotMilitaryStats(userId: string): Promise<PilotMilitaryStats> {
   const admin = createAdminClient();
 
-  const [
-    { data: logs },
-    { data: missionVols },
-  ] = await Promise.all([
-    admin.from('armee_missions_log').select('reward, created_at').eq('user_id', userId),
-    admin
-      .from('vols')
-      .select('mission_status, statut')
-      .eq('type_vol', TYPE_VOL_MILITAIRE)
-      .eq('pilote_id', userId)
-      .not('mission_id', 'is', null),
-  ]);
-
-  const missionsCompleted = logs?.length ?? 0;
-  const totalFelitzEarned = (logs || []).reduce((s, r) => s + (Number(r.reward) || 0), 0);
+  const { data, error } = await admin.rpc('get_armee_pilot_stats', { p_user: userId });
+  if (error || !data) throw new Error('Impossible de charger la progression Armée. Vérifiez la mise à jour de la base.');
+  const summary = data as { completed: number; reward: number; dates: string[]; attempted: number; validated: number; failed: number };
+  const missionsCompleted = Number(summary.completed);
+  const totalFelitzEarned = Number(summary.reward);
   const grade = getGradeForMissionCount(missionsCompleted);
   const allGrades = (await import('./grades')).ARMEE_GRADES;
   const nextIdx = allGrades.findIndex((g) => g.id === grade.id) + 1;
   const nextGrade = nextIdx < allGrades.length ? allGrades[nextIdx] : null;
   const missionsToNextGrade = nextGrade ? Math.max(0, nextGrade.minMissions - missionsCompleted) : 0;
 
-  const dates = uniqueUtcDatesDesc((logs || []).map((l) => l.created_at as string));
-  const opsStreak = computeOpsStreak(dates);
-
-  const attempted = missionVols?.length ?? 0;
-  const validated = (missionVols || []).filter((v) => v.mission_status === 'valide' || v.statut === 'validé').length;
-  const failed = (missionVols || []).filter((v) => v.mission_status === 'echec').length;
-  const successRate = attempted > 0 ? Math.round((validated / attempted) * 100) : null;
+  const opsStreak = computeOpsStreak(summary.dates || []);
+  const attempted = Number(summary.attempted);
+  const validated = Number(summary.validated);
+  const failed = Number(summary.failed);
+  const decided = validated + failed;
+  const successRate = decided > 0 ? Math.round((validated / decided) * 100) : null;
 
   return {
     missionsCompleted,
@@ -79,36 +67,9 @@ export async function getHonorBoard(period: 'week' | 'month'): Promise<HonorBoar
   const days = period === 'week' ? 7 : 30;
   const since = subDays(new Date(), days).toISOString();
 
-  const { data: logs } = await admin
-    .from('armee_missions_log')
-    .select('user_id, reward, profiles:user_id(identifiant)')
-    .gte('created_at', since);
-
-  const byUser = new Map<string, { identifiant: string; count: number; total: number }>();
-
-  for (const row of logs || []) {
-    const uid = row.user_id as string;
-    const prof = row.profiles as { identifiant: string } | { identifiant: string }[] | null;
-    const ident = prof
-      ? Array.isArray(prof)
-        ? prof[0]?.identifiant || uid.slice(0, 8)
-        : prof.identifiant
-      : uid.slice(0, 8);
-    const cur = byUser.get(uid) || { identifiant: ident, count: 0, total: 0 };
-    cur.count++;
-    cur.total += Number(row.reward) || 0;
-    byUser.set(uid, cur);
-  }
-
-  const entries: HonorBoardEntry[] = Array.from(byUser.entries())
-    .map(([userId, v]) => ({
-      userId,
-      identifiant: v.identifiant,
-      missionsCount: v.count,
-      totalReward: v.total,
-    }))
-    .sort((a, b) => b.missionsCount - a.missionsCount || b.totalReward - a.totalReward)
-    .slice(0, 10);
+  const { data, error } = await admin.rpc('get_armee_honor_board', { p_days: days });
+  if (error) throw new Error('Impossible de charger le tableau d’honneur Armée.');
+  const entries = (data || []) as HonorBoardEntry[];
 
   return {
     period,
@@ -119,9 +80,10 @@ export async function getHonorBoard(period: 'week' | 'month'): Promise<HonorBoar
 
 export async function countMissionsCompleted(userId: string): Promise<number> {
   const admin = createAdminClient();
-  const { count } = await admin
+  const { count, error } = await admin
     .from('armee_missions_log')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId);
+  if (error) throw new Error('Impossible de vérifier votre progression militaire.');
   return count ?? 0;
 }

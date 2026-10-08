@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-  Shield, LayoutDashboard, Target, BookOpen, Plus, FileText,
+  Shield, LayoutDashboard, Target, BookOpen, Plus, FileText, Plane,
 } from 'lucide-react';
 import Link from 'next/link';
 import type { MilitaireStats, MilitaireTabId, VolMilitaireRow } from './types';
@@ -11,6 +11,7 @@ import { ARME_MISSIONS } from '@/lib/armee';
 import VueEnsembleTab from './components/VueEnsembleTab';
 import MissionsTab from './components/MissionsTab';
 import CarnetTab from './components/CarnetTab';
+import OperationsTab from './components/OperationsTab';
 
 type Props = {
   vols: VolMilitaireRow[];
@@ -26,6 +27,8 @@ const TABS: { id: MilitaireTabId; label: string; icon: typeof Shield }[] = [
   { id: 'vue', label: 'Vue d\'ensemble', icon: LayoutDashboard },
   { id: 'missions', label: 'Missions', icon: Target },
   { id: 'carnet', label: 'Carnet de vol', icon: BookOpen },
+  { id: 'operations', label: 'Opérations', icon: Shield },
+  { id: 'flotte', label: 'Flotte', icon: Plane },
 ];
 
 export default function MilitaireClient({
@@ -75,7 +78,7 @@ export default function MilitaireClient({
               {!isBlocked && (
                 <Link href="/militaire/nouveau" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-600/90 hover:bg-red-600 text-white text-sm font-medium transition-colors">
                   <Plus className="h-4 w-4" />
-                  <span className="hidden sm:inline">Nouveau vol</span>
+                  <span>Nouveau vol</span>
                 </Link>
               )}
               <Link
@@ -83,7 +86,7 @@ export default function MilitaireClient({
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-sky-500/40 text-sky-200 hover:bg-sky-500/10 text-sm font-medium transition-colors"
               >
                 <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">Plan ATC</span>
+                <span>Plan ATC</span>
               </Link>
             </div>
           </div>
@@ -112,7 +115,7 @@ export default function MilitaireClient({
       </div>
 
       {/* Tab bar */}
-      <div className="flex gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
+      <div role="tablist" aria-label="Espace Armée" className="flex flex-wrap gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -121,6 +124,9 @@ export default function MilitaireClient({
             <button
               key={tab.id}
               type="button"
+              role="tab"
+              aria-selected={active}
+              aria-label={tab.label}
               onClick={() => setActiveTab(tab.id)}
               className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
                 active
@@ -129,7 +135,7 @@ export default function MilitaireClient({
               }`}
             >
               <Icon className={`h-4 w-4 ${active ? 'text-red-400' : ''}`} />
-              <span className="hidden sm:inline">{tab.label}</span>
+              <span>{tab.label}</span>
               {badge > 0 && tab.id === 'carnet' && (
                 <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-300">{badge}</span>
               )}
@@ -150,6 +156,7 @@ export default function MilitaireClient({
       )}
       {activeTab === 'missions' && <MissionsTab />}
       {activeTab === 'carnet' && <CarnetTab vols={vols} userId={userId} />}
+      {(activeTab === 'operations' || activeTab === 'flotte') && <OperationsTab key={activeTab} mode={activeTab} />}
     </div>
   );
 }

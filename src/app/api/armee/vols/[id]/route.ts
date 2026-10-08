@@ -3,8 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import {
-  applyMissionOnAdminDecision,
+  decideVolMilitaire,
   canValidateVolMilitaire,
+  canSubmitVolMilitaire,
   submitMissionAar,
   TYPE_VOL_MILITAIRE,
   updateVolMilitaire,
@@ -23,7 +24,7 @@ export async function PATCH(
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    const { data: profile } = await supabase.from('profiles').select('role, armee, blocked_until').eq('id', user.id).single();
     const isAdmin = profile?.role === 'admin';
     const body = await request.json();
 
@@ -42,26 +43,12 @@ export async function PATCH(
         return NextResponse.json({ error: 'Ce vol n\'est pas militaire' }, { status: 400 });
       }
 
-      const updates: Record<string, unknown> = {
-        statut: body.statut,
-        editing_by_pilot_id: null,
-        editing_started_at: null,
-      };
-      if (body.statut === 'refusé') {
-        updates.refusal_reason = body.refusal_reason ?? null;
-        updates.refusal_count = ((vol as { refusal_count?: number }).refusal_count ?? 0) + 1;
-      }
-
-      const missionFx = await applyMissionOnAdminDecision(vol, body.statut);
-      if (!missionFx.ok) {
-        return NextResponse.json({ error: missionFx.error }, { status: missionFx.status });
-      }
-      Object.assign(updates, missionFx.data);
-
-      const { error } = await admin.from('vols').update(updates).eq('id', id);
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      const result = await decideVolMilitaire(id, body.statut, user.id, body.refusal_reason);
+      if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
       return NextResponse.json({ ok: true });
     }
+
+    if (!profile || !canSubmitVolMilitaire({ ...profile, id: user.id })) return NextResponse.json({ error: 'Accès Armée suspendu ou non autorisé' }, { status: 403 });
 
     if (body.aar === true || body.mission_aar_notes !== undefined || body.mission_aar_tags !== undefined) {
       const result = await submitMissionAar(

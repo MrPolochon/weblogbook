@@ -8,6 +8,7 @@ import {
   getActiveBriefing,
   getBriefingForAdmin,
   updateBriefing,
+  isBlocked,
 } from '@/lib/armee';
 
 /** GET — briefing actif (pilotes) ou complet (PDG/admin). */
@@ -48,8 +49,8 @@ export async function PUT(req: NextRequest) {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    if (!(await canManageBriefing(user.id, profile))) {
+    const { data: profile } = await supabase.from('profiles').select('role, blocked_until').eq('id', user.id).single();
+    if (isBlocked(profile) || !(await canManageBriefing(user.id, profile))) {
       return NextResponse.json({ error: 'Réservé au PDG militaire ou aux administrateurs' }, { status: 403 });
     }
 

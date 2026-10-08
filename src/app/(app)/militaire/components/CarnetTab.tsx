@@ -19,6 +19,7 @@ type Props = {
 export default function CarnetTab({ vols, userId }: Props) {
   const [search, setSearch] = useState('');
   const [filterStatut, setFilterStatut] = useState<FilterStatut>('tous');
+  const [limit, setLimit] = useState(30);
 
   const filtered = useMemo(() => {
     let list = vols;
@@ -47,7 +48,7 @@ export default function CarnetTab({ vols, userId }: Props) {
             type="search"
             placeholder="Rechercher (aéroport, appareil, callsign…)"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setLimit(30); }}
             className="input w-full pl-10"
           />
         </div>
@@ -55,7 +56,7 @@ export default function CarnetTab({ vols, userId }: Props) {
           <Filter className="h-4 w-4 text-slate-500 shrink-0" />
           <select
             value={filterStatut}
-            onChange={(e) => setFilterStatut(e.target.value as FilterStatut)}
+            onChange={(e) => { setFilterStatut(e.target.value as FilterStatut); setLimit(30); }}
             className="input min-w-[140px]"
           >
             <option value="tous">Tous les statuts</option>
@@ -84,9 +85,9 @@ export default function CarnetTab({ vols, userId }: Props) {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map((v) => {
+          {filtered.slice(0, limit).map((v) => {
             const statut = LIB_STATUT[v.statut] || LIB_STATUT.en_attente;
-            const canDelete = v.pilote_id === userId || v.copilote_id === userId || v.chef_escadron_id === userId;
+            const canDelete = v.mission_reward_final == null && (v.pilote_id === userId || v.copilote_id === userId || v.chef_escadron_id === userId);
             return (
               <article
                 key={v.id}
@@ -138,6 +139,7 @@ export default function CarnetTab({ vols, userId }: Props) {
               </article>
             );
           })}
+          {filtered.length > limit && <button type="button" className="btn-secondary w-full" onClick={() => setLimit(n => n + 30)}>Afficher 30 vols supplémentaires ({filtered.length - limit} restants)</button>}
         </div>
       )}
     </div>

@@ -55,11 +55,14 @@ export function canSubmitVolMilitaire(profile: ArmeeProfile | null | undefined):
 }
 
 export function canEditVolMilitaire(
-  vol: { pilote_id: string | null; copilote_id: string | null; chef_escadron_id: string | null; statut: string },
+  vol: { pilote_id: string | null; copilote_id: string | null; chef_escadron_id: string | null; statut: string; mission_reward_final?: number | null; mission_status?: string | null; mission_refusals?: number | null },
   userId: string,
   isAdminUser: boolean,
 ): boolean {
-  if (vol.statut !== 'en_attente' && !isAdminUser) return false;
+  if (vol.mission_reward_final != null) return false;
+  if (vol.mission_status === 'echec') return false;
+  if (!['en_attente', 'refusé'].includes(vol.statut) && !isAdminUser) return false;
+  if (vol.statut === 'refusé' && (vol.mission_refusals || 0) >= 3 && !isAdminUser) return false;
   return (
     isAdminUser ||
     vol.pilote_id === userId ||
@@ -69,10 +72,11 @@ export function canEditVolMilitaire(
 }
 
 export function canDeleteVolMilitaire(
-  vol: { pilote_id: string | null; copilote_id: string | null; chef_escadron_id: string | null },
+  vol: { pilote_id: string | null; copilote_id: string | null; chef_escadron_id: string | null; mission_reward_final?: number | null },
   userId: string,
   isAdminUser: boolean,
 ): boolean {
+  if (vol.mission_reward_final != null) return false;
   return (
     isAdminUser ||
     vol.pilote_id === userId ||
