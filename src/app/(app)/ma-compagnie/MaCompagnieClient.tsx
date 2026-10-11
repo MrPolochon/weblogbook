@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import CompanyPerformance from '@/components/CompanyPerformance';
+import TransfertPropriete from '@/components/TransfertPropriete';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut, LayoutGrid } from 'lucide-react';
 import Image from 'next/image';
@@ -365,6 +366,7 @@ export default function MaCompagnieClient({
   return (
     <div className="space-y-6 animate-fade-in stagger-enter">
       {isLeader && <CompanyPerformance id={compagnie.id} balance={soldeCompagnie} />}
+      {isPdg && <TransfertPropriete key={compagnie.id} type="compagnie" id={compagnie.id} nom={compagnie.nom} />}
 
       {/* === HERO HEADER === */}
       <header className="card overflow-hidden p-0 border-slate-700/60 transition-shadow hover:shadow-xl hover:shadow-slate-950/40">

@@ -1,4 +1,5 @@
 'use client';
+import TransfertPropriete from '@/components/TransfertPropriete';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
@@ -467,6 +468,7 @@ export default function ReparationClient({ userId }: { userId: string }) {
         {tab === 'tarifs' && isPdg && <TarifsTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
         {tab === 'employes' && isPdg && <EmployesTab detail={detail} isPdg={isPdg} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
         {tab === 'compte' && isPdg && <CompteTab detail={detail} />}
+        {tab === 'parametres' && detail.pdg_id === userId && <TransfertPropriete key={detail.id} type="reparation" id={detail.id} nom={detail.nom} />}
         {tab === 'parametres' && isPdg && <ParametresTab detail={detail} api={api} flash={flash} busy={busy} onRefresh={() => loadDetail(detail.id)} />}
       </div>
     </div>
