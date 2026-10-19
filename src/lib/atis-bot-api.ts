@@ -221,12 +221,14 @@ export async function getCachedChannels(guildId: string): Promise<{
  * En multi-instance : on cherche TOUTES les rows où l'utilisateur contrôle un ATIS,
  * et on arrête chacun de ces bots.
  */
-export async function stopAtisIfController(userId: string): Promise<void> {
+export async function stopAtisIfController(userId: string, endedBefore?: string): Promise<void> {
   const admin = createAdminClient();
-  const { data: rows } = await admin
+  let query = admin
     .from('atis_broadcast_state')
     .select('id, controlling_user_id')
     .eq('controlling_user_id', userId);
+  if (endedBefore) query = query.lte('started_at', endedBefore);
+  const { data: rows } = await query;
 
   if (!rows || rows.length === 0) return;
 

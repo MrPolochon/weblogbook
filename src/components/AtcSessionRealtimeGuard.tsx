@@ -34,7 +34,7 @@ export default function AtcSessionRealtimeGuard({
         },
         () => {
           toast.error(
-            'Vous avez été déconnecté de force par un administrateur. Pensez à vous mettre hors service pour ne pas bloquer les autres.',
+            'Votre service ATC est terminé. La position a été libérée (relève réservée ou intervention administrative).',
             { duration: 8000 }
           );
           router.refresh();

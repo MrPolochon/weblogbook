@@ -4,17 +4,16 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { stopAtisIfController } from '@/lib/atis-bot-api';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
-import { ATC_TAUX_PAR_MINUTE } from '@/lib/atc-salaire';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
-import { ensureComptePersonnel, getComptePersonnelCanonique } from '@/lib/felitz/ensure-comptes';
 import { finaliserCloturesEnAttenteSansControleur } from '@/lib/plans-vol/closure';
 import { checkAtcAccess, isKnownAtcAirportCode, loadAllAtcAccessRules, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
+import { enforceAtcHandover } from '@/lib/events/atc-handover';
 
 /**
  * POST - Se mettre en service sur une position.
  * Règles : une position (aeroport, position) est bloquée tant que le contrôleur
- * ne se met pas hors service. Seul un admin peut forcer la déconnexion.
- * On ne supprime JAMAIS la session d'un autre utilisateur.
+ * ne se met pas hors service, sauf relève automatique à l'heure d'une réservation.
+ * Une réservation active peut provoquer la relève automatique du titulaire précédent.
  */
 export async function POST(request: Request) {
   try {
@@ -45,7 +44,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: access.reason }, { status: 403 });
     }
 
-    // Position déjà prise par un autre contrôleur → refuser (ne jamais le déconnecter)
+    // Libérer les sessions dont le créneau vient d'être réservé à un autre titulaire.
+    await enforceAtcHandover();
     const { data: existing } = await admin.from('atc_sessions').select('id, user_id').eq('aeroport', ap).eq('position', position).maybeSingle();
     if (existing) return NextResponse.json({ error: 'Position déjà prise. Le contrôleur en place doit se mettre hors service.' }, { status: 400 });
 
@@ -71,154 +71,19 @@ export async function DELETE(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
-
-    let force = false;
-    try {
-      const body = await request.json();
-      force = Boolean(body?.force);
-    } catch {
-      /* body vide : déconnexion normale */
-    }
-
+    const body = await request.json().catch(() => ({}));
     const admin = createAdminClient();
-    // Les vols déjà en autosurveillance ne bloquent pas la fin de service
-    // (certains chemins laissaient current_holder_user_id renseigné).
-    await admin
-      .from('plans_vol')
-      .update({
-        current_holder_user_id: null,
-        current_holder_position: null,
-        current_holder_aeroport: null,
-      })
-      .eq('current_holder_user_id', user.id)
-      .eq('automonitoring', true);
-
-    const { count } = await admin
-      .from('plans_vol')
-      .select('*', { count: 'exact', head: true })
-      .eq('current_holder_user_id', user.id)
-      .or('automonitoring.eq.false,automonitoring.is.null')
-      .in('statut', ['depose', 'en_attente', 'en_cours', 'accepte', 'en_attente_cloture']);
-
-    if ((count ?? 0) > 0 && !force) {
-      return NextResponse.json(
-        {
-          error:
-            'Vous avez encore des plans de vol sous votre contrôle. Mettez-les en autosurveillance, transférez-les ou clôturez-les avant de vous mettre hors service.',
-          code: 'FLIGHTS_HELD',
-          count,
-        },
-        { status: 409 }
-      );
-    }
-
-    if (force) {
-      await admin
-        .from('plans_vol')
-        .update({
-          current_holder_user_id: null,
-          current_holder_position: null,
-          current_holder_aeroport: null,
-          pending_transfer_aeroport: null,
-          pending_transfer_position: null,
-          pending_transfer_at: null,
-          automonitoring: true,
-          strip_zone: null,
-        })
-        .eq('current_holder_user_id', user.id)
-        .in('statut', ['accepte', 'en_cours', 'en_attente_cloture']);
-
-      await admin
-        .from('plans_vol')
-        .update({
-          current_holder_user_id: null,
-          current_holder_position: null,
-          current_holder_aeroport: null,
-          pending_transfer_aeroport: null,
-          pending_transfer_position: null,
-          pending_transfer_at: null,
-          strip_zone: null,
-        })
-        .eq('current_holder_user_id', user.id)
-        .in('statut', ['depose', 'en_attente']);
-
-      await finaliserCloturesEnAttenteSansControleur(admin);
-    }
-
-    const { data: session } = await supabase.from('atc_sessions').select('id, started_at, aeroport, position').eq('user_id', user.id).single();
-    if (!session) return NextResponse.json({ error: 'Aucune session active.' }, { status: 400 });
-
-    let durationMinutes = 0;
-    if (session.started_at) {
-      durationMinutes = Math.max(0, Math.floor((Date.now() - new Date(session.started_at).getTime()) / 60_000));
-      const { data: prof } = await supabase.from('profiles').select('atc_temps_total_minutes').eq('id', user.id).single();
-      const prev = (prof?.atc_temps_total_minutes ?? 0) | 0;
-      await supabase.from('profiles').update({ atc_temps_total_minutes: prev + durationMinutes }).eq('id', user.id);
-    }
-
-    const tauxMinute = ATC_TAUX_PAR_MINUTE[session.position] ?? 0;
-    const salaireMinute = durationMinutes * tauxMinute;
-
-    const { data: taxesPending } = await admin.from('atc_taxes_pending')
-      .select('id, montant, aeroport, description, plan_vol_id')
-      .eq('session_id', session.id);
-
-    const totalTaxes = taxesPending?.reduce((sum, t) => sum + (t.montant || 0), 0) ?? 0;
-    const chequeMontant = salaireMinute + totalTaxes;
-    let chequeEnvoye = false;
-
-    if (chequeMontant > 0) {
-      let compteAtc = await getComptePersonnelCanonique(admin, user.id);
-      if (!compteAtc) compteAtc = await ensureComptePersonnel(admin, user.id);
-
-      if (compteAtc) {
-        const nbVols = taxesPending?.length ?? 0;
-        const aeroportsConcernes = Array.from(new Set((taxesPending || []).map(t => t.aeroport))).join(', ');
-
-        let contenu = `Fin de votre service sur ${session.aeroport} - ${session.position}.\n\n`;
-        contenu += `Durée de service : ${durationMinutes} min\n`;
-        contenu += `Salaire à la minute (${durationMinutes} min × ${tauxMinute.toLocaleString('fr-FR')} F$/min) : ${salaireMinute.toLocaleString('fr-FR')} F$\n`;
-        if (nbVols > 0) {
-          contenu += `Taxes aéroportuaires perçues (${nbVols} vol(s) sur ${aeroportsConcernes}) : ${totalTaxes.toLocaleString('fr-FR')} F$\n`;
-        }
-        contenu += `\nTotal : ${chequeMontant.toLocaleString('fr-FR')} F$\n\nMerci pour votre service !`;
-
-        const { error: chequeErr } = await admin.from('messages').insert({
-          destinataire_id: user.id,
-          expediteur_id: null,
-          titre: `Salaire ATC - ${session.aeroport} ${session.position}`,
-          contenu,
-          type_message: 'cheque_taxes_atc',
-          cheque_montant: chequeMontant,
-          cheque_encaisse: false,
-          cheque_destinataire_compte_id: compteAtc.id,
-          cheque_libelle: `Salaire ATC - ${session.aeroport} ${session.position} (${durationMinutes} min)`,
-          cheque_pour_compagnie: false
-        });
-        if (chequeErr) {
-          console.error('ATC session DELETE: chèque non créé', chequeErr);
-        } else {
-          chequeEnvoye = true;
-        }
-      } else {
-        console.error('ATC session DELETE: compte Felitz introuvable, taxes pending conservées');
-      }
-    }
-
-    if (taxesPending && taxesPending.length > 0 && (chequeEnvoye || chequeMontant === 0)) {
-      await admin.from('atc_taxes_pending').delete().eq('session_id', session.id);
-    }
-
-    // Si cet ATC contrôlait l'ATIS, l'arrêter automatiquement
+    const { data: session, error: sessionError } = await admin.from('atc_sessions').select('id').eq('user_id',user.id).maybeSingle();
+    if (sessionError) throw sessionError;
+    if (!session) return NextResponse.json({ ok: true, alreadyEnded: true });
+    const { data, error } = await admin.rpc('finish_atc_service',{p_session:session.id,p_force:body.force===true});
+    if (error?.message.includes('FLIGHTS_HELD')) return NextResponse.json({error:'Vous avez encore des plans sous contrôle. Transférez-les ou confirmez la fin de service forcée.',code:'FLIGHTS_HELD'}, {status:409});
+    if (error) throw error;
     await stopAtisIfController(user.id);
-
-    // Supprimer la session
-    const { error } = await supabase.from('atc_sessions').delete().eq('user_id', user.id);
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-    
-    return NextResponse.json({ ok: true, chequeEnvoye, montant: chequeMontant });
-  } catch (e) {
-    console.error('ATC session DELETE:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    await finaliserCloturesEnAttenteSansControleur(admin);
+    return NextResponse.json(data);
+  } catch (error) {
+    console.error('ATC service end:',error);
+    return NextResponse.json({error:'Fin de service indisponible. Réessayez.'},{status:503});
   }
 }

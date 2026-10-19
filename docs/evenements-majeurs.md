@@ -12,7 +12,17 @@
 
 Une réservation pilote confirmée est nécessaire pour déposer un plan depuis ou vers un aéroport concerné pendant l’événement, y compris un dépôt anticipé pour son créneau. Route, callsign, horaire et durée doivent correspondre. Le lien de dépôt préremplit ces informations. Le strip affiche le nom de l’événement et le slot.
 
-Les contrôles sont appliqués côté serveur et en base, y compris pour les créations ATC. Une réservation n’est utilisable que pour un plan. Un déroutement d’un vol existant reste possible. Les postes réservés ne peuvent pas être pris par un autre contrôleur ; les sessions déjà actives ne sont pas déconnectées.
+Les contrôles sont appliqués côté serveur et en base, y compris pour les créations ATC. Une réservation n’est utilisable que pour un plan. Un déroutement d’un vol existant reste possible. Les postes réservés ne peuvent pas être pris par un autre contrôleur.
+
+### Relève des positions ATC
+
+Migration complémentaire : `supabase/atc_reservation_handover.sql` (après la migration principale). Le contrôleur qui occupe la position réservée à une autre personne reçoit des avertissements visuels et sonores à 3, 2 puis 1 minute. Le son nécessite une première interaction avec la page, conformément aux restrictions du navigateur ; les avertissements visuels restent disponibles.
+
+À l'échéance, Supabase Cron contrôle les relèves chaque seconde, même sans navigateur ouvert. Ce délai d'exécution peut varier si le serveur est indisponible ou surchargé ; il ne s'agit pas d'une garantie temps réel. La session ATC est terminée, les vols libérés passent en autosurveillance, la durée est arrêtée à l'heure réservée et le chèque inclut salaire et taxes accumulés. Le compte du site reste connecté. Une réservation annulée, expirée ou appartenant au contrôleur en place ne provoque aucune expulsion.
+
+La clôture volontaire et automatique utilisent la même transaction pour éviter un double paiement. La tâche de nettoyage ATC existante traite l'arrêt du bot ATIS et les clôtures de vols restantes. Les détails d'exécution du travail chaque seconde sont conservés une journée.
+
+Tests complémentaires : `node --test scripts/test-atc-handover.cjs`.
 
 Après réservation, les dates, aéroports, capacités et postes de l’événement sont verrouillés. Fermer les inscriptions conserve les réservations. Désactiver l’événement annule les réservations non utilisées et conserve leur historique ; les réservations libres restent intactes.
 

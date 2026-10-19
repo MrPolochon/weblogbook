@@ -13,6 +13,7 @@ import AtcSessionRealtimeGuard from '@/components/AtcSessionRealtimeGuard';
 import AtcPlansRealtimeRefresh from '@/components/AtcPlansRealtimeRefresh';
 import AtcMain from '@/components/AtcMain';
 import AtcSoundSettings from '@/components/AtcSoundSettings';
+import AtcReservationHandover from '@/components/AtcReservationHandover';
 
 export const dynamic = 'force-dynamic';
 
@@ -120,6 +121,7 @@ export default async function AtcLayout({
         <AtcNavBar isAdmin={isAdmin} enService={enService} gradeNom={gradeNom} sessionInfo={enService && session ? { aeroport: session.aeroport, position: session.position, started_at: session.started_at } : null} messagesNonLusCount={messagesNonLusCount || 0} userId={user.id} />
         <AtcAtisTicker />
         <AtcAtisDesyncBanner />
+        <AtcReservationHandover enService={enService} />
         {enService && <AtcSoundSettings />}
         <div className="flex flex-1 w-full min-h-0">
           <AtcMain>{children}</AtcMain>

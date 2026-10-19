@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { finaliserCloturesEnAttenteSansControleur } from '@/lib/plans-vol/closure';
+import { enforceAtcHandover, cleanupAtcHandovers } from '@/lib/events/atc-handover';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +15,8 @@ function cronOk(request: NextRequest): boolean {
 }
 
 async function run() {
+  await enforceAtcHandover();
+  await cleanupAtcHandovers();
   const admin = createAdminClient();
   const cutoff = new Date(Date.now() - TIMEOUT_MS).toISOString();
   const { data, error } = await admin
