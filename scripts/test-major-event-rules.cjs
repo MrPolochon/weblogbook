@@ -1,4 +1,13 @@
 const { test } = require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const ts=require('typescript');
+test('public event reading does not exempt mutations or admin pages',()=>{
+  const {isPublicMajorEventPath}=load('src/lib/events/public-paths.ts');
+  for(const path of ['/api/evenements/bandeau','/api/evenements/reservations','/evenements/12345678-1111-4111-8111-111111111111']) {
+    assert.equal(isPublicMajorEventPath(path,'GET'),true);
+    for(const method of ['POST','PATCH','DELETE']) assert.equal(isPublicMajorEventPath(path,method),false);
+  }
+  assert.equal(isPublicMajorEventPath('/admin/evenements-majeurs','GET'),false);
+  assert.equal(isPublicMajorEventPath('/api/evenements/reservations/private-id','GET'),false);
+});
 function load(file,deps={}) {const mod={exports:{}};new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>deps[n]||require(n),mod,mod.exports);return mod.exports;}
 const {eventBannerState,csvCell,majorConfigSchema,reservationSchema}=load('src/lib/events/rules.ts',{
   '@/lib/aeroports-ptfs':{CODES_OACI_VALIDES:new Set(['ITKO','IRFD'])},'@/lib/atc-positions':{ATC_POSITIONS:['Tower','Ground']}

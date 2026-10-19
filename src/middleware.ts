@@ -6,6 +6,7 @@ import { isDiscordLinkRequired, isTemporaryDiscordSanctionActive, type DiscordLi
 import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 import { RADAR_ENABLED } from '@/lib/radar-status';
 import { isPublicBulletinPath } from '@/lib/tribunal-bulletins';
+import { isPublicMajorEventPath } from '@/lib/events/public-paths';
 
 function copyCookies(from: NextResponse, to: NextResponse) {
   from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
@@ -248,7 +249,7 @@ async function runMiddleware(request: NextRequest) {
   if (
     isAuthCallback || isApiPublic || isApiDiscord || isApiSupportBot || isApiDiscordInteractions || isApiAeroSchoolPublic || isApiAuth ||
     isSetup || isLogin || isDownload || isCodeConduite || isLivretProgression || isManuelControleur || isAeroSchool || isCalendrier || isCarteAtc || isApiAtcOnline ||
-    isMaintenance || isTranscript || isPublicBulletinPath(pathname)
+    isMaintenance || isTranscript || isPublicBulletinPath(pathname) || isPublicMajorEventPath(pathname, request.method)
   ) {
     return NextResponse.next({ request });
   }
