@@ -1,4 +1,5 @@
 'use client';
+import MajorEventBanner from '@/components/MajorEventBanner';
 
 import React, { Suspense, useEffect, useRef, useState, useMemo, useTransition } from 'react';
 import Link from 'next/link';
@@ -425,6 +426,7 @@ function LoginPageContent() {
 
   return (
     <div className="login-shell min-h-dvh relative flex items-center justify-center px-4 py-3 overflow-x-hidden bg-slate-950">
+      <MajorEventBanner login />
       <HalloweenAmbience />
       {fond}
       {overlay}

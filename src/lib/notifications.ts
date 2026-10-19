@@ -13,6 +13,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchAtisBot } from '@/lib/atis-bot-api';
 
 export type NotificationType =
+  | 'event_booking'
   | 'exam_request'
   | 'exam_accepted'
   | 'exam_started'

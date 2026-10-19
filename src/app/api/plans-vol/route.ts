@@ -9,6 +9,7 @@ import { getMissionById, getMissionCooldownForUser } from '@/lib/armee';
 import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { STATUTS_PLAN_OCCUPES, hasOccupiedPlan, isCompanyMember } from '@/lib/plans-vol/crew';
 import { notifyUser } from '@/lib/notifications';
+import { checkMajorFlight, reservedDeparture } from '@/lib/events/server';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       vol_sans_atc, vol_ferry, bria_conversation,
       copilote_id: copiloteIdRaw,
     } = body;
-    const heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
+    let heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
     if (!heureDepartIso) {
       return NextResponse.json({ error: 'L\'heure de départ (UTC) est obligatoire.' }, { status: 400 });
     }
@@ -83,6 +84,12 @@ export async function POST(request: Request) {
     const isMilitaryPlan = armeeAvionRaw != null && String(armeeAvionRaw).trim() !== '';
 
     const admin = createAdminClient();
+    if (body.event_reservation_id) {
+      heureDepartIso = await reservedDeparture(user.id, body.event_reservation_id, heure_depart);
+      if (!heureDepartIso) return NextResponse.json({ error: 'Réservation pilote introuvable ou horaire invalide.' }, { status: 400 });
+    }
+    const slotError = await checkMajorFlight(user.id,ad,aa,heureDepartIso,t,String(numero_vol));
+    if (slotError) return NextResponse.json({ error: slotError, booking_url: '/calendrier' }, { status: 409 });
 
     let armeeAvionId: string | null = null;
     let armeeMissionId: string | null = null;

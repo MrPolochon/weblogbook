@@ -2,6 +2,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { findSiteAdminByDiscordId } from '@/lib/calendrier/staff';
 import { parseUtcDateTime } from '@/lib/calendrier/time';
 import { CALENDAR_EVENT_SELECT, type CalendarEvent, type CalendarEventInput } from '@/lib/calendrier/types';
+import { majorConfigSchema } from '@/lib/events/rules';
+import { attachMajorEvents } from '@/lib/events/server';
 
 const DATE_HINT = 'Ex. : 22/09/2026 19h, 22/09 19h, 19h';
 
@@ -22,10 +24,18 @@ export function sanitizeCalendarInput(
   const announce = Boolean(body.announce_discord);
   const channelId = announce ? String(body.announce_channel_id || '').trim() || null : null;
   if (announce && !channelId) return { ok: false, error: 'Choisis un salon Discord pour l’annonce.' };
+  let major: CalendarEventInput['major'];
+  if (body.is_major) {
+    const config = majorConfigSchema.safeParse(body.major);
+    if (!config.success) return { ok: false, error: config.error.issues[0]?.message || 'Configuration de l’événement majeur invalide.' };
+    if (!endsAt || new Date(endsAt).getTime() - starts.getTime() > 7 * 86400000) return { ok: false, error: 'Un événement majeur nécessite une fin, au maximum 7 jours après son début.' };
+    major = config.data;
+  }
   return {
     ok: true,
     data: {
       title,
+      ...(body.is_major ? { is_major: true, major } : {}),
       description: String(body.description || '').trim() || null,
       location: String(body.location || '').trim() || null,
       starts_at: starts.toISOString(),
@@ -43,6 +53,16 @@ export async function persistCalendarEvent(opts: {
   createdVia: 'site' | 'discord';
 }): Promise<{ ok: true; event: CalendarEvent } | { ok: false; error: string }> {
   const admin = createAdminClient();
+  if (opts.data.is_major) {
+    const { data: eventId, error: saveError } = await admin.rpc('save_major_calendar_event', {
+      p_actor: opts.createdBy, p_id: null, p_event: opts.data, p_config: opts.data.major,
+    });
+    if (saveError) return { ok: false, error: saveError.code === 'PGRST202' ? 'Appliquez la migration des événements majeurs avant leur création.' : saveError.message };
+    const { data, error } = await admin.from('site_calendar_events').select(CALENDAR_EVENT_SELECT).eq('id', eventId).single();
+    if (error) return { ok: false, error: error.message };
+    const [event] = await attachMajorEvents([data as CalendarEvent]);
+    return { ok: true, event };
+  }
   const { data, error } = await admin
     .from('site_calendar_events')
     .insert({

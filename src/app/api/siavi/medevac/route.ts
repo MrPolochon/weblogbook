@@ -6,6 +6,7 @@ import { canAccessSiavi } from '@/lib/siavi/permissions';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { heureDepartToIso } from '@/lib/heure-depart';
 import { randomUUID } from 'crypto';
+import { checkMajorFlight } from '@/lib/events/server';
 
 const ORDRE_DEPART = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'] as const;
 const MAX_SEGMENTS = 5;
@@ -119,6 +120,10 @@ export async function POST(request: Request) {
     }
 
     const numeroVolFinal = `MEDEVAC${String(numero_vol).trim()}`;
+    for (const seg of segmentsValidated) {
+      const slotError = await checkMajorFlight(user.id,seg.aeroport_depart,seg.aeroport_arrivee,heureDepartToIso(seg.heure_depart),seg.temps_prev_min,numeroVolFinal);
+      if (slotError) return NextResponse.json({ error: slotError }, { status: 409 });
+    }
 
     // -- Vérifier plan actif existant pour cet agent --
     // On inclut 'planifie_suivant' et 'en_pause' : une mission MEDEVAC multi-segments en cours

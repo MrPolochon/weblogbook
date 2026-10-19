@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { formatCtot, getSquawkColor, getSquawkLabel, statutLabel } from '@/lib/atc-ui';
 
 export type StripData = {
+  event_title?: string | null;
+  event_slot_time?: string | null;
   deroutement_at?: string | null;
   id: string;
   numero_vol: string;
@@ -1017,6 +1019,7 @@ function FlightStripImpl({
             style={{ height: LANE_H }}
           >
             <Chip tone={statutTone} title={`Statut : ${statutLabel(statut)}${strip.deroutement_at ? ' · Vol dérouté' : ''}`}>{strip.deroutement_at ? 'DÉROUTÉ' : statutLabel(statut)}</Chip>
+            {strip.event_title && <Chip tone="bg-amber-700 text-white" title={`${strip.event_title} · Slot réservé`}>EVENT {strip.event_slot_time ? new Date(strip.event_slot_time).toISOString().slice(11,16) + 'Z' : ''}</Chip>}
             {sqLabel && <Chip tone="bg-[#dc2626] text-[#ffffff]" pulse title={`Squawk d'urgence ${strip.code_transpondeur}`}>{sqLabel}</Chip>}
             {isClotureRequested && !isDupe && <Chip tone="bg-[#dc2626] text-[#ffffff]" pulse title="Le pilote demande la clôture">Clôture</Chip>}
             {isDupe && <Chip tone="bg-[#b91c1c] text-[#ffffff]" pulse title="Deux vols au même squawk en mode C">Dupe</Chip>}

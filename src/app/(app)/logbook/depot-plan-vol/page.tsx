@@ -6,7 +6,7 @@ import { ArrowLeft, Plane, Radio, Compass, Navigation2 } from 'lucide-react';
 import DepotPlanVolForm, { type AvionArmeeItem } from './DepotPlanVolForm';
 import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 
-export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string; duplicate?: string } }) {
+export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string; duplicate?: string; reservation?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -35,6 +35,10 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
   }
 
   const admin = createAdminClient();
+  const { data: eventReservation } = searchParams?.reservation && /^[a-f0-9-]{36}$/i.test(searchParams.reservation)
+    ? await admin.from('event_reservations').select('id,departure,arrival,departure_at,duration_minutes,callsign,airline,aircraft')
+      .eq('id',searchParams.reservation).eq('user_id',user.id).eq('role','pilot').eq('status','confirmed').is('claimed_at',null).maybeSingle()
+    : { data: null };
 
   let armeeAvions: AvionArmeeItem[] = [];
   if (profile?.armee) {
@@ -254,6 +258,7 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
       </div>
 
       <DepotPlanVolForm 
+        initialReservation={eventReservation ?? undefined}
         draftKey={`flight-draft:${user.id}`}
         initialDraft={initialDraft ?? undefined}
         compagniesDisponibles={compagniesDisponibles}

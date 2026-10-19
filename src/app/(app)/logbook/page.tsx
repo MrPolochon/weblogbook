@@ -1,3 +1,4 @@
+import MajorEventBanner from '@/components/MajorEventBanner';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
@@ -77,6 +78,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
 
   return (
     <div className="space-y-6">
+      <MajorEventBanner />
       {/* Header : fond décoratif dans un calque overflow-hidden pour ne pas couper le menu PDF */}
       <div className="relative z-0 rounded-2xl shadow-xl animate-reveal-blur">
         <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 via-sky-700 to-indigo-800">

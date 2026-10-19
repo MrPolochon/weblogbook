@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { heureDepartToIso } from '@/lib/heure-depart';
+import { checkMajorFlight } from '@/lib/events/server';
 
 export async function POST(request: Request) {
   try {
@@ -83,6 +84,8 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
+    const slotError = await checkMajorFlight(pilote_id,ad,aa,heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null),t,numero_vol);
+    if (slotError) return NextResponse.json({ error: slotError }, { status: 409 });
 
     // Vérifier que le pilote existe
     const { data: piloteProfile } = await admin.from('profiles').select('id, identifiant, role').eq('id', pilote_id).single();

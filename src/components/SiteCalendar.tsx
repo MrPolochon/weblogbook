@@ -5,6 +5,9 @@ import {
   CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, Megaphone, Plus, Trash2, X,
 } from 'lucide-react';
 import type { CalendarEvent, DiscordCalendarTarget } from '@/lib/calendrier/types';
+import Link from 'next/link';
+import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
+import { ATC_POSITIONS } from '@/lib/atc-positions';
 import {
   formatEventDateTime,
   formatEventTime,
@@ -35,6 +38,13 @@ function gridDaysUtc(year: number, month: number) {
 type Variant = 'dark' | 'light' | 'siavi';
 
 type FormState = {
+  is_major: boolean;
+  airports: string[];
+  slot_minutes: number;
+  pilot_capacity: number;
+  atc_positions: string[];
+  enabled: boolean;
+  bookings_open: boolean;
   title: string;
   description: string;
   location: string;
@@ -46,6 +56,7 @@ type FormState = {
 };
 
 const emptyForm = (): FormState => ({
+  is_major: false, airports: [], slot_minutes: 10, pilot_capacity: 5, atc_positions: [...ATC_POSITIONS], enabled: true, bookings_open: true,
   title: '',
   description: '',
   location: '',
@@ -58,6 +69,9 @@ const emptyForm = (): FormState => ({
 
 function eventToForm(e: CalendarEvent): FormState {
   return {
+    is_major: Boolean(e.is_major), airports: e.major?.airports || [], slot_minutes: e.major?.slot_minutes || 10,
+    pilot_capacity: e.major?.pilot_capacity || 5, atc_positions: e.major?.atc_positions || [...ATC_POSITIONS],
+    enabled: e.major?.enabled ?? true, bookings_open: e.major?.bookings_open ?? true,
     title: e.title,
     description: e.description || '',
     location: e.location || '',
@@ -96,9 +110,10 @@ export default function SiteCalendar({
     try {
       const res = await fetch('/api/calendrier', { cache: 'no-store' });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Chargement impossible');
       setEvents(Array.isArray(data.events) ? data.events : []);
-    } catch {
-      setEvents([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Chargement impossible');
     } finally {
       setLoading(false);
     }
@@ -133,9 +148,12 @@ export default function SiteCalendar({
     for (const e of events) {
       const key = utcDayKey(e.starts_at);
       if (!key) continue;
-      const list = map.get(key) || [];
-      list.push(e);
-      map.set(key, list);
+      const first = Date.parse(`${key}T00:00:00Z`);
+      const last = e.is_major && e.ends_at ? Math.min(Date.parse(e.ends_at)-1,first+7*86400000) : first;
+      for (let at=first;at<=last;at+=86400000) {
+        const day = utcDayKeyFromDate(new Date(at));
+        const list = map.get(day) || []; list.push(e); map.set(day,list);
+      }
     }
     return map;
   }, [events]);
@@ -176,6 +194,9 @@ export default function SiteCalendar({
     setError(null);
     try {
       const payload = {
+        is_major: form.is_major,
+        ...(form.is_major ? { major: { airports: form.airports, slot_minutes: form.slot_minutes, pilot_capacity: form.pilot_capacity,
+          atc_positions: form.atc_positions, enabled: form.enabled, bookings_open: form.bookings_open } } : {}),
         title: form.title,
         description: form.description,
         location: form.location,
@@ -233,6 +254,7 @@ export default function SiteCalendar({
 
   return (
     <div className={`space-y-4 ${shell}`}>
+      {error && !creating && <p role="alert" className="rounded-lg border border-red-400/40 p-3">{error} <button className="underline" onClick={() => { setError(null); void load(); }}>Réessayer</button></p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <button
@@ -343,6 +365,7 @@ export default function SiteCalendar({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold">{e.title}</p>
+                    {e.is_major && <p className="text-xs font-semibold text-amber-300">ÉVÉNEMENT MAJEUR{e.major?.enabled ? ' · slots obligatoires' : ' · désactivé'}</p>}
                     <p className="text-sm mt-0.5 flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5" />
                       {formatEventDateTime(e.starts_at)}
@@ -354,6 +377,7 @@ export default function SiteCalendar({
                       </p>
                     )}
                     {e.description && <p className="text-sm mt-2 whitespace-pre-wrap">{e.description}</p>}
+                    {e.is_major && <Link className="inline-flex mt-3 underline font-semibold text-sky-400" href={`/evenements/${e.id}`}>Réserver un slot pilote / ATC · Voir le manifeste</Link>}
                     {e.announce_discord && canEdit && (
                       <p className={`text-xs mt-2 flex items-center gap-1 ${muted}`}>
                         <Megaphone className="h-3 w-3" />
@@ -386,7 +410,7 @@ export default function SiteCalendar({
             if (e.key === 'Escape') setCreating(false);
           }}
         >
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-4 space-y-3">
+          <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 text-slate-100 p-4 space-y-3">
             <div className="flex items-center justify-between">
               <h3 id="site-calendar-dialog-title" className="font-semibold">
                 {editing ? 'Modifier l’événement' : 'Nouvel événement'}
@@ -405,6 +429,19 @@ export default function SiteCalendar({
             <label className="text-xs text-slate-400">Fin (optionnel, UTC)
               <input type="datetime-local" className="input mt-1" value={form.ends_utc} onChange={(e) => setForm({ ...form, ends_utc: e.target.value })} />
             </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" disabled={Boolean(editing?.is_major)} checked={form.is_major} onChange={e => setForm({ ...form, is_major: e.target.checked })}/>
+              Événement majeur — réservation obligatoire pour les aéroports concernés
+            </label>
+            {form.is_major && <fieldset className="space-y-3 border border-amber-500/30 rounded-lg p-3"><legend>Créneaux et restrictions</legend>
+              <p className="text-xs text-slate-400">Après la première réservation, les horaires, aéroports et capacités sont verrouillés pour préserver les places déjà prises.</p>
+              <div className="grid grid-cols-2 gap-2">{AEROPORTS_PTFS.map(a => <label key={a.code} className="text-xs flex gap-2 items-center"><input type="checkbox" checked={form.airports.includes(a.code)} onChange={e => setForm({ ...form, airports: e.target.checked ? [...form.airports,a.code] : form.airports.filter(c => c !== a.code) })}/>{a.code} — {a.nom}</label>)}</div>
+              <label className="block text-sm">Durée d’un slot pilote (minutes)<input type="number" min={5} max={60} className="input w-full" value={form.slot_minutes} onChange={e => setForm({ ...form, slot_minutes: Number(e.target.value) })}/></label>
+              <label className="block text-sm">Mouvements par aéroport et par slot<input type="number" min={1} max={100} className="input w-full" value={form.pilot_capacity} onChange={e => setForm({ ...form, pilot_capacity: Number(e.target.value) })}/></label>
+              <div className="flex flex-wrap gap-3">{ATC_POSITIONS.map(p => <label key={p} className="text-xs flex gap-1"><input type="checkbox" checked={form.atc_positions.includes(p)} onChange={e => setForm({ ...form, atc_positions: e.target.checked ? [...form.atc_positions,p] : form.atc_positions.filter(c => c !== p) })}/>{p}</label>)}</div>
+              <label className="flex gap-2"><input type="checkbox" checked={form.bookings_open} onChange={e => setForm({ ...form, bookings_open: e.target.checked })}/>Inscriptions ouvertes</label>
+              <label className="flex gap-2"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}/>Événement actif (décocher pour l’annuler)</label>
+            </fieldset>}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={form.announce_discord} onChange={(e) => setForm({ ...form, announce_discord: e.target.checked })} />
               Annonce Discord au début de l’événement

@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { requireSiteAdmin } from '@/lib/calendrier/staff';
 import { persistCalendarEvent, sanitizeCalendarInput } from '@/lib/calendrier/create';
 import { CALENDAR_EVENT_SELECT, type CalendarEvent, type CalendarEventInput } from '@/lib/calendrier/types';
+import { attachMajorEvents } from '@/lib/events/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,7 +29,8 @@ export async function GET() {
     ? await admin.from('site_calendar_events').select(STAFF_SELECT).order('starts_at', { ascending: true })
     : await admin.from('site_calendar_events').select(PUBLIC_SELECT).order('starts_at', { ascending: true });
   if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
-  return NextResponse.json({ events: (result.data || []) as unknown as CalendarEvent[] });
+  try { return NextResponse.json({ events: await attachMajorEvents((result.data || []) as unknown as CalendarEvent[]) }); }
+  catch { return NextResponse.json({ error: 'Chargement des événements impossible.' }, { status: 503 }); }
 }
 
 export async function POST(req: Request) {

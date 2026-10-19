@@ -1,4 +1,6 @@
 export type CalendarEvent = {
+  is_major?: boolean;
+  major?: import('@/lib/events/types').MajorConfig;
   id: string;
   title: string;
   description: string | null;
@@ -18,6 +20,8 @@ export type CalendarEvent = {
 };
 
 export type CalendarEventInput = {
+  is_major?: boolean;
+  major?: Omit<import('@/lib/events/types').MajorConfig, 'event_id'>;
   title: string;
   description?: string | null;
   location?: string | null;

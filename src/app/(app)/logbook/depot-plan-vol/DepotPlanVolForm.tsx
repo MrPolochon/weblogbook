@@ -78,6 +78,7 @@ export interface AvionArmeeItem {
 }
 
 interface Props {
+  initialReservation?: { id: string; departure: string; arrival: string; departure_at: string; duration_minutes: number; callsign: string; airline: string | null; aircraft: string | null };
   draftKey: string;
   initialDraft?: { aeroport_depart: string; aeroport_arrivee: string; temps_prev_min: number | null; type_vol: string; route_ifr: string | null; niveau_croisiere: string | number | null; intentions_vol: string | null };
   compagniesDisponibles: Compagnie[];
@@ -107,6 +108,7 @@ function isVolLocalRoute(depart: string, arrivee: string): boolean {
 export default function DepotPlanVolForm({
   draftKey,
   initialDraft,
+  initialReservation,
   compagniesDisponibles,
   inventairePersonnel,
   avionsParCompagnie = {},
@@ -186,6 +188,12 @@ export default function DepotPlanVolForm({
     setTempsPrevMin(String(initialDraft.temps_prev_min ?? '')); setTypeVol(initialDraft.type_vol==='IFR'?'IFR':'VFR');
     setRouteIfr(initialDraft.route_ifr ?? ''); setNiveauCroisiere(String(initialDraft.niveau_croisiere ?? '')); setIntentionsVol(initialDraft.intentions_vol ?? '');
   }, [initialDraft]);
+  useEffect(() => {
+    if (!initialReservation) return;
+    setAeroportDepart(initialReservation.departure); setAeroportArrivee(initialReservation.arrival);
+    setTempsPrevMin(String(initialReservation.duration_minutes)); setNumeroVol(initialReservation.callsign);
+    setHeureDepart(new Date(initialReservation.departure_at).toISOString().slice(11,16));
+  }, [initialReservation]);
   function saveDraft() {
     try { localStorage.setItem(draftKey,JSON.stringify({ aeroport_depart,aeroport_arrivee,temps_prev_min,type_vol,route_ifr,niveau_croisiere,intentions_vol,numero_vol })); toast.success('Brouillon enregistré sur cet appareil.'); }
     catch { toast.error('Le brouillon ne peut pas être enregistré sur cet appareil.'); }
@@ -675,6 +683,7 @@ export default function DepotPlanVolForm({
   function getFormData(volSansAtc: boolean = false) {
     const t = parseInt(temps_prev_min, 10);
     return {
+      event_reservation_id: initialReservation?.id,
       aeroport_depart,
       aeroport_arrivee,
       numero_vol: numero_vol.trim(),
@@ -871,6 +880,7 @@ export default function DepotPlanVolForm({
 
   return (
     <>
+    {initialReservation && <p className="mb-4 rounded-lg border border-amber-500/40 p-3 text-amber-200">Plan prérempli depuis votre slot : {initialReservation.departure} → {initialReservation.arrival} · {new Date(initialReservation.departure_at).toLocaleString('fr-FR',{timeZone:'UTC'})} UTC · {initialReservation.aircraft}. Choisissez votre appareil et complétez les procédures du vol. Le callsign, la route, la durée et l’horaire seront vérifiés.</p>}
     <div className="flex flex-wrap gap-3 mb-4 text-sm"><button type="button" onClick={saveDraft} className="rounded-lg border border-sky-700 p-2">Enregistrer le brouillon</button><button type="button" onClick={restoreDraft} className="rounded-lg border border-slate-700 p-2">Restaurer mon brouillon</button><button type="button" onClick={()=>{try{localStorage.removeItem(draftKey);toast.success('Brouillon supprimé.');}catch{toast.error('Suppression impossible.');}}} className="p-2 text-slate-400">Supprimer le brouillon</button></div>
     {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
 

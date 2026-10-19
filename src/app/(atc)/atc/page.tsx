@@ -14,14 +14,18 @@ import { formatDistanceToNow } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import type { StripData } from '@/components/FlightStrip';
 import { loadAllAtcAccessRules, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
+import Link from 'next/link';
 
 
-export default async function AtcPage() {
+export default async function AtcPage({ searchParams }: { searchParams?: { reservation?: string } }) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
   const admin = createAdminClient();
+  const { data: reservation } = searchParams?.reservation && /^[a-f0-9-]{36}$/i.test(searchParams.reservation)
+    ? await admin.from('event_reservations').select('airport,position').eq('id',searchParams.reservation).eq('user_id',user.id).eq('role','atc').eq('status','confirmed').maybeSingle()
+    : { data: null };
 
   const accessContext = await loadAtcAccessContext(admin, user.id);
   const { airportOptions } = await loadAllAtcAccessRules(admin);
@@ -310,7 +314,8 @@ export default async function AtcPage() {
             <p className="text-sm text-slate-400 mb-5">
               Choisissez un aéroport et une position pour ouvrir la console strips.
             </p>
-            <SeMettreEnServiceForm accessContext={accessContext} airportOptions={airportOptions} />
+            <Link href="/atc/reservations" className="btn-secondary inline-flex mb-4">Réserver une position</Link>
+            <SeMettreEnServiceForm accessContext={accessContext} airportOptions={airportOptions} initialAirport={reservation?.airport} initialPosition={reservation?.position} />
           </div>
           <div className="space-y-3">
             <div className="rounded-2xl border border-slate-700 bg-[#0b1220] p-4 flex gap-3">

@@ -99,6 +99,7 @@ export async function GET() {
       return {
         id: plan.id,
         numero_vol: plan.numero_vol || '',
+        event_title: plan.event_title || null, event_slot_time: plan.event_slot_time || null,
         aeroport_depart: plan.aeroport_depart || '',
         aeroport_arrivee: plan.aeroport_arrivee || '',
         type_vol: plan.type_vol || '',
@@ -206,6 +207,7 @@ async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAd
 
     return {
       id: plan.id, numero_vol: plan.numero_vol || '', aeroport_depart: plan.aeroport_depart || '',
+      event_title: plan.event_title || null, event_slot_time: plan.event_slot_time || null,
       aeroport_arrivee: plan.aeroport_arrivee || '', type_vol: plan.type_vol || '', statut: plan.statut || '',
       created_at: plan.created_at || '', accepted_at: plan.accepted_at || null, immatriculation,
       type_avion_code_oaci: typeAvionCodeOaci, type_avion_nom: typeAvionNom, type_wake: getTypeWake(typeAvionCodeOaci),

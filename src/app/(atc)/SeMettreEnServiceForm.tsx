@@ -12,15 +12,17 @@ import {
 import { MapPin, Radio, Loader2 } from 'lucide-react';
 
 type Props = {
+  initialAirport?: string;
+  initialPosition?: string;
   accessContext: AtcAccessContext;
   airportOptions: AtcAirportOption[];
 };
 
-export default function SeMettreEnServiceForm({ accessContext, airportOptions }: Props) {
+export default function SeMettreEnServiceForm({ accessContext, airportOptions, initialAirport = '', initialPosition = '' }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [aeroport, setAeroport] = useState('');
-  const [position, setPosition] = useState('');
+  const [aeroport, setAeroport] = useState(initialAirport);
+  const [position, setPosition] = useState(initialPosition);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 

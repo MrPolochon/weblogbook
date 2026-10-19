@@ -99,6 +99,7 @@ const sections: Section[] = [
       { href: '/admin/radar-beta', label: 'Radar beta', desc: 'Prototype radar ATC', icon: Activity },
       { href: '/admin/support-bot', label: 'Bot assistance Discord', desc: 'Tickets IA, panel et sections', icon: Bot },
       { href: '/app/calendrier', label: 'Calendrier site', desc: 'Événements PTFR (édition admin)', icon: CalendarDays },
+      { href: '/admin/evenements-majeurs', label: 'Événements majeurs', desc: 'Manifestes, slots et réservations ATC', icon: CalendarDays },
     ],
   },
 ];
