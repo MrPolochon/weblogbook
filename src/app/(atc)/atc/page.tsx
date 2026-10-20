@@ -17,7 +17,8 @@ import { loadAllAtcAccessRules, loadAtcAccessContext } from '@/lib/atc-grade-res
 import Link from 'next/link';
 
 
-export default async function AtcPage({ searchParams }: { searchParams?: { reservation?: string } }) {
+export default async function AtcPage({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ reservation?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;

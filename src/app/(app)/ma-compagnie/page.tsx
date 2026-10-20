@@ -4,7 +4,8 @@ import { redirect } from 'next/navigation';
 import { Building2 } from 'lucide-react';
 import MaCompagnieClient from './MaCompagnieClient';
 
-export default async function MaCompagniePage({ searchParams }: { searchParams: { c?: string } }) {
+export default async function MaCompagniePage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ c?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

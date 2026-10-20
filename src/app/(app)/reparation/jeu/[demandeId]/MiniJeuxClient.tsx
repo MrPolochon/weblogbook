@@ -1657,8 +1657,8 @@ function DiagnosticGame({ onComplete }: { onComplete: (s: GameScore) => Promise<
   const [finalScore, setFinalScore] = useState<GameScore | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const startTime = useRef(Date.now());
-  const qTimerRef = useRef<ReturnType<typeof setInterval>>();
-  const finishTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const qTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const finishTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const submittingRef = useRef(false);
   const answersRef = useRef<number[]>([]);
 

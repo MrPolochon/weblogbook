@@ -8,7 +8,8 @@ import { isInstructionTitreType } from '@/lib/licence-titres-instruction';
 const TYPES_VALIDES = ALL_LICENCE_TYPES as readonly string[];
 const TYPE_QUALIFICATION_TYPE = 'Qualification Type';
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
+export async function PATCH(request: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -114,7 +115,8 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   }
 }
 
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+export async function DELETE(request: Request, { params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();

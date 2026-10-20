@@ -9,9 +9,9 @@ import VolFormMilitaire from './VolFormMilitaire';
 export default async function NouveauVolMilitairePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ mission?: string }> | { mission?: string };
+  searchParams?: Promise<{ mission?: string }>;
 }) {
-  const sp = searchParams instanceof Promise ? await searchParams : searchParams;
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

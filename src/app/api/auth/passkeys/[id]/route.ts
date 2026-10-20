@@ -6,8 +6,9 @@ import { NextResponse, NextRequest } from 'next/server';
 /** Supprime une passkey de l'utilisateur connecté. */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params: paramsPromise }: { params: Promise<{ id: string }> }
 ) {
+  const params = await paramsPromise;
   try {
     const supabase = await createClient();
     const {

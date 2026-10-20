@@ -13,7 +13,7 @@ export default async function IfsaLicencesPage() {
   if (!user) redirect('/login');
 
   const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-  const gate = ifsaPageGate(profile);
+  const gate = await ifsaPageGate(profile);
   if (gate === 'deny') redirect('/logbook');
   if (gate === 'admin_password') return <IfsaAdminUnlock />;
 

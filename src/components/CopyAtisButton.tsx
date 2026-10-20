@@ -7,7 +7,7 @@ import { createPortal } from 'react-dom';
 export default function CopyAtisButton({ text, disabled = false }: { text: string | null | undefined; disabled?: boolean }) {
   const [copied, setCopied] = useState(false);
   const [manual, setManual] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout>>();
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => {
     setCopied(false); setManual(false);
     return () => clearTimeout(timer.current);

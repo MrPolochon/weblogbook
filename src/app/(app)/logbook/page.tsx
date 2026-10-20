@@ -19,7 +19,8 @@ const VOL_STATUT_MAP: Record<string, StatusBadgeConfig> = {
   'en_attente': { label: 'Attente', className: 'bg-amber-500/15 text-amber-400 border border-amber-500/25', icon: <Timer className="h-3 w-3" /> },
 };
 
-export default async function LogbookPage({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+export default async function LogbookPage({ searchParams: searchParamsPromise }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;

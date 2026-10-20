@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 import { isPublicBulletinPath } from '@/lib/tribunal-bulletins';
 
 export const dynamic = 'force-dynamic';
-export default async function BulletinPage({ params }: { params: { id: string } }) {
+export default async function BulletinPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   if (!isPublicBulletinPath(`/journal/${params.id}`)) notFound();
   const supabase = await createClient();
   const { data: b, error } = await supabase.from('tribunal_bulletins').select('number, title, category, content, author_name, published_at').eq('id', params.id).maybeSingle();

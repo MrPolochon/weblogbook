@@ -22,7 +22,8 @@ import {
 } from '@/lib/instruction-admin-staff-pools';
 import type { AdminExamTrainerConflicts, AdminStaffReassignPools } from '@/lib/instruction-admin-staff-pools';
 
-export default async function InstructionPage({ searchParams }: { searchParams: { tab?: string; history?: string } }) {
+export default async function InstructionPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ tab?: string; history?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

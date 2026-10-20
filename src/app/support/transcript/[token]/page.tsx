@@ -22,7 +22,8 @@ function formatWhen(iso: string): string {
   });
 }
 
-export default async function TranscriptPage({ params }: { params: { token: string } }) {
+export default async function TranscriptPage({ params: paramsPromise }: { params: Promise<{ token: string }> }) {
+  const params = await paramsPromise;
   const token = String(params.token || '').trim();
   if (!token || token.length < 16) notFound();
 

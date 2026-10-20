@@ -4,8 +4,8 @@ import { createClient } from '@/lib/supabase/server';
 
 export const RADAR_UNLOCK_COOKIE = 'radar_pf_unlock';
 
-export function hasRadarUnlockCookie(): boolean {
-  return cookies().get(RADAR_UNLOCK_COOKIE)?.value === '1';
+export async function hasRadarUnlockCookie(): Promise<boolean> {
+  return (await cookies()).get(RADAR_UNLOCK_COOKIE)?.value === '1';
 }
 
 /**
@@ -31,7 +31,7 @@ export async function requireRadarUnlock(): Promise<
     return { ok: false, response: NextResponse.json({ error: 'Non authentifié' }, { status: 401 }) };
   }
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).maybeSingle();
-  if (profile?.role !== 'admin' || !hasRadarUnlockCookie()) {
+  if (profile?.role !== 'admin' || !(await hasRadarUnlockCookie())) {
     return { ok: false, response: NextResponse.json({ error: 'Radar verrouillé' }, { status: 403 }) };
   }
   return { ok: true, userId: user.id };

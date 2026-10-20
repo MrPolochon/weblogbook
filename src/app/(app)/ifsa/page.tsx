@@ -17,7 +17,7 @@ export default async function IfsaPage() {
     .eq('id', user.id)
     .single();
 
-  const gate = ifsaPageGate(profile);
+  const gate = await ifsaPageGate(profile);
   if (gate === 'deny') redirect('/logbook');
   if (gate === 'admin_password') return <IfsaAdminUnlock />;
 

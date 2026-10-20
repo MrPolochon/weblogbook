@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const { data: profile } = await supabase.from('profiles').select('role, ifsa').eq('id', user.id).single();
-    if (!canAccessIfsaSpace(profile)) {
+    if (!(await canAccessIfsaSpace(profile))) {
       return NextResponse.json({ error: 'Accès réservé à l\'IFSA' }, { status: 403 });
     }
 

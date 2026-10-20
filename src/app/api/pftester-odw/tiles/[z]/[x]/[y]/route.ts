@@ -19,8 +19,9 @@ function parseIndex(raw: string, maxDigits: number): number | null {
 
 export async function GET(
   _request: Request,
-  { params }: { params: { z: string; x: string; y: string } },
+  { params: paramsPromise }: { params: Promise<{ z: string; x: string; y: string }> },
 ) {
+  const params = await paramsPromise;
   const z = parseIndex(params.z, 1);
   const x = parseIndex(params.x, 3);
   const y = parseIndex(params.y, 3);

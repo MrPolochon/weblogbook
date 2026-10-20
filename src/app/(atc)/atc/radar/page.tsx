@@ -27,7 +27,7 @@ export default async function RadarPage() {
     );
   }
 
-  if (!hasRadarUnlockCookie()) {
+  if (!(await hasRadarUnlockCookie())) {
     return <RadarUnlock />;
   }
 

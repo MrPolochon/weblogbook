@@ -4,7 +4,8 @@ import { BULLETIN_CATEGORIES } from '@/lib/tribunal-bulletins';
 
 export const dynamic = 'force-dynamic';
 export const metadata = { title: 'Journal du tribunal administratif — PTFS Logbook' };
-export default async function JournalPage({ searchParams }: { searchParams: { q?: string; category?: string; page?: string } }) {
+export default async function JournalPage({ searchParams: searchParamsPromise }: { searchParams: Promise<{ q?: string; category?: string; page?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const q = (typeof searchParams.q === 'string' ? searchParams.q : '').trim().slice(0, 200);
   const category = BULLETIN_CATEGORIES.find(c => c === searchParams.category);

@@ -6,7 +6,8 @@ import { ArrowLeft, Plane, Radio, Compass, Navigation2 } from 'lucide-react';
 import DepotPlanVolForm, { type AvionArmeeItem } from './DepotPlanVolForm';
 import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 
-export default async function DepotPlanVolPage({ searchParams }: { searchParams?: { mission?: string; duplicate?: string; reservation?: string } }) {
+export default async function DepotPlanVolPage({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ mission?: string; duplicate?: string; reservation?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');

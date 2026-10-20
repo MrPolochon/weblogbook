@@ -8,11 +8,12 @@ import VolEditForm from './VolEditForm';
 
 export default async function LogbookVolEditPage({
   params,
-  searchParams,
+  searchParams: searchParamsPromise,
 }: {
   params: Promise<{ id: string }>;
-  searchParams?: { [key: string]: string | string[] | undefined };
+  searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const searchParams = await searchParamsPromise;
   const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
