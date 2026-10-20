@@ -202,12 +202,6 @@ export default function InstructionClient({
       )}
 
       {/* ===== HUD Header aviation ===== */}
-      <section className="rounded-xl border border-sky-800 bg-slate-900 p-4 space-y-2 text-sm">
-        <h2 className="font-semibold text-sky-200">Prochaine étape de votre dossier</h2>
-        <p>{activeSessionProp ? 'Terminez votre session active avant de changer de parcours.' : myFormationActive ? `Module suivant : ${myProgram?.modules.find(m=>!myCompletedSet.has(m.code))?.title || 'Demander un examen avec votre référent'}.` : 'Choisissez un training ou une demande d’examen dans Mon Espace.'}</p>
-        {myInstructorIdentifiant && <p className="text-slate-400">Référent : {myInstructorIdentifiant}. Convenez d’un créneau avant de démarrer la session.</p>}
-        {examRequestsMine.some(r=>['assigne','accepte'].includes(r.statut) && Date.now()-Date.parse(r.updated_at)>7*86400000) && <p className="text-amber-300">Une demande attend depuis plus de 7 jours : contactez votre examinateur pour convenir d’un créneau.</p>}
-      </section>
       <div className="relative overflow-hidden rounded-2xl border border-sky-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-sky-500/10 blur-3xl" />
@@ -233,7 +227,7 @@ export default function InstructionClient({
             <div className="flex-1">
               <h1 className="text-2xl font-bold text-slate-50 tracking-tight">Centre d&apos;Instruction</h1>
               <p className="text-sm text-slate-400 mt-0.5">
-                Partie <strong className="text-slate-300">pratique</strong> des CAT 1–5 (après le QCM AeroSchool).{' '}
+                Entraînez-vous au pilotage ou au contrôle aérien, suivez votre progression et préparez vos examens.{' '}
                 <a href="/livret-progression" className="text-sky-400 hover:text-sky-300 underline">Livret de progression</a>
               </p>
             </div>
@@ -311,12 +305,12 @@ export default function InstructionClient({
       )}
 
       {/* ===== Tab Bar ===== */}
-      <div aria-label="Parcours instruction" className="flex flex-wrap gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
+      <nav aria-label="Parcours instruction" className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1.5 p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
         {([
           { id: 'espace' as TabId, label: 'Mon Espace', icon: BookOpen, visible: true },
-          { id: 'formation' as TabId, label: 'Formation', icon: Users, visible: isManager },
+          { id: 'formation' as TabId, label: 'Mes élèves', icon: Users, visible: isManager },
           { id: 'examens' as TabId, label: 'Examens & Titres', icon: Award, visible: showExamensTab },
-          { id: 'admin' as TabId, label: 'Admin', icon: Shield, visible: isStaffAdmin },
+          { id: 'admin' as TabId, label: 'Administration', icon: Shield, visible: isStaffAdmin },
         ]).filter((t) => t.visible).map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -327,6 +321,8 @@ export default function InstructionClient({
           return (
             <button
               key={tab.id}
+              type="button"
+              aria-current={active ? 'page' : undefined}
               onClick={() => trySetActiveTab(tab.id)}
               disabled={lockedOut}
               title={
@@ -343,12 +339,32 @@ export default function InstructionClient({
               }`}
             >
               <Icon className={`h-4 w-4 ${active ? 'text-sky-400' : ''}`} />
-              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="text-xs sm:text-sm">{tab.label}</span>
             </button>
           );
         })}
-      </div>
-
+      </nav>
+      {activeTab === 'espace' && !activeSessionProp && (
+        <section aria-label="Choisir une démarche" className="grid gap-3 sm:grid-cols-3">
+          {[
+            { href: '#training-pilote', title: 'Training pilote', description: 'Préparer un vol avec un instructeur.', icon: Plane },
+            { href: '#training-atc', title: 'Training ATC', description: 'Travailler vos procédures de contrôle.', icon: Users },
+            { href: '#demande-examen', title: 'Passer un examen', description: 'Choisir une licence et demander une évaluation.', icon: Award },
+          ].map(({ href, title, description, icon: Icon }) => (
+            <a key={href} href={href} className="group rounded-2xl border border-slate-700/60 bg-slate-900/80 p-4 transition-colors hover:border-sky-400/50 hover:bg-slate-800/80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400">
+              <Icon className="mb-3 h-5 w-5 text-sky-300" aria-hidden="true" />
+              <h2 className="font-semibold text-slate-100">{title} <span aria-hidden="true">↗</span></h2>
+              <p className="mt-1 text-sm leading-relaxed text-slate-400">{description}</p>
+            </a>
+          ))}
+        </section>
+      )}
+      {activeTab === 'espace' && (<section className="rounded-xl border border-sky-800 bg-slate-900 p-4 space-y-2 text-sm">
+        <h2 className="font-semibold text-sky-200">Prochaine étape de votre dossier</h2>
+        <p>{activeSessionProp ? 'Terminez votre session active avant de changer de parcours.' : myFormationActive ? `Module suivant : ${myProgram?.modules.find(m=>!myCompletedSet.has(m.code))?.title || 'Demander un examen avec votre référent'}.` : 'Choisissez un training ou une demande d’examen dans Mon Espace.'}</p>
+        {myInstructorIdentifiant && <p className="text-slate-400">Référent : {myInstructorIdentifiant}. Convenez d’un créneau avant de démarrer la session.</p>}
+        {examRequestsMine.some(r=>['assigne','accepte'].includes(r.statut) && Date.now()-Date.parse(r.updated_at)>7*86400000) && <p className="text-amber-300">Une demande attend depuis plus de 7 jours : contactez votre examinateur pour convenir d’un créneau.</p>}
+      </section>)}
       {/* ===== Tab Content ===== */}
       {activeTab === 'espace' && (
         <MonEspaceTab

@@ -241,7 +241,17 @@ export default function MonEspaceTab({
   return (
     <>
       {!isLocked && (
-      <form onSubmit={createExamRequest} className="card space-y-4 border-l-4 border-l-amber-500/60">
+        <section aria-label="Déroulement d’une demande" className="rounded-xl border border-slate-700/50 bg-slate-900/50 p-4 text-sm leading-relaxed text-slate-400">
+          <h2 className="font-semibold text-slate-200">Votre parcours en trois étapes</h2>
+          <ol className="mt-3 grid gap-3 sm:grid-cols-3">
+            <li><strong className="text-sky-300">01 · Choisir</strong><br />Sélectionnez votre licence et envoyez une demande.</li>
+            <li><strong className="text-sky-300">02 · Organiser</strong><br />Convenez d’un créneau avec la personne assignée.</li>
+            <li><strong className="text-sky-300">03 · Pratiquer</strong><br />Retrouvez les réponses et le suivi sur cette page.</li>
+          </ol>
+        </section>
+      )}
+      {!isLocked && (
+      <form id="demande-examen" onSubmit={createExamRequest} className="card scroll-mt-24 space-y-4 border-l-4 border-l-amber-500/60">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-amber-500/10"><ClipboardList className="h-5 w-5 text-amber-400" /></div>
           <h2 className="text-lg font-semibold text-slate-100">Demander un examen</h2>
@@ -251,14 +261,14 @@ export default function MonEspaceTab({
           il ne pourra pas être votre examinateur.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <select className="input" value={examLicence} onChange={(e) => setExamLicence(e.target.value)} required>
+          <select aria-label="Licence à évaluer" className="input" value={examLicence} onChange={(e) => setExamLicence(e.target.value)} required>
             {examLicenceOptions.map((licence) => (
               <option key={licence} value={licence}>{formatLicenceOptionLabel(licence)}</option>
             ))}
           </select>
           <input
             className="input md:col-span-2"
-            value={examMessage}
+            aria-label="Message pour l’examinateur (facultatif)" value={examMessage}
             onChange={(e) => setExamMessage(e.target.value)}
             placeholder="Message (optionnel)"
           />
@@ -277,10 +287,10 @@ export default function MonEspaceTab({
             </div>
             <div className="text-right">
               <p className="text-2xl font-bold text-emerald-400">{myProgressPercent}%</p>
-              <p className="text-xs text-slate-500">{myCompletedSet.size}/{myProgram.modules.length} modules</p>
+              <p className="text-xs text-slate-500">{myProgram.modules.filter(module => myCompletedSet.has(module.code)).length}/{myProgram.modules.length} modules validés</p>
             </div>
           </div>
-          <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+          <div role="progressbar" aria-label="Modules validés" aria-valuemin={0} aria-valuemax={100} aria-valuenow={myProgressPercent} className="h-2 rounded-full bg-slate-800 overflow-hidden">
             <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700" style={{ width: `${myProgressPercent}%` }} />
           </div>
           <div className="space-y-2">
@@ -293,7 +303,7 @@ export default function MonEspaceTab({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className={`text-sm font-medium ${myCompletedSet.has(m.code) ? 'text-emerald-200' : 'text-slate-200'}`}>{m.code} — {m.title}</p>
-                  <p className="text-xs text-slate-500 truncate">{m.description}</p>
+                  <p className="text-xs leading-relaxed text-slate-400">{m.description}</p>
                 </div>
                 <span className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${myCompletedSet.has(m.code) ? 'bg-emerald-500/15 text-emerald-300' : 'bg-slate-700/60 text-slate-400'}`}>
                   {myCompletedSet.has(m.code) ? 'Validé' : 'À faire'}
@@ -353,7 +363,7 @@ export default function MonEspaceTab({
       </div>
       )}
 
-      <div className={`card space-y-4 border-l-4 ${isLocked ? 'border-l-violet-500 ring-2 ring-violet-500/30' : 'border-l-teal-500/60'}`}>
+      <div id="training-pilote" className={`card scroll-mt-24 space-y-4 border-l-4 ${isLocked ? 'border-l-violet-500 ring-2 ring-violet-500/30' : 'border-l-teal-500/60'}`}>
         {isLocked && (
           <p className="text-sm text-violet-300 bg-violet-500/10 border border-violet-500/25 rounded-lg px-3 py-2">
             Session de training en cours — clôturez-la avec « Session terminée » pour retrouver l&apos;accès aux autres sections.
@@ -361,7 +371,7 @@ export default function MonEspaceTab({
         )}
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-teal-500/10"><PlaneTakeoff className="h-5 w-5 text-teal-400" /></div>
-          <h2 className="text-lg font-semibold text-slate-100">Session de training (vol / pilote)</h2>
+          <h2 className="text-lg font-semibold text-slate-100">Entraînement pilote</h2>
         </div>
         <p className="text-sm text-slate-500">
           Choisissez la licence visée. Un <strong className="text-slate-400">FI</strong> est assigné en priorité ;
@@ -372,7 +382,7 @@ export default function MonEspaceTab({
         <form onSubmit={requestPilotTraining} className="space-y-2">
           <select
             className="input w-full"
-            value={pilotTrainingLicence}
+            aria-label="Licence du training pilote" value={pilotTrainingLicence}
             onChange={(e) => setPilotTrainingLicence(e.target.value)}
             required
           >
@@ -382,7 +392,7 @@ export default function MonEspaceTab({
           </select>
           <input
             className="input w-full"
-            value={pilotTrainingMessage}
+            aria-label="Message pour le training pilote (facultatif)" value={pilotTrainingMessage}
             onChange={(e) => setPilotTrainingMessage(e.target.value)}
             placeholder="Message (optionnel) pour l'instructeur"
           />
@@ -504,10 +514,10 @@ export default function MonEspaceTab({
       </div>
 
       {!isLocked && (
-      <div className="card space-y-4 border-l-4 border-l-indigo-500/60">
+      <div id="training-atc" className="card scroll-mt-24 space-y-4 border-l-4 border-l-indigo-500/60">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-lg bg-indigo-500/10"><Radio className="h-5 w-5 text-indigo-400" /></div>
-          <h2 className="text-lg font-semibold text-slate-100">Session de training (ATC)</h2>
+          <h2 className="text-lg font-semibold text-slate-100">Entraînement ATC</h2>
         </div>
         <p className="text-sm text-slate-500">
           Choisissez la licence ATC/AFIS visée. L&apos;instructeur qui clôture la session ne pourra pas être
@@ -516,7 +526,7 @@ export default function MonEspaceTab({
         <form onSubmit={requestAtcTraining} className="space-y-2">
           <select
             className="input w-full"
-            value={atcTrainingLicence}
+            aria-label="Licence du training ATC" value={atcTrainingLicence}
             onChange={(e) => setAtcTrainingLicence(e.target.value)}
             required
           >
@@ -526,7 +536,7 @@ export default function MonEspaceTab({
           </select>
           <input
             className="input w-full"
-            value={atcTrainingMessage}
+            aria-label="Message pour le training ATC (facultatif)" value={atcTrainingMessage}
             onChange={(e) => setAtcTrainingMessage(e.target.value)}
             placeholder="Message (optionnel) pour l'instructeur"
           />
