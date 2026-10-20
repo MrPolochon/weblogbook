@@ -16,6 +16,8 @@ async function setup() {
   await db.exec(fs.readFileSync('supabase/major_events_and_reservations.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/major_events_open_flight_plans.sql','utf8'));
   await db.exec(fs.readFileSync('supabase/major_events_open_flight_plans.sql','utf8')); // Idempotent en production.
+  await db.exec(fs.readFileSync('supabase/major_events_open_atc_positions.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/major_events_open_atc_positions.sql','utf8'));
   const start = new Date(Math.floor(Date.now()/600000)*600000 - 600000).toISOString(); const end = new Date(Date.parse(start)+7200000).toISOString();
   const config = { airports:['ITKO'],slot_minutes:10,pilot_capacity:1,atc_positions:['Tower','Ground'],enabled:true,bookings_open:true };
   const event = { title:'Tokyo RFE',starts_at:start,ends_at:end };
@@ -59,10 +61,11 @@ test('capacity, waiting list and promotion are transactional',async()=>{
     assert.equal((await s.db.query('select status from event_reservations where id=$1',[b])).rows[0].status,'confirmed');
   }finally{await s.db.close();}
 });
-test('ATC service requires own reservation at an active event and never replaces a booked position',async()=>{
+test('ATC service is open without a reservation and never replaces a booked position',async()=>{
   const s=await setup();try{
     const start=new Date(Date.now()-60000).toISOString(); const end=new Date(Date.now()+1800000).toISOString();
-    await assert.rejects(s.db.query("insert into atc_sessions(user_id,aeroport,position) values($1,'ITKO','Tower')",[uuid(2)]),/Réservez/);
+    await s.db.query("insert into atc_sessions(user_id,aeroport,position) values($1,'ITKO','Tower')",[uuid(2)]);
+    await s.db.query('delete from atc_sessions where user_id=$1',[uuid(2)]);
     await reserve(s,uuid(1),{event_id:null,role:'atc',airport:'ITKO',position:'Tower',starts_at:start,ends_at:end,status:'confirmed'});
     await assert.rejects(s.db.query("insert into atc_sessions(user_id,aeroport,position) values($1,'ITKO','Tower')",[uuid(2)]),/autre contrôleur/);
     await s.db.query("insert into atc_sessions(user_id,aeroport,position) values($1,'ITKO','Tower')",[uuid(1)]);

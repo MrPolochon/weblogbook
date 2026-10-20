@@ -439,7 +439,7 @@ export default function SiteCalendar({
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" disabled={Boolean(editing?.is_major)} checked={form.is_major} onChange={e => setForm({ ...form, is_major: e.target.checked })}/>
-              Événement majeur — slots pilotes facultatifs et réservation des positions ATC
+              Événement majeur — réservations facultatives pour les pilotes et les positions ATC libres
             </label>
             {form.is_major && <fieldset className="space-y-3 border border-amber-500/30 rounded-lg p-3"><legend>Créneaux et restrictions</legend>
               <p className="text-xs text-slate-400">Après la première réservation, les horaires, aéroports et capacités sont verrouillés pour préserver les places déjà prises.</p>

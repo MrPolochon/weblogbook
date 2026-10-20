@@ -228,12 +228,7 @@ BEGIN
     AND starts_at<=now() AND ends_at>now() AND user_id<>NEW.user_id) THEN
     RAISE EXCEPTION 'Cette position est réservée à un autre contrôleur sur ce créneau';
   END IF;
-  IF EXISTS (SELECT 1 FROM major_event_configs c JOIN site_calendar_events e ON e.id=c.event_id
-    WHERE c.enabled AND NEW.aeroport=ANY(c.airports) AND e.starts_at<=now() AND e.ends_at>now())
-    AND NOT EXISTS (SELECT 1 FROM event_reservations WHERE role='atc' AND status='confirmed' AND user_id=NEW.user_id
-      AND airport=NEW.aeroport AND position=NEW.position AND starts_at<=now() AND ends_at>now()) THEN
-    RAISE EXCEPTION 'Réservez cette position avant de prendre le service pendant l’événement majeur';
-  END IF;
+  -- Une position non réservée peut être prise librement, même pendant un événement.
   RETURN NEW;
 END $$;
 DROP TRIGGER IF EXISTS guard_reserved_atc_position ON public.atc_sessions;
