@@ -373,7 +373,7 @@ export default function SiteCalendar({
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="font-semibold">{e.title}</p>
-                    {e.is_major && <p className="text-xs font-semibold text-amber-300">ÉVÉNEMENT MAJEUR{e.major?.enabled ? ' · slots obligatoires' : ' · désactivé'}</p>}
+                    {e.is_major && <p className="text-xs font-semibold text-amber-300">ÉVÉNEMENT MAJEUR{e.major?.enabled ? ' · plans de vol libres' : ' · désactivé'}</p>}
                     <p className="text-sm mt-0.5 flex items-center gap-1.5">
                       <Clock className="h-3.5 w-3.5" />
                       {formatEventDateTime(e.starts_at)}
@@ -439,7 +439,7 @@ export default function SiteCalendar({
             </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" disabled={Boolean(editing?.is_major)} checked={form.is_major} onChange={e => setForm({ ...form, is_major: e.target.checked })}/>
-              Événement majeur — réservation obligatoire pour les aéroports concernés
+              Événement majeur — slots pilotes facultatifs et réservation des positions ATC
             </label>
             {form.is_major && <fieldset className="space-y-3 border border-amber-500/30 rounded-lg p-3"><legend>Créneaux et restrictions</legend>
               <p className="text-xs text-slate-400">Après la première réservation, les horaires, aéroports et capacités sont verrouillés pour préserver les places déjà prises.</p>

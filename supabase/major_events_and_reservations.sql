@@ -184,7 +184,8 @@ BEGIN
       AND p_depart_at >= r.departure_at AND p_depart_at < r.departure_at + make_interval(mins => ev.slot_minutes)
       AND p_duration=r.duration_minutes AND (r.claimed_at IS NULL OR r.plan_id=p_plan)
       ORDER BY r.created_at LIMIT 1 FOR UPDATE;
-    IF NOT FOUND THEN RAISE EXCEPTION 'Slot pilote confirmé requis pour % : réservez dans le calendrier (route, callsign et horaire identiques)',ev.title USING ERRCODE='23514'; END IF;
+    -- Les slots pilotes organisent le manifeste sans bloquer les autres vols ou strips manuels.
+    IF NOT FOUND THEN CONTINUE; END IF;
     ids := array_append(ids,booking.id); label := coalesce(label || ' / ','') || ev.title; slot_time := coalesce(slot_time,booking.starts_at);
   END LOOP;
   RETURN jsonb_build_object('ids',to_jsonb(ids),'title',label,'slot_time',slot_time);

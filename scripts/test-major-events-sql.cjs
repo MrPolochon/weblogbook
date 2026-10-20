@@ -14,6 +14,8 @@ async function setup() {
     INSERT INTO discord_links SELECT id,'discord-'||id::text,'active' FROM profiles;
   `);
   await db.exec(fs.readFileSync('supabase/major_events_and_reservations.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/major_events_open_flight_plans.sql','utf8'));
+  await db.exec(fs.readFileSync('supabase/major_events_open_flight_plans.sql','utf8')); // Idempotent en production.
   const start = new Date(Math.floor(Date.now()/600000)*600000 - 600000).toISOString(); const end = new Date(Date.parse(start)+7200000).toISOString();
   const config = { airports:['ITKO'],slot_minutes:10,pilot_capacity:1,atc_positions:['Tower','Ground'],enabled:true,bookings_open:true };
   const event = { title:'Tokyo RFE',starts_at:start,ends_at:end };
@@ -23,13 +25,13 @@ async function setup() {
 function pilot(s, changes={}) { return { event_id:s.id,role:'pilot',airport:'ITKO',starts_at:s.slot,ends_at:new Date(Date.parse(s.slot)+600000).toISOString(),movement:'departure',departure:'ITKO',arrival:'IRFD',departure_at:s.slot,duration_minutes:30,callsign:'AFR123',aircraft:'A320',status:'confirmed',...changes }; }
 const reserve = async (s,user,data) => (await s.db.query('select reserve_event_slot($1,$2) id',[user,data])).rows[0].id;
 const plan = (s,user=uuid(1),changes={}) => s.db.query('insert into plans_vol(pilote_id,numero_vol,aeroport_depart,aeroport_arrivee,heure_depart_estimee,temps_prev_min) values($1,$2,$3,$4,$5,$6) returning *',[user,changes.callsign||'AFR123',changes.departure||'ITKO',changes.arrival||'IRFD',changes.date||s.slot,changes.duration||30]);
-test('active major event blocks unbooked pilots, manual strips and invalid routes; reserved plans claim a slot exactly once',async()=>{
+test('active major event permits unbooked pilots and manual strips; matching plans claim a slot exactly once',async()=>{
   const s=await setup();try{
-    await assert.rejects(plan(s),/Slot pilote/); await assert.rejects(plan(s,null),/Slot pilote/);
+    for(const user of [uuid(1),null]) { const open=await plan(s,user); assert.deepEqual(open.rows[0].event_booking_ids,[]); await s.db.query("update plans_vol set statut='en_cours' where id=$1",[open.rows[0].id]); }
     const id=await reserve(s,uuid(1),pilot(s));
-    await assert.rejects(plan(s,uuid(1),{callsign:'OTHER'}),/Slot pilote/);
+    assert.deepEqual((await plan(s,uuid(1),{callsign:'OTHER'})).rows[0].event_booking_ids,[]);
     const p=await plan(s); assert.equal(p.rows[0].event_title,'Tokyo RFE'); assert.deepEqual(p.rows[0].event_booking_ids,[id]);
-    await assert.rejects(plan(s),/Slot pilote/);
+    assert.deepEqual((await plan(s)).rows[0].event_booking_ids,[]);
     await s.db.query("update plans_vol set statut='en_cours' where id=$1",[p.rows[0].id]);
     await assert.rejects(s.db.query('select manage_event_reservation($1,$2,$3)',[uuid(1),id,'cancel']),/déjà utilisée/);
     await s.db.query("update plans_vol set aeroport_arrivee='IPPH',deroutement_at=now() where id=$1",[p.rows[0].id]);
@@ -98,11 +100,11 @@ test('both airport movements count toward capacity; local flights cannot double-
   }finally{await s.db.close();}
   const s2=await setup();try{await assert.rejects(reserve(s2,uuid(1),pilot(s2,{arrival:'ITKO',duration_minutes:5})),/complet/);}finally{await s2.db.close();}
 });
-test('a future event requires a slot for a future flight while unrelated airports remain open',async()=>{
+test('future event flights and unrelated airports remain open without reservations',async()=>{
   const s=await setup();try{
     const start=new Date(Date.now()+86400000).toISOString();const end=new Date(Date.parse(start)+7200000).toISOString();
     await s.db.query('select save_major_calendar_event($1,$2,$3,$4)',[uuid(3),s.id,{...s.event,starts_at:start,ends_at:end},s.config]);
-    await assert.rejects(plan(s,uuid(1),{date:start}),/Slot pilote/);
+    assert.deepEqual((await plan(s,uuid(1),{date:start})).rows[0].event_booking_ids,[]);
     await plan(s,uuid(1),{date:start,departure:'IPPH',arrival:'IRFD'});
   }finally{await s.db.close();}
 });
