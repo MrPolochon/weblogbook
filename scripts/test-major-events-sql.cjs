@@ -1,5 +1,5 @@
-// Moteur PostgreSQL isolé : npm install --prefix tmp/armee-sql-tests --no-save --package-lock=false @electric-sql/pglite
-const { PGlite } = require('../tmp/armee-sql-tests/node_modules/@electric-sql/pglite');
+// Moteur PostgreSQL isolé, installé avec les dépendances de développement.
+const { PGlite } = require('@electric-sql/pglite');
 const { test } = require('node:test'); const assert = require('node:assert/strict'); const fs = require('node:fs');
 const uuid = n => `${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
 async function setup() {

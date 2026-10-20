@@ -1,5 +1,5 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript');
-const {PGlite}=require('../tmp/armee-sql-tests/node_modules/@electric-sql/pglite');
+const {PGlite}=require('@electric-sql/pglite');
 test('three warning boundaries use server-adjusted time and stop at the reservation',()=>{
   const m={exports:{}};new Function('exports',ts.transpileModule(fs.readFileSync('src/lib/events/handover-rules.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(m.exports);
   const stage=m.exports.handoverWarningStage,start=1000000;

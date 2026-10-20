@@ -1,6 +1,7 @@
 ﻿'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { fetchJson } from '@/lib/fetch-json';
 import { createClient } from '@/lib/supabase/client';
 import {
   ChevronLeft, Package, Utensils, Fuel, Users, Loader2,
@@ -33,6 +34,7 @@ export default function ServicesAuSolPanel({
   planVolId, aeroportDepart, aeroportArrivee, statut, porteDepart, paxCount,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [actionError, setActionError] = useState('');
   const [requests, setRequests] = useState<GroundServiceRequest[]>([]);
   const [boarding, setBoarding] = useState<BoardingStatus | null>(null);
   const [porteArrivee, setPorteArrivee] = useState<string | null>(null);
@@ -54,6 +56,9 @@ export default function ServicesAuSolPanel({
       fetch(`/api/ground/session?aeroport=${currentAeroport}`),
     ]);
 
+    if ([reqRes, boardingRes, gateRes, groundRes].some(response => !response.ok)) {
+      throw new Error('Chargement des services impossible. Réessayez.');
+    }
     if (reqRes.ok) {
       const d = await reqRes.json() as { requests?: GroundServiceRequest[] };
       const reqs = d.requests ?? [];
@@ -95,23 +100,25 @@ export default function ServicesAuSolPanel({
 
   useEffect(() => {
     if (!open) return;
-    loadData();
+    const refresh = () => { void loadData().catch(() => setActionError('Actualisation des services impossible. Réouvrez le panneau pour réessayer.')); };
+    refresh();
     const supabase = createClient();
     const channel = supabase
       .channel(`pilot-service-${planVolId}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ground_service_requests', filter: `plan_vol_id=eq.${planVolId}` }, () => { loadData(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_status', filter: `plan_vol_id=eq.${planVolId}` }, () => { loadData(); })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'gate_assignments', filter: `plan_vol_id=eq.${planVolId}` }, () => { loadData(); })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ground_service_requests', filter: `plan_vol_id=eq.${planVolId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'boarding_status', filter: `plan_vol_id=eq.${planVolId}` }, refresh)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'gate_assignments', filter: `plan_vol_id=eq.${planVolId}` }, refresh)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [open, loadData]);
+  }, [open, loadData, planVolId]);
 
   async function requestService(type: ServiceType, direction?: RepoussageDirection) {
     const key = direction ? `repoussage_${direction}` as const : type;
     setLoading(prev => ({ ...prev, [key]: true }));
     setRepoussageMenuOpen(false);
     try {
-      await fetch('/api/ground/service-requests', {
+      setActionError('');
+      await fetchJson('/api/ground/service-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -123,6 +130,8 @@ export default function ServicesAuSolPanel({
         }),
       });
       await loadData();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Demande non envoyée. Réessayez.');
     } finally {
       setLoading(prev => ({ ...prev, [key]: false }));
     }
@@ -132,25 +141,18 @@ export default function ServicesAuSolPanel({
   async function confirmServiceDone(reqId: string) {
     setConfirmLoading(reqId);
     try {
-      await fetch(`/api/ground/service-requests/${reqId}`, {
+      setActionError('');
+      await fetchJson(`/api/ground/service-requests/${reqId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pilote_confirme: true }),
       });
       await loadData();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Confirmation non envoyée. Réessayez.');
     } finally {
       setConfirmLoading(null);
     }
-  }
-
-  async function startBoarding() {
-    if (!paxCount || paxCount <= 0) return;
-    await fetch('/api/ground/boarding', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ plan_vol_id: planVolId, action: 'start', total_pax: paxCount }),
-    });
-    await loadData();
   }
 
   const isGroundAvailable = groundAvailable[currentAeroport] ?? false;
@@ -198,22 +200,23 @@ export default function ServicesAuSolPanel({
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-5">
+              {actionError && <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">{actionError}</p>}
 
               {/* Portes */}
               <section>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Portes</h3>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="rounded-xl border border-emerald-800/40 bg-emerald-900/10 p-3">
-                    <p className="text-[10px] text-emerald-400/80 uppercase font-medium">DÃ©part</p>
+                    <p className="text-[10px] text-emerald-400/80 uppercase font-medium">Départ</p>
                     <p className="text-lg font-bold text-emerald-300 mt-0.5">
-                      {porteDepart ?? <span className="text-slate-500 text-sm">Non assignÃ©e</span>}
+                      {porteDepart ?? <span className="text-slate-500 text-sm">Non assignée</span>}
                     </p>
                     <div className="flex items-center gap-1 text-[10px] text-slate-500 mt-1">
                       <MapPin className="h-2.5 w-2.5" />{aeroportDepart}
                     </div>
                   </div>
                   <div className="rounded-xl border border-sky-800/40 bg-sky-900/10 p-3">
-                    <p className="text-[10px] text-sky-400/80 uppercase font-medium">ArrivÃ©e</p>
+                    <p className="text-[10px] text-sky-400/80 uppercase font-medium">Arrivée</p>
                     <p className="text-lg font-bold text-sky-300 mt-0.5">
                       {porteArrivee ?? <span className="text-slate-500 text-sm">En attente</span>}
                     </p>
@@ -224,14 +227,14 @@ export default function ServicesAuSolPanel({
                 </div>
               </section>
 
-              {/* Ã‰quipe */}
+              {/* Équipe */}
               {assignedTeamInfo && (
                 <div className="flex items-center gap-2 rounded-xl border border-emerald-800/40 bg-emerald-900/10 px-3 py-2.5 text-sm text-emerald-300">
                   <Users2 className="h-4 w-4 shrink-0" />Pris en charge par le ground crew
                 </div>
               )}
 
-              {/* DisponibilitÃ© */}
+              {/* Disponibilité */}
               {groundCheckDone && groundUnavailableReason === 'gc_unavailable' && (
                 <div className="flex items-center gap-2 rounded-xl border border-amber-700/40 bg-amber-900/10 px-3 py-2.5 text-sm text-amber-300">
                   <AlertTriangle className="h-4 w-4 shrink-0" />Aucun ground crew disponible
@@ -279,7 +282,7 @@ export default function ServicesAuSolPanel({
 
               {/* Marshalling */}
               <section>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">OpÃ©rations avion</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Opérations avion</h3>
                 <div className="space-y-2">
                   {/* Marshalling */}
                   {marshallingActive ? (
@@ -299,12 +302,12 @@ export default function ServicesAuSolPanel({
                           className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-colors disabled:opacity-50"
                         >
                           {confirmLoading === marshallingActive.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Confirmer terminÃ©
+                          Confirmer terminé
                         </button>
                       )}
                       {marshallingActive.pilote_confirme && (
                         <p className="text-xs text-emerald-400 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyÃ©e au GC
+                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyée au GC
                         </p>
                       )}
                     </div>
@@ -328,7 +331,7 @@ export default function ServicesAuSolPanel({
                       <div className="flex items-center gap-2">
                         <ArrowLeftRight className="h-4 w-4 text-orange-400" />
                         <span className="text-xs font-semibold text-slate-200">
-                          Repoussage {repoussageActive.direction === 'gauche' ? 'â† Gauche' : 'â†’ Droite'}
+                          Repoussage {repoussageActive.direction === 'gauche' ? '← Gauche' : '→ Droite'}
                         </span>
                         <StatusBadge statut={repoussageActive.statut} />
                       </div>
@@ -340,12 +343,12 @@ export default function ServicesAuSolPanel({
                           className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold transition-colors disabled:opacity-50"
                         >
                           {confirmLoading === repoussageActive.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Confirmer terminÃ©
+                          Confirmer terminé
                         </button>
                       )}
                       {repoussageActive.pilote_confirme && (
                         <p className="text-xs text-emerald-400 flex items-center gap-1">
-                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyÃ©e au GC
+                          <CheckCircle2 className="h-3.5 w-3.5" />Confirmation envoyée au GC
                         </p>
                       )}
                     </div>
@@ -359,7 +362,7 @@ export default function ServicesAuSolPanel({
                       >
                         <ArrowLeftRight className="h-4 w-4" />
                         Demander Repoussage
-                        <span className="ml-auto text-slate-500 text-xs">â–¾</span>
+                        <span className="ml-auto text-slate-500 text-xs">▾</span>
                       </button>
                       {repoussageMenuOpen && (
                         <div className="absolute left-0 right-0 top-full mt-1 z-10 rounded-xl border border-orange-800/40 bg-slate-900 shadow-xl overflow-hidden">
@@ -368,7 +371,7 @@ export default function ServicesAuSolPanel({
                             onClick={() => requestService('repoussage', 'gauche')}
                             className="w-full flex items-center gap-2 px-4 py-3 text-sm text-orange-300 hover:bg-orange-900/20 transition-colors"
                           >
-                            {loading.repoussage_gauche ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>â†</span>}
+                            {loading.repoussage_gauche ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>←</span>}
                             Pushback Left (Gauche)
                           </button>
                           <button
@@ -376,7 +379,7 @@ export default function ServicesAuSolPanel({
                             onClick={() => requestService('repoussage', 'droite')}
                             className="w-full flex items-center gap-2 px-4 py-3 text-sm text-orange-300 hover:bg-orange-900/20 transition-colors border-t border-orange-800/30"
                           >
-                            {loading.repoussage_droite ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>â†’</span>}
+                            {loading.repoussage_droite ? <Loader2 className="h-4 w-4 animate-spin" /> : <span>→</span>}
                             Pushback Right (Droite)
                           </button>
                         </div>
@@ -393,9 +396,9 @@ export default function ServicesAuSolPanel({
                   {boarding ? (
                     <div className="rounded-xl border border-purple-800/40 bg-purple-900/10 p-3 space-y-2">
                       <div className="flex items-center justify-between text-sm">
-                        <span className="text-slate-300 font-medium">{boarding.pax_embarques}/{boarding.total_pax} embarquÃ©s</span>
+                        <span className="text-slate-300 font-medium">{boarding.pax_embarques}/{boarding.total_pax} embarqués</span>
                         <span className={`text-xs font-semibold ${boarding.statut === 'completed' ? 'text-emerald-400' : boarding.statut === 'in_progress' ? 'text-purple-400' : 'text-slate-400'}`}>
-                          {boarding.statut === 'completed' ? 'âœ“ TerminÃ©' : boarding.statut === 'in_progress' ? 'En cours' : 'Non dÃ©marrÃ©'}
+                          {boarding.statut === 'completed' ? '✓ Terminé' : boarding.statut === 'in_progress' ? 'En cours' : 'Non démarré'}
                         </span>
                       </div>
                       <div className="h-2 rounded-full bg-slate-700 overflow-hidden">
@@ -403,17 +406,18 @@ export default function ServicesAuSolPanel({
                       </div>
                       {boardingIncomplet && malusBoarding > 0 && (
                         <div className="flex items-center gap-1.5 text-xs text-amber-400">
-                          <AlertTriangle className="h-3.5 w-3.5" />DÃ©part anticipÃ© : malus -{malusBoarding}%
+                          <AlertTriangle className="h-3.5 w-3.5" />Départ anticipé : malus -{malusBoarding}%
                         </div>
                       )}
                     </div>
                   ) : (
                     <button
                       type="button"
-                      onClick={startBoarding}
+                      onClick={() => void requestService('boarding')}
+                      disabled={loading.boarding || Boolean(activeReq('boarding'))}
                       className="w-full rounded-xl border border-purple-800/40 bg-purple-900/10 hover:bg-purple-900/20 p-3 text-sm font-semibold text-purple-300 transition-colors flex items-center justify-center gap-2"
                     >
-                      <Users className="h-4 w-4" />DÃ©marrer le boarding
+                      <Users className="h-4 w-4" />{loading.boarding ? 'Envoi…' : activeReq('boarding') ? 'Embarquement demandé' : 'Demander l’embarquement'}
                     </button>
                   )}
                 </section>
@@ -463,8 +467,8 @@ function StatusBadge({ statut }: { statut: string }) {
     pending:     { label: 'En attente',    color: 'text-amber-400',  icon: <Clock className="h-3 w-3" /> },
     accepted:    { label: 'Pris en charge',color: 'text-sky-400',    icon: <CheckCircle2 className="h-3 w-3" /> },
     in_progress: { label: 'En cours',      color: 'text-purple-400', icon: <Loader2 className="h-3 w-3" /> },
-    completed:   { label: 'TerminÃ©',       color: 'text-emerald-400',icon: <CheckCircle2 className="h-3 w-3" /> },
-    rejected:    { label: 'RejetÃ©',        color: 'text-red-400',    icon: <X className="h-3 w-3" /> },
+    completed:   { label: 'Terminé',       color: 'text-emerald-400',icon: <CheckCircle2 className="h-3 w-3" /> },
+    rejected:    { label: 'Rejeté',        color: 'text-red-400',    icon: <X className="h-3 w-3" /> },
   };
   const c = config[statut] ?? config.pending;
   return (

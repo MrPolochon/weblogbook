@@ -6,8 +6,13 @@ export async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> 
   const timer = setTimeout(abort, 15000);
   try {
     const response = await fetch(url, { ...init, signal: controller.signal });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data?.error || 'Chargement impossible. Réessayez.');
+    if (response.redirected && response.url && new URL(response.url).pathname === '/login') {
+      throw new Error('Votre session a expiré. Reconnectez-vous pour continuer.');
+    }
+    const data = await response.json().catch(() => {
+      throw new Error('Réponse du serveur illisible. Réessayez.');
+    });
+    if (!response.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Chargement impossible. Réessayez.');
     return data as T;
   } finally {
     clearTimeout(timer);
