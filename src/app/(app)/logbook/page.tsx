@@ -1,12 +1,13 @@
+import LogbookOverview from '@/components/logbook/LogbookOverview';
+import LogbookPagination from '@/components/logbook/LogbookPagination';
 import MajorEventBanner from '@/components/MajorEventBanner';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
-import { formatDuree, cn } from '@/lib/utils';
+import { formatDuree } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
-import { Plus, BookOpen, Plane, FileText, Clock, CheckCircle2, XCircle, Timer, TrendingUp, ArrowRight, AlertCircle, ChevronRight } from 'lucide-react';
+import { Plus, BookOpen, Plane, FileText, CheckCircle2, XCircle, Timer, ArrowRight, ChevronRight, Search, SlidersHorizontal, Layers } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
-import NePasEnregistrerPlanButton from './NePasEnregistrerPlanButton';
 import ExportLogbookButton from './ExportLogbookButton';
 import { StatusBadge } from '@/components/StatusBadge';
 import type { StatusBadgeConfig } from '@/components/StatusBadge';
@@ -44,7 +45,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
   if (search) flightsQuery = flightsQuery.or(`callsign.ilike.%${search}%,compagnie_libelle.ilike.%${search}%,aeroport_depart.ilike.%${search}%,aeroport_arrivee.ilike.%${search}%`);
   const summaryPromise = admin.rpc('logbook_summary', { p_user_id: user.id });
   // Profile + bounded flight data in a single parallel batch
-  const [{ data: profile }, { data: vols, count: filteredCount, error: flightsError }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }, { data: plansActifs }, chequesAEncaisser, summaryResult] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: vols, count: filteredCount, error: flightsError }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }, { data: plansActifs }, chequesAEncaisser, summaryResult] = await Promise.all([
     supabase.from('profiles').select('heures_initiales_minutes, blocked_until, role').eq('id', user.id).single(),
     flightsQuery.order('depart_utc', { ascending: false }).order('id', { ascending: false }).range((page - 1) * 30, page * 30 - 1),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
@@ -66,14 +67,14 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
     : false;
 
   const summary = summaryResult.data as { total: number; validated: number; pending: number; refused: number; minutes: number; types: string[] } | null;
+  const summaryUnavailable = Boolean(summaryResult.error || profileError) || summary === null;
   const totalValides = summary?.validated ?? 0;
-  const volsEnAttente = summary?.pending ?? 0;
-  const volsRefuses = summary?.refused ?? 0;
   const totalMinutes = (profile?.heures_initiales_minutes ?? 0) + (summary?.minutes ?? 0);
   const heures = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   const typesVolUniques = (summary?.types ?? []).filter(Boolean).sort();
   const pageCount = Math.max(1, Math.ceil((filteredCount ?? 0) / 30));
+  const activeFilters = Boolean(search || status || date);
   const pageUrl = (target: number) => '/logbook?' + new URLSearchParams({ page: String(target), q: search, statut: status, date }).toString();
 
   return (
@@ -81,7 +82,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
       <MajorEventBanner />
       {/* Header : fond décoratif dans un calque overflow-hidden pour ne pas couper le menu PDF */}
       <div className="relative z-0 rounded-2xl shadow-xl animate-reveal-blur">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br from-sky-600 via-sky-700 to-indigo-800">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950">
           <div className="absolute inset-0 bg-cockpit-grid opacity-30"></div>
           <div aria-hidden className="absolute top-3 left-0 right-0 h-6 overflow-hidden opacity-30">
             <div className="animate-plane-glide text-white/60 text-xs">✈</div>
@@ -96,16 +97,16 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
                   <BookOpen className="h-6 w-6 text-white" />
                 </div>
               </div>
-              <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Mon Logbook</h1>
+              <div><p className="mb-1 text-[10px] font-semibold uppercase tracking-[.2em] text-cyan-300">Espace pilote · Votre activité</p><h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Mon carnet de vol</h1></div>
             </div>
-            <p className="text-sky-100/80 text-sm">Gérez vos vols, suivez votre progression et exportez votre carnet en PDF.</p>
+            <p className="text-sky-100/80 text-sm">Tous vos vols, vos heures et votre progression, réunis au même endroit.</p>
             <p className="text-sky-200/70 text-xs mt-2 flex items-center gap-1.5">
               <span className="status-dot status-dot-success animate-hud-blink"></span>
-              {totalValides} vol{totalValides > 1 ? 's' : ''} validé{totalValides > 1 ? 's' : ''} · {heures}h{minutes.toString().padStart(2, '0')} de vol cumulé
+              {summaryUnavailable ? 'Statistiques temporairement indisponibles' : <>{totalValides} vol{totalValides > 1 ? 's' : ''} validé{totalValides > 1 ? 's' : ''} · {heures} h {minutes.toString().padStart(2, '0')} · toutes les pages</>}
             </p>
           </div>
-          <div className="flex flex-wrap gap-2 items-start">
-            <ExportLogbookButton typesVolDisponibles={typesVolUniques} />
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-start">
+            <ExportLogbookButton typesVolDisponibles={typesVolUniques} className="w-full justify-center sm:w-auto" />
             {!blocked && (
               <>
                 <Link
@@ -132,7 +133,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
                   className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-sky-50 text-sky-700 text-sm font-bold transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98]"
                 >
                   <Plus className="h-4 w-4" />
-                  Nouveau vol
+                  Enregistrer un vol
                 </Link>
               </>
             )}
@@ -151,127 +152,47 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
         chequesAEncaisser={chequesAEncaisser}
       />
 
-      <div className="flex flex-wrap gap-3 text-sm">
-        <a href="#confirmations" className="rounded-lg border border-amber-700 p-3">Confirmations : {(volsEnAttentePilote?.length ?? 0) + (volsEnAttenteCopilote?.length ?? 0) + (volsEnAttenteInstructeur?.length ?? 0)}</a>
-        <Link href="/instruction" className="rounded-lg border border-sky-700 p-3">Formation et prochaines étapes</Link>
-        <Link href="/messagerie" className="rounded-lg border border-emerald-700 p-3">Chèques : {chequesAEncaisser}</Link>
-      </div>
+      <nav aria-label="Accès rapides du pilote" className="flex flex-wrap gap-2 text-sm">
+        <a href="#historique" className="rounded-xl border border-sky-600/50 bg-sky-500/10 px-4 py-2.5 font-medium text-sky-200">Historique des vols</a>
+        <Link href="/logbook/a-confirmer" className="rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 hover:bg-slate-800">Vols à confirmer <span className="ml-1 text-amber-300">{(volsEnAttentePilote?.length ?? 0) + (volsEnAttenteCopilote?.length ?? 0) + (volsEnAttenteInstructeur?.length ?? 0)}</span></Link>
+        <Link href="/instruction" className="rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 hover:bg-slate-800">Formation</Link>
+        <Link href="/messagerie" className="rounded-xl border border-slate-700 px-4 py-2.5 text-slate-300 hover:bg-slate-800">Chèques <span className="ml-1 text-emerald-300">{chequesAEncaisser}</span></Link>
+      </nav>
       <div id="confirmations" />
-      {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-enter">
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 p-5 transition-all duration-300 hover:border-emerald-500/40 hover:shadow-lg hover:shadow-emerald-500/10 hover:-translate-y-0.5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-emerald-400/80 text-xs font-semibold uppercase tracking-wider">Temps de vol total</p>
-              <p className="text-3xl font-bold text-emerald-400 mt-1 tabular-nums animate-ticker-pop">
-                {heures}<span className="text-lg">h</span>{minutes.toString().padStart(2, '0')}
-              </p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 group-hover:bg-emerald-500/20 transition-colors group-hover:scale-110 duration-300">
-              <Clock className="h-5 w-5 text-emerald-400" />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-emerald-500/10">
-            <p className="text-xs text-slate-500">{formatDuree(totalMinutes)}</p>
-          </div>
-        </div>
-
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-sky-500/10 to-sky-600/5 border border-sky-500/20 p-5 transition-all duration-300 hover:border-sky-500/40 hover:shadow-lg hover:shadow-sky-500/10 hover:-translate-y-0.5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-sky-400/80 text-xs font-semibold uppercase tracking-wider">Vols validés</p>
-              <p className="text-3xl font-bold text-sky-400 mt-1 tabular-nums animate-ticker-pop">{totalValides}</p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-sky-500/10 group-hover:bg-sky-500/20 transition-colors group-hover:scale-110 duration-300">
-              <CheckCircle2 className="h-5 w-5 text-sky-400" />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-sky-500/10">
-            <p className="text-xs text-slate-500">Comptabilisés dans le logbook</p>
-          </div>
-        </div>
-
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-5 transition-all duration-300 hover:border-amber-500/40 hover:shadow-lg hover:shadow-amber-500/10 hover:-translate-y-0.5">
-          {volsEnAttente > 0 && (
-            <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 animate-ping"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
-            </span>
-          )}
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-amber-400/80 text-xs font-semibold uppercase tracking-wider">En attente</p>
-              <p className="text-3xl font-bold text-amber-400 mt-1 tabular-nums animate-ticker-pop">{volsEnAttente}</p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors group-hover:scale-110 duration-300">
-              <Timer className="h-5 w-5 text-amber-400" />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-amber-500/10">
-            <p className="text-xs text-slate-500">En attente de validation</p>
-          </div>
-        </div>
-
-        <div className="group relative overflow-hidden rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20 p-5 transition-all duration-300 hover:border-purple-500/40 hover:shadow-lg hover:shadow-purple-500/10 hover:-translate-y-0.5">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-purple-400/80 text-xs font-semibold uppercase tracking-wider">Total vols</p>
-              <p className="text-3xl font-bold text-purple-400 mt-1 tabular-nums animate-ticker-pop">{summary?.total ?? 0}</p>
-            </div>
-            <div className="p-2.5 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors group-hover:scale-110 duration-300">
-              <TrendingUp className="h-5 w-5 text-purple-400" />
-            </div>
-          </div>
-          <div className="mt-3 pt-3 border-t border-purple-500/10 flex items-center justify-between gap-2 text-xs text-slate-500">
-            <span>Tous statuts</span>
-            {volsRefuses > 0 && (
-              <span className="text-red-400/80 inline-flex items-center gap-1">
-                <XCircle className="h-3 w-3" />
-                {volsRefuses} refusé{volsRefuses > 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+        <h2 className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">Votre carnet en un regard</h2>
+        <span className="inline-flex items-center gap-1.5 text-xs text-slate-400"><Layers className="h-3.5 w-3.5"/> Totaux du carnet complet</span>
       </div>
+      {summaryUnavailable ? <p role="alert" className="rounded-xl border border-amber-700 bg-amber-950/30 p-4 text-amber-200">Statistiques temporairement indisponibles. Aucun total ne peut être affiché pour le moment. <Link href={pageUrl(page)} className="underline">Réessayer</Link></p> : <LogbookOverview summary={summary!} initialMinutes={profile?.heures_initiales_minutes ?? 0}/>}
 
       {/* Actions pilotes -> voir la cloche de notifications */}
 
-      <div className="card animate-fade-in border-slate-700/40 shadow-lg shadow-black/10">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-          <h2 className="text-lg font-medium text-slate-200 flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-sky-400" />
-            Vols
-            {vols && vols.length > 0 && (
-              <span className="text-xs font-medium text-slate-500 bg-slate-800/70 px-2 py-0.5 rounded-full">
-                {vols.length}
-              </span>
-            )}
-          </h2>
+      <section id="historique" aria-labelledby="historique-title" className="scroll-mt-24 rounded-2xl border border-slate-700/60 bg-slate-900/70 p-4 shadow-xl shadow-black/10 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
+          <div><h2 id="historique-title" className="flex items-center gap-2 text-xl font-semibold text-slate-100"><BookOpen className="h-5 w-5 text-sky-400"/> Historique des vols</h2><p className="mt-1 text-sm text-slate-400">{activeFilters?'Résultats correspondant à vos filtres.':'Parcourez vos vols du plus récent au plus ancien.'}</p></div>
+          {!flightsError&&<span className="rounded-full border border-slate-600/60 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200">{filteredCount ?? 0} {activeFilters?'résultats':'vols au total'}</span>}
         </div>
-        <form className="flex flex-wrap gap-3 mb-4" action="/logbook">
-          <input name="q" aria-label="Rechercher une route, compagnie ou callsign" placeholder="Route, compagnie, callsign" defaultValue={search} className="rounded-lg bg-slate-900 border border-slate-700 p-2" />
-          <select name="statut" aria-label="Statut des vols" defaultValue={status} className="rounded-lg bg-slate-900 border border-slate-700 p-2"><option value="">Tous les statuts</option><option value="validé">Validés</option><option value="en_attente">En attente</option><option value="refusé">Refusés</option></select>
-          <label className="text-sm text-slate-400">Depuis le <input type="date" name="date" defaultValue={date} className="rounded-lg bg-slate-900 border border-slate-700 p-2" /></label>
-          <button className="rounded-lg bg-sky-700 px-4 py-2">Filtrer</button><Link href="/logbook" className="p-2 underline">Réinitialiser</Link>
+        <form className="grid gap-3 rounded-xl border border-slate-700/60 bg-slate-950/40 p-4 sm:grid-cols-2 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" action="/logbook#historique">
+          <label className="text-xs font-medium text-slate-400">Rechercher un vol<div className="relative mt-2"><Search aria-hidden className="absolute left-3 top-3 h-4 w-4 text-slate-500"/><input name="q" placeholder="Route, compagnie, callsign…" defaultValue={search} className="min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 pl-10 pr-3 text-sm text-slate-100 outline-none focus:border-sky-500"/></div></label>
+          <label className="text-xs font-medium text-slate-400">Statut<select name="statut" defaultValue={status} className="mt-2 min-h-11 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 focus:border-sky-500"><option value="">Tous les statuts</option><option value="validé">Validés</option><option value="en_attente">En attente</option><option value="refusé">Refusés</option></select></label>
+          <label className="min-w-0 text-xs font-medium text-slate-400">Départ depuis le (UTC)<input name="date" type="date" defaultValue={date} className="mt-2 min-h-11 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm text-slate-100 focus:border-sky-500"/></label>
+          <div className="flex items-end gap-2"><button className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"><SlidersHorizontal className="h-4 w-4"/> Filtrer</button>{activeFilters&&<Link href="/logbook#historique" className="inline-flex min-h-11 items-center px-2 text-xs text-slate-300 underline hover:text-white">Effacer</Link>}</div>
         </form>
-        {(flightsError || summaryResult.error) && <p role="alert" className="text-amber-300 mb-4">Le carnet ou ses statistiques n’ont pas pu être chargés. <Link href={pageUrl(page)} className="underline">Réessayer</Link></p>}
-        <nav aria-label="Pages du carnet" className="flex justify-between items-center mb-4 text-sm">
-          <span>{filteredCount ?? 0} vols · page {page} / {pageCount} · export PDF complet</span>
-          <div className="flex gap-4">{page > 1 && <Link href={pageUrl(page-1)}>Précédente</Link>}{page < pageCount && <Link href={pageUrl(page+1)}>Suivante</Link>}</div>
-        </nav>
-        {!vols || vols.length === 0 ? (
+        {!flightsError&&pageCount>1&&<div className="mt-4 flex gap-3 rounded-xl border border-sky-800/60 bg-sky-950/30 p-3 text-sm text-sky-100"><Layers aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-sky-400"/><p><strong>{filteredCount} vols, {pageCount} pages.</strong> Jusqu’à 30 vols sont affichés par page. Utilisez les numéros pour consulter les vols plus anciens.</p></div>}
+        {!flightsError&&<LogbookPagination page={page} total={filteredCount ?? 0} search={search} status={status} date={date} location="haut"/>}
+        {flightsError || !vols ? <p role="alert" className="text-amber-300 py-8">Impossible de charger les vols pour le moment. Ce message ne signifie pas que votre carnet est vide. <Link href={pageUrl(page)} className="underline">Réessayer</Link></p> : vols.length === 0 && page > pageCount ? <p className="py-8 text-slate-300">Cette page ne contient plus de vols. <Link href={pageUrl(1)} className="underline text-sky-400">Revenir à la première page</Link></p> : vols.length === 0 ? (
           <div className="text-center py-12 animate-fade-in">
             <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4 animate-float">
               <Plane className="h-8 w-8 text-slate-500" />
             </div>
             <p className="text-slate-400 text-base font-medium">Aucun vol dans cette sélection</p>
-            <p className="text-slate-500 text-sm mt-1">Commencez par déposer un plan de vol ou enregistrez un vol directement.</p>
+            <p className="text-slate-500 text-sm mt-1">{search || status || date ? 'Essayez de retirer les filtres pour retrouver vos vols.' : 'Les vols à confirmer apparaissent dans la rubrique Confirmations.'}</p>
             <Link
-              href="/logbook/nouveau"
+              href={search || status || date ? '/logbook' : '/logbook/nouveau'}
               className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Plus className="h-4 w-4" />
-              Enregistrer votre premier vol
+              {search || status || date ? 'Afficher tous mes vols' : 'Enregistrer un vol'}
             </Link>
           </div>
         ) : (
@@ -285,7 +206,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
                   <Link
                     key={v.id}
                     href={`/logbook/vol/${v.id}`}
-                    className="flex items-center gap-3 rounded-xl bg-slate-800/50 border border-slate-700/40 hover:border-sky-500/40 hover:bg-slate-800/80 transition-colors p-3"
+                    className="flex items-center gap-3 rounded-xl bg-slate-950/35 border border-slate-700/60 hover:border-sky-500/40 hover:bg-slate-800/80 transition-colors p-3"
                   >
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -313,7 +234,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-slate-600/50 bg-slate-800/20">
-                    <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Date</th>
+                    <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-400">Date (UTC)</th>
                     <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Route</th>
                     <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Appareil</th>
                     <th className="pb-3 pr-4 text-left text-xs font-medium uppercase tracking-wider text-slate-500">Cie / Callsign</th>
@@ -326,7 +247,7 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
                 <tbody className="divide-y divide-slate-700/30">
                   {vols.map((v) => (
                     <tr key={v.id}
-                      className="group border-l-2 border-transparent hover:border-sky-500/40 hover:bg-slate-800/35 transition-[background-color,border-color] duration-150 cursor-pointer">
+                      className="group border-l-2 border-transparent odd:bg-slate-800/15 hover:border-sky-500/40 hover:bg-slate-800/35 transition-[background-color,border-color] duration-150 cursor-pointer">
                       <td className="py-3 pr-4">
                         <Link href={`/logbook/vol/${v.id}`} className="text-slate-300 group-hover:text-sky-300 font-medium transition-colors block">
                           {formatDateMediumUTC(v.depart_utc)}
@@ -382,7 +303,8 @@ export default async function LogbookPage({ searchParams }: { searchParams: Reco
             </div>
           </>
         )}
-      </div>
+        {!flightsError&&pageCount>1&&<div className="mt-4 border-t border-slate-700/50"><LogbookPagination page={page} total={filteredCount ?? 0} search={search} status={status} date={date} location="bas"/></div>}
+      </section>
     </div>
   );
 }
