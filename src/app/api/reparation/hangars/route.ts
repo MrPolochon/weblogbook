@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { calculerPrixHangar } from '@/lib/compagnie-utils';
+import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { REPARATION_STATUTS_ACTIFS } from '@/lib/reparation-transit';
 
 export const dynamic = 'force-dynamic';
@@ -49,57 +49,20 @@ export async function POST(req: Request) {
   if (!isPdg && !isAdmin) return NextResponse.json({ error: 'Seul le PDG peut ajouter un hangar' }, { status: 403 });
 
   const ac = String(aeroport_code).toUpperCase().trim();
-  const cap = Math.max(1, Math.min(20, Number(capacite) || 2));
-
-  const { count } = await admin.from('reparation_hangars')
-    .select('*', { count: 'exact', head: true })
-    .eq('entreprise_id', entreprise_id);
-  const numHangar = (count ?? 0) + 1;
-  const base = (ent.prix_hangar_base as number) ?? 500000;
-  const mult = (ent.prix_hangar_multiplicateur as number) ?? 2;
-  const prix = calculerPrixHangar(numHangar, cap, base, mult);
-
-  if (prix > 0) {
-    const { data: compte } = await admin.from('felitz_comptes')
-      .select('id, solde')
-      .eq('entreprise_reparation_id', entreprise_id)
-      .eq('type', 'reparation')
-      .single();
-
-    if (!compte || compte.solde < prix) {
-      return NextResponse.json({
-        error: `Solde insuffisant. Prix : ${prix.toLocaleString('fr-FR')} F$.`
-      }, { status: 400 });
-    }
-
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compte.id, p_montant: prix });
-    if (!debitOk) {
-      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
-    }
-
-    await admin.from('felitz_transactions').insert({
-      compte_id: compte.id,
-      type: 'debit',
-      montant: prix,
-      libelle: `Achat hangar ${ac}`,
-    });
+  const cap = capacite === undefined ? 2 : Number(capacite);
+  if (!Number.isInteger(cap) || cap < 1 || cap > 20 || !CODES_OACI_VALIDES.has(ac)) {
+    return NextResponse.json({ error: 'Choisissez un aéroport valide et une capacité entière de 1 à 20.' }, { status: 400 });
   }
-
-  const { data: hangar, error } = await admin.from('reparation_hangars').insert({
-    entreprise_id,
-    aeroport_code: ac,
-    nom: nom ? String(nom).trim() : null,
-    capacite: cap,
-    prix_achat: prix,
-    achat_le: prix > 0 ? new Date().toISOString() : null,
-  }).select('id').single();
-
+  const { data, error } = await admin.rpc('acheter_hangar_reparation_atomic', {
+    p_actor: user.id, p_entreprise: entreprise_id, p_aeroport: ac,
+    p_nom: nom ? String(nom).trim() : null, p_capacite: cap,
+  });
   if (error) {
-    if (error.code === '23505') return NextResponse.json({ error: 'Hangar déjà existant pour cet aéroport' }, { status: 409 });
-    console.error('reparation hangars POST:', error);
-    return NextResponse.json({ error: 'Erreur lors de la création du hangar' }, { status: 400 });
+    console.error('Achat hangar atomique:', error);
+    return NextResponse.json({ error: error.code === '23505' ? 'Hangar déjà existant pour cet aéroport' : error.code === 'P0001' ? error.message : 'Achat non effectué. Réessayez.' }, { status: error.code === '23505' ? 409 : error.code === '42501' ? 403 : 400 });
   }
-  return NextResponse.json({ ok: true, id: hangar?.id, prix });
+  if (!data?.ok) return NextResponse.json({ error: 'Achat non confirmé. Réessayez.' }, { status: 500 });
+  return NextResponse.json(data);
 }
 
 export async function DELETE(req: Request) {
