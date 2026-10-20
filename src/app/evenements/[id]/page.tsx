@@ -13,7 +13,7 @@ export default async function MajorEventPage({ params }: { params: Promise<{ id:
     <Link href="/calendrier" className="text-sky-300 underline">Retour au calendrier</Link><h1 className="text-3xl font-bold">{event.title}</h1>
     <p>{new Date(event.starts_at).toLocaleString('fr-FR',{timeZone:'UTC'})} → {new Date(event.ends_at!).toLocaleString('fr-FR',{timeZone:'UTC'})} UTC · {event.major.airports.join(', ')}</p>
     <p className="whitespace-pre-wrap text-slate-300">{event.description}</p>
-    <p className="border border-amber-500/40 p-3 rounded-lg text-amber-200">{event.major.enabled ? 'Événement majeur : un slot pilote confirmé est obligatoire pour déposer un plan de vol vers ou depuis les aéroports concernés pendant l’événement.' : 'Cet événement est désactivé. Les nouvelles réservations sont fermées.'}</p>
+    <p className="border border-amber-500/40 p-3 rounded-lg text-amber-200">{event.major.enabled ? 'Événement majeur : choisissez un créneau, puis déposez le plan de vol prérempli pour confirmer votre inscription pilote. Les réservations ATC sont confirmées directement.' : 'Cet événement est désactivé. Les nouvelles réservations sont fermées.'}</p>
     <EventReservations event={event}/>
   </div></main>;
 }

@@ -3,7 +3,7 @@
 ## Utilisation
 
 - Dans le calendrier, un administrateur coche « Événement majeur », choisit les aéroports, la durée des slots, la capacité et les postes ATC ouverts. Les heures sont UTC.
-- La page de l’événement permet de réserver comme pilote ou contrôleur, modifier une réservation non utilisée, confirmer sa présence ou annuler. Un compte Discord lié est requis.
+- La page de l’événement permet de choisir un créneau comme pilote ou contrôleur, modifier une réservation non utilisée, confirmer sa présence ou annuler. Un compte Discord lié est requis. Pour un pilote, le choix du créneau réserve la place et ouvre le dépôt prérempli : l'inscription n'est confirmée qu'après le dépôt effectif du plan. Un simple brouillon ne confirme rien. L’ATC est confirmé directement.
 - Avant la prise de service ATC, « Réserver une position » ouvre le planning libre. Les réservations libres et événementielles partagent le même planning : la première réservation confirmée est conservée.
 - Admin → Événements majeurs affiche le manifeste, la liste d’attente, les présences et l’export CSV. Les identifiants Discord sont réservés aux administrateurs.
 - Un bandeau apparaît sur la connexion et le logbook à J-1, puis annonce l’événement en cours.
@@ -11,6 +11,10 @@
 ## Contrôles
 
 Une réservation pilote confirmée est nécessaire pour déposer un plan depuis ou vers un aéroport concerné pendant l’événement, y compris un dépôt anticipé pour son créneau. Route, callsign, horaire et durée doivent correspondre. Le lien de dépôt préremplit ces informations. Le strip affiche le nom de l’événement et le slot.
+
+En base, `event_reservations.status=confirmed` réserve la capacité du créneau ; pour les pilotes, le manifeste et l'export ne présentent l'inscription comme confirmée qu'une fois `plan_id`/`claimed_at` renseigné par le déclencheur de dépôt. L'historique reste confirmé si un plan terminé est ensuite remplacé par son vol dans le carnet. Les inscriptions incomplètes gardent leur créneau jusqu'à annulation, comme les réservations existantes. La liste d'attente n'ouvre le dépôt qu'après promotion. La présence pilote ne peut pas être confirmée avant le dépôt.
+
+La capacité est un nombre entier de 1 à 100 mouvements par aéroport et par créneau, pas un total pour tout l'événement. Le formulaire et l'API affichent les mêmes messages de validation en français.
 
 Les contrôles sont appliqués côté serveur et en base, y compris pour les créations ATC. Une réservation n’est utilisable que pour un plan. Un déroutement d’un vol existant reste possible. Les postes réservés ne peuvent pas être pris par un autre contrôleur.
 

@@ -2,9 +2,23 @@ import { z } from 'zod';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
 
+export const MAJOR_EVENT_MAX_MOVEMENTS = 100;
+/** Même explication lisible dans le formulaire et les réponses API. */
+export function majorConfigError(error: { issues: { path: PropertyKey[] }[] }): string {
+  const messages: Record<string,string> = {
+    airports: 'Aéroports : sélectionnez entre 1 et 30 aéroports PTFS valides.',
+    slot_minutes: 'Durée du créneau : indiquez un nombre entier entre 5 et 60 minutes.',
+    pilot_capacity: `Capacité du créneau : indiquez un nombre entier entre 1 et ${MAJOR_EVENT_MAX_MOVEMENTS} mouvements par aéroport. Ce n’est pas le total des places de l’événement.`,
+    atc_positions: 'Positions ATC : sélectionnez au moins un poste valide.',
+    enabled: 'État de l’événement invalide.',
+    bookings_open: 'État des inscriptions invalide.',
+  };
+  return [...new Set(error.issues.map(issue=>messages[String(issue.path[0])] || 'Renseignez la configuration complète de l’événement majeur.'))].join(' ');
+}
+
 export const majorConfigSchema = z.object({
   airports: z.array(z.string().trim().toUpperCase().refine(v => CODES_OACI_VALIDES.has(v), 'Aéroport PTFS inconnu')).min(1).max(30).transform(v => [...new Set(v)]),
-  slot_minutes: z.number().int().min(5).max(60), pilot_capacity: z.number().int().min(1).max(100),
+  slot_minutes: z.number().int().min(5).max(60), pilot_capacity: z.number().int().min(1).max(MAJOR_EVENT_MAX_MOVEMENTS),
   atc_positions: z.array(z.string().refine(v => (ATC_POSITIONS as readonly string[]).includes(v))).min(1).max(7).transform(v => [...new Set(v)]),
   enabled: z.boolean().default(true), bookings_open: z.boolean().default(true),
 });

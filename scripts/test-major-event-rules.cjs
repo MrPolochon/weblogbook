@@ -9,7 +9,7 @@ test('public event reading does not exempt mutations or admin pages',()=>{
   assert.equal(isPublicMajorEventPath('/api/evenements/reservations/private-id','GET'),false);
 });
 function load(file,deps={}) {const mod={exports:{}};new Function('require','module','exports',ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText)(n=>deps[n]||require(n),mod,mod.exports);return mod.exports;}
-const {eventBannerState,csvCell,majorConfigSchema,reservationSchema}=load('src/lib/events/rules.ts',{
+const {eventBannerState,csvCell,majorConfigSchema,reservationSchema,majorConfigError}=load('src/lib/events/rules.ts',{
   '@/lib/aeroports-ptfs':{CODES_OACI_VALIDES:new Set(['ITKO','IRFD'])},'@/lib/atc-positions':{ATC_POSITIONS:['Tower','Ground']}
 });
 test('banner appears exactly 24 hours ahead, switches to active and disappears at the end',()=>{
@@ -26,6 +26,16 @@ test('major config requires valid airports and bounded capacities',()=>{
   assert.equal(majorConfigSchema.safeParse({...config,airports:[]}).success,false);
   assert.equal(majorConfigSchema.safeParse({...config,pilot_capacity:0}).success,false);
   assert.equal(majorConfigSchema.safeParse({...config,slot_minutes:3}).success,false);
+});
+test('700 movements and invalid fields produce actionable French messages; capacity 100 is accepted',()=>{
+  const valid={airports:['ITKO'],slot_minutes:10,pilot_capacity:100,atc_positions:['Tower']};
+  assert.equal(majorConfigSchema.safeParse(valid).success,true);
+  for(const value of [700,0,1.5,null]) {
+    const parsed=majorConfigSchema.safeParse({...valid,pilot_capacity:value});assert.equal(parsed.success,false);
+    const text=majorConfigError(parsed.error);assert.match(text,/1 et 100 mouvements par aéroport/);assert.match(text,/pas le total/);assert.doesNotMatch(text,/Invalid input/);
+  }
+  const multiple=majorConfigSchema.safeParse({...valid,airports:[],slot_minutes:0,atc_positions:[]});
+  const text=majorConfigError(multiple.error);assert.match(text,/Aéroports/);assert.match(text,/5 et 60/);assert.match(text,/Positions ATC/);
 });
 test('pilot reservations need a route, callsign, aircraft and event; ATC reservations need a position',()=>{
   const reservation={event_id:null,role:'pilot',airport:'ITKO',starts_at:'2026-10-19T18:00:00Z',ends_at:'2026-10-19T18:10:00Z'};

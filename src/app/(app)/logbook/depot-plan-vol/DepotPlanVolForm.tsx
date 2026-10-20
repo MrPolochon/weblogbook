@@ -78,7 +78,7 @@ export interface AvionArmeeItem {
 }
 
 interface Props {
-  initialReservation?: { id: string; departure: string; arrival: string; departure_at: string; duration_minutes: number; callsign: string; airline: string | null; aircraft: string | null };
+  initialReservation?: { id: string; event_id: string | null; departure: string; arrival: string; departure_at: string; duration_minutes: number; callsign: string; airline: string | null; aircraft: string | null };
   draftKey: string;
   initialDraft?: { aeroport_depart: string; aeroport_arrivee: string; temps_prev_min: number | null; type_vol: string; route_ifr: string | null; niveau_croisiere: string | number | null; intentions_vol: string | null };
   compagniesDisponibles: Compagnie[];
@@ -805,7 +805,9 @@ export default function DepotPlanVolForm({
       }
       
       try { localStorage.removeItem(draftKey); } catch { /* appareil indisponible */ }
-      router.push('/logbook/plans-vol');
+      if(initialReservation && data.event_registration_confirmed) toast.success('Plan de vol déposé : votre inscription à l’événement est confirmée.');
+      else if(initialReservation) toast.warning('Le plan est créé. Vérifiez l’état de votre inscription dans le manifeste de l’événement.');
+      router.push(initialReservation?.event_id && data.event_registration_confirmed ? `/evenements/${initialReservation.event_id}` : '/logbook/plans-vol');
       startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -862,7 +864,9 @@ export default function DepotPlanVolForm({
       }
       
       try { localStorage.removeItem(draftKey); } catch { /* appareil indisponible */ }
-      router.push('/logbook/plans-vol');
+      if(initialReservation && data.event_registration_confirmed) toast.success('Plan de vol déposé : votre inscription à l’événement est confirmée.');
+      else if(initialReservation) toast.warning('Le plan est créé. Vérifiez l’état de votre inscription dans le manifeste de l’événement.');
+      router.push(initialReservation?.event_id && data.event_registration_confirmed ? `/evenements/${initialReservation.event_id}` : '/logbook/plans-vol');
       startTransition(() => router.refresh());
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -880,7 +884,7 @@ export default function DepotPlanVolForm({
 
   return (
     <>
-    {initialReservation && <p className="mb-4 rounded-lg border border-amber-500/40 p-3 text-amber-200">Plan prérempli depuis votre slot : {initialReservation.departure} → {initialReservation.arrival} · {new Date(initialReservation.departure_at).toLocaleString('fr-FR',{timeZone:'UTC'})} UTC · {initialReservation.aircraft}. Choisissez votre appareil et complétez les procédures du vol. Le callsign, la route, la durée et l’horaire seront vérifiés.</p>}
+    {initialReservation && <p className="mb-4 rounded-lg border border-amber-500/40 p-3 text-amber-200">Dernière étape de votre inscription : déposez ce plan de vol pour la confirmer. Créneau choisi : {initialReservation.departure} → {initialReservation.arrival} · {new Date(initialReservation.departure_at).toLocaleString('fr-FR',{timeZone:'UTC'})} UTC · {initialReservation.aircraft}. Choisissez votre appareil et complétez les procédures du vol. Le callsign, la route, la durée et l’horaire seront vérifiés.</p>}
     <div className="flex flex-wrap gap-3 mb-4 text-sm"><button type="button" onClick={saveDraft} className="rounded-lg border border-sky-700 p-2">Enregistrer le brouillon</button><button type="button" onClick={restoreDraft} className="rounded-lg border border-slate-700 p-2">Restaurer mon brouillon</button><button type="button" onClick={()=>{try{localStorage.removeItem(draftKey);toast.success('Brouillon supprimé.');}catch{toast.error('Suppression impossible.');}}} className="p-2 text-slate-400">Supprimer le brouillon</button></div>
     {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
 

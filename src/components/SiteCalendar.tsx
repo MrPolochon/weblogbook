@@ -8,6 +8,7 @@ import type { CalendarEvent, DiscordCalendarTarget } from '@/lib/calendrier/type
 import Link from 'next/link';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { ATC_POSITIONS } from '@/lib/atc-positions';
+import { majorConfigSchema, majorConfigError, MAJOR_EVENT_MAX_MOVEMENTS } from '@/lib/events/rules';
 import {
   formatEventDateTime,
   formatEventTime,
@@ -206,6 +207,13 @@ export default function SiteCalendar({
         announce_channel_id: form.announce_channel_id || null,
         announce_role_id: form.announce_role_id || null,
       };
+      if (form.is_major) {
+        const config = majorConfigSchema.safeParse(payload.major);
+        if (!config.success) { setError(majorConfigError(config.error)); return; }
+        if (!ends || new Date(ends).getTime() <= new Date(starts).getTime() || new Date(ends).getTime() - new Date(starts).getTime() > 7 * 86400000) {
+          setError('Un événement majeur nécessite une fin après son début, au maximum 7 jours plus tard.'); return;
+        }
+      }
       const url = editing ? `/api/calendrier/${editing.id}` : '/api/calendrier';
       const res = await fetch(url, {
         method: editing ? 'PATCH' : 'POST',
@@ -437,7 +445,8 @@ export default function SiteCalendar({
               <p className="text-xs text-slate-400">Après la première réservation, les horaires, aéroports et capacités sont verrouillés pour préserver les places déjà prises.</p>
               <div className="grid grid-cols-2 gap-2">{AEROPORTS_PTFS.map(a => <label key={a.code} className="text-xs flex gap-2 items-center"><input type="checkbox" checked={form.airports.includes(a.code)} onChange={e => setForm({ ...form, airports: e.target.checked ? [...form.airports,a.code] : form.airports.filter(c => c !== a.code) })}/>{a.code} — {a.nom}</label>)}</div>
               <label className="block text-sm">Durée d’un slot pilote (minutes)<input type="number" min={5} max={60} className="input w-full" value={form.slot_minutes} onChange={e => setForm({ ...form, slot_minutes: Number(e.target.value) })}/></label>
-              <label className="block text-sm">Mouvements par aéroport et par slot<input type="number" min={1} max={100} className="input w-full" value={form.pilot_capacity} onChange={e => setForm({ ...form, pilot_capacity: Number(e.target.value) })}/></label>
+              <label className="block text-sm">Mouvements par aéroport et par créneau (1–{MAJOR_EVENT_MAX_MOVEMENTS})<input type="number" min={1} max={MAJOR_EVENT_MAX_MOVEMENTS} step={1} aria-describedby="major-capacity-help" aria-invalid={!Number.isInteger(form.pilot_capacity) || form.pilot_capacity < 1 || form.pilot_capacity > MAJOR_EVENT_MAX_MOVEMENTS} className="input w-full aria-[invalid=true]:border-red-500" value={form.pilot_capacity} onChange={e => setForm({ ...form, pilot_capacity: Number(e.target.value) })}/></label>
+              <p id="major-capacity-help" className="text-xs text-slate-400">Un mouvement correspond à un départ ou une arrivée. Cette capacité s’applique à chaque aéroport pour chaque créneau de {form.slot_minutes} minutes, et non à tout l’événement. Exemple : 5 mouvements par créneau de 10 minutes = 30 mouvements par heure et par aéroport.</p>
               <div className="flex flex-wrap gap-3">{ATC_POSITIONS.map(p => <label key={p} className="text-xs flex gap-1"><input type="checkbox" checked={form.atc_positions.includes(p)} onChange={e => setForm({ ...form, atc_positions: e.target.checked ? [...form.atc_positions,p] : form.atc_positions.filter(c => c !== p) })}/>{p}</label>)}</div>
               <label className="flex gap-2"><input type="checkbox" checked={form.bookings_open} onChange={e => setForm({ ...form, bookings_open: e.target.checked })}/>Inscriptions ouvertes</label>
               <label className="flex gap-2"><input type="checkbox" checked={form.enabled} onChange={e => setForm({ ...form, enabled: e.target.checked })}/>Événement actif (décocher pour l’annuler)</label>

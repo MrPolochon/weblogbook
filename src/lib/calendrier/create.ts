@@ -2,7 +2,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { findSiteAdminByDiscordId } from '@/lib/calendrier/staff';
 import { parseUtcDateTime } from '@/lib/calendrier/time';
 import { CALENDAR_EVENT_SELECT, type CalendarEvent, type CalendarEventInput } from '@/lib/calendrier/types';
-import { majorConfigSchema } from '@/lib/events/rules';
+import { majorConfigSchema, majorConfigError } from '@/lib/events/rules';
 import { attachMajorEvents } from '@/lib/events/server';
 
 const DATE_HINT = 'Ex. : 22/09/2026 19h, 22/09 19h, 19h';
@@ -27,8 +27,8 @@ export function sanitizeCalendarInput(
   let major: CalendarEventInput['major'];
   if (body.is_major) {
     const config = majorConfigSchema.safeParse(body.major);
-    if (!config.success) return { ok: false, error: config.error.issues[0]?.message || 'Configuration de l’événement majeur invalide.' };
-    if (!endsAt || new Date(endsAt).getTime() - starts.getTime() > 7 * 86400000) return { ok: false, error: 'Un événement majeur nécessite une fin, au maximum 7 jours après son début.' };
+    if (!config.success) return { ok: false, error: majorConfigError(config.error) };
+    if (!endsAt || new Date(endsAt).getTime() <= starts.getTime() || new Date(endsAt).getTime() - starts.getTime() > 7 * 86400000) return { ok: false, error: 'Un événement majeur nécessite une fin après son début, au maximum 7 jours plus tard.' };
     major = config.data;
   }
   return {

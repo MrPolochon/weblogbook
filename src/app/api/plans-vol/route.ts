@@ -9,7 +9,7 @@ import { getMissionById, getMissionCooldownForUser } from '@/lib/armee';
 import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { STATUTS_PLAN_OCCUPES, hasOccupiedPlan, isCompanyMember } from '@/lib/plans-vol/crew';
 import { notifyUser } from '@/lib/notifications';
-import { checkMajorFlight, reservedDeparture } from '@/lib/events/server';
+import { checkMajorFlight, reservedDeparture, validateBookingFlight, bookingLinkedToPlan } from '@/lib/events/server';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -90,6 +90,10 @@ export async function POST(request: Request) {
     }
     const slotError = await checkMajorFlight(user.id,ad,aa,heureDepartIso,t,String(numero_vol));
     if (slotError) return NextResponse.json({ error: slotError, booking_url: '/calendrier' }, { status: 409 });
+    if(typeof body.event_reservation_id==='string') {
+      const bookingError=await validateBookingFlight(user.id,body.event_reservation_id,ad,aa,heureDepartIso,t,String(numero_vol));
+      if(bookingError) return NextResponse.json({error:bookingError},{status:409});
+    }
 
     let armeeAvionId: string | null = null;
     let armeeMissionId: string | null = null;
@@ -675,7 +679,7 @@ export async function POST(request: Request) {
         link: '/logbook/plans-vol',
       });
 
-      return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente_copilote' });
+      return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente_copilote', event_registration_confirmed:await bookingLinkedToPlan(user.id,body.event_reservation_id,data.id) });
     }
     
     // Si vol sans ATC, accepter automatiquement et mettre en autosurveillance
@@ -780,7 +784,7 @@ export async function POST(request: Request) {
           .eq('id', compagnie_avion_id);
       }
 
-      return NextResponse.json({ ok: true, id: data.id, statut: 'accepte', vol_sans_atc: true });
+      return NextResponse.json({ ok: true, id: data.id, statut: 'accepte', vol_sans_atc: true, event_registration_confirmed:await bookingLinkedToPlan(user.id,body.event_reservation_id,data.id) });
     }
     
     // Sinon, assigner le plan à un ATC du départ uniquement (pas d’acceptation/refus par l’arrivée)
@@ -949,7 +953,7 @@ export async function POST(request: Request) {
       frequence: vhfFreq?.frequency ? String(vhfFreq.frequency).replace('.', ' décimal ') : '',
     };
 
-    return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente', atc_contact: atcContact });
+    return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente', atc_contact: atcContact, event_registration_confirmed:await bookingLinkedToPlan(user.id,body.event_reservation_id,data.id) });
   } catch (e) {
     console.error('plans-vol POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

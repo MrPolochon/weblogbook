@@ -36,7 +36,7 @@ export default async function DepotPlanVolPage({ searchParams }: { searchParams?
 
   const admin = createAdminClient();
   const { data: eventReservation } = searchParams?.reservation && /^[a-f0-9-]{36}$/i.test(searchParams.reservation)
-    ? await admin.from('event_reservations').select('id,departure,arrival,departure_at,duration_minutes,callsign,airline,aircraft')
+    ? await admin.from('event_reservations').select('id,event_id,departure,arrival,departure_at,duration_minutes,callsign,airline,aircraft')
       .eq('id',searchParams.reservation).eq('user_id',user.id).eq('role','pilot').eq('status','confirmed').is('claimed_at',null).maybeSingle()
     : { data: null };
 

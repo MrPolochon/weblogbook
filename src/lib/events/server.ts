@@ -32,3 +32,21 @@ export async function reservedDeparture(user: string, bookingId: unknown, hour: 
   if (candidate.getTime() < Date.parse(data.departure_at) - 12*3600000) candidate.setUTCDate(candidate.getUTCDate()+1);
   return candidate.toISOString();
 }
+
+/** Le lien de réservation ne permet pas de déposer un autre vol puis de se dire inscrit. */
+export async function validateBookingFlight(user:string,bookingId:string,departure:string,arrival:string,at:string,duration:number,callsign:string):Promise<string|null> {
+  const {data,error}=await createAdminClient().from('event_reservations')
+    .select('departure,arrival,departure_at,duration_minutes,callsign,claimed_at,major_event_configs(slot_minutes)')
+    .eq('id',bookingId).eq('user_id',user).eq('role','pilot').eq('status','confirmed').maybeSingle();
+  if(error||!data||data.claimed_at) return 'Cette réservation n’est plus disponible. Revenez au manifeste de l’événement.';
+  const config=data.major_event_configs as unknown as {slot_minutes:number}|null;
+  const start=Date.parse(data.departure_at),chosen=Date.parse(at);
+  if(!config||data.departure!==departure||data.arrival!==arrival||data.duration_minutes!==duration||data.callsign.toUpperCase()!==callsign.trim().toUpperCase()||!Number.isFinite(chosen)||chosen<start||chosen>=start+config.slot_minutes*60000)
+    return 'Le plan doit conserver la route, le callsign, la durée et l’horaire du créneau choisi pour confirmer votre inscription.';
+  return null;
+}
+export async function bookingLinkedToPlan(user:string,bookingId:unknown,planId:string):Promise<boolean> {
+  if(typeof bookingId!=='string') return false;
+  const {data,error}=await createAdminClient().from('event_reservations').select('id').eq('id',bookingId).eq('user_id',user).eq('plan_id',planId).not('claimed_at','is',null).maybeSingle();
+  return !error&&Boolean(data);
+}

@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { reservationSchema } from '@/lib/events/rules';
 import { checkAtcAccess, isKnownAtcAirportCode, loadAllAtcAccessRules, loadAtcAccessContext } from '@/lib/atc-grade-restrictions';
 import { notifyUser } from '@/lib/notifications';
+import { planBookingUrl } from '@/lib/events/registration';
 
 export async function GET(request: Request) {
   try {
@@ -56,8 +57,9 @@ export async function POST(request: Request) {
   }
   const { data, error } = await admin.rpc('reserve_event_slot', { p_user: user.id, p_data: value });
   if (error) return NextResponse.json({ error: error.code === 'PGRST202' ? 'La mise à jour des réservations doit être appliquée à la base.' : error.message }, { status: 409 });
-  await notifyUser(user.id, { type: 'event_booking', title: value.status === 'waitlisted' ? 'Inscription en liste d’attente' : 'Réservation confirmée',
+  const needsPlan=value.role==='pilot'&&value.status==='confirmed';
+  await notifyUser(user.id, { type: 'event_booking', title: value.status === 'waitlisted' ? 'Inscription en liste d’attente' : needsPlan ? 'Créneau choisi : plan de vol à compléter' : 'Réservation confirmée',
     body: `${value.airport} · ${value.role === 'atc' ? value.position : value.callsign} · ${new Date(value.starts_at).toISOString()} UTC`,
-    link: value.event_id ? `/evenements/${value.event_id}` : '/atc/reservations' });
-  return NextResponse.json({ ok: true, id: data });
+    link: needsPlan ? planBookingUrl(data) : value.event_id ? `/evenements/${value.event_id}` : '/atc/reservations' });
+  return NextResponse.json({ ok: true, id: data, requires_plan:needsPlan });
 }
