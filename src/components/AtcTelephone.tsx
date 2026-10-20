@@ -607,6 +607,10 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     void cleanupLiveKit();
   }, [cleanupLiveKit, stopLocalMicTest]);
 
+  // Keep Enter synchronized with the latest number and audio-device selection.
+  const callHandlerRef = useRef(handleCall);
+  useEffect(() => { callHandlerRef.current = handleCall; });
+
   useEffect(() => {
     if (!isOpen) return;
     function onKey(e: KeyboardEvent) {
@@ -619,7 +623,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
         handleDelete();
       } else if (e.key === 'Enter') {
         e.preventDefault();
-        void handleCall();
+        void callHandlerRef.current();
       } else if (e.key === 'Escape' && (callState === 'idle' || callState === 'dialing')) {
         setIsOpen(false);
         if (callState === 'idle') setNumber('');
