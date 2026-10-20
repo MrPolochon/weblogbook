@@ -4,18 +4,6 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 const POURCENTAGE_FIXE = 50;
-const LIMITE_REVENTES_RAPIDES = 2;
-
-function getWeekStart(): Date {
-  const now = new Date();
-  const dayOfWeek = now.getUTCDay(); // 0=Dimanche, 1=Lundi...
-  const daysFromMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-  const weekStart = new Date(now);
-  weekStart.setUTCDate(now.getUTCDate() - daysFromMonday);
-  weekStart.setUTCHours(0, 0, 0, 0);
-  return weekStart;
-}
-
 // GET - Récupérer les demandes de revente (mes demandes ou toutes pour admin)
 export async function GET(req: NextRequest) {
   try {
@@ -72,65 +60,13 @@ export async function POST(req: NextRequest) {
     if (action === 'revente_directe') {
       const { inventaire_avion_id, compagnie_avion_id } = body;
 
-      if (!inventaire_avion_id && !compagnie_avion_id) {
-        return NextResponse.json({ error: 'Sélectionnez un avion' }, { status: 400 });
+      if (Boolean(inventaire_avion_id) === Boolean(compagnie_avion_id)) {
+        return NextResponse.json({ error: 'Sélectionnez un seul avion' }, { status: 400 });
       }
 
-      // Vérifier la limite hebdomadaire (lundi → dimanche UTC)
-      const weekStart = getWeekStart();
-      const { count: reventesThisWeek } = await admin.from('hangar_market_reventes')
-        .select('*', { count: 'exact', head: true })
-        .eq('demandeur_id', user.id)
-        .eq('statut', 'executee')
-        .is('admin_id', null)
-        .gte('created_at', weekStart.toISOString());
-
-      if ((reventesThisWeek ?? 0) >= LIMITE_REVENTES_RAPIDES) {
-        return NextResponse.json({
-          error: `Limite de ${LIMITE_REVENTES_RAPIDES} reventas rapides par semaine atteinte. Réinitialisation le lundi prochain.`,
-        }, { status: 429 });
-      }
-
-      // Valider l'avion et récupérer ses infos avant exécution
-      const avionInfo = await getAvionInfo(admin, user.id, inventaire_avion_id, compagnie_avion_id);
-      if (!avionInfo.success) {
-        return NextResponse.json({ error: avionInfo.error }, { status: avionInfo.status || 400 });
-      }
-
-      const montant = Math.round(avionInfo.prixInitial! * POURCENTAGE_FIXE / 100);
-
-      // Exécuter la revente (crédite + supprime l'avion)
-      const result = await executerRevente(admin, user.id, {
-        inventaire_avion_id,
-        compagnie_avion_id,
-        pourcentage: POURCENTAGE_FIXE,
-      });
-
-      if (!result.success) {
-        return NextResponse.json({ error: result.error }, { status: result.status || 400 });
-      }
-
-      // Enregistrer la revente directe (admin_id NULL = marque "directe")
-      await admin.from('hangar_market_reventes').insert({
-        demandeur_id: user.id,
-        inventaire_avion_id: inventaire_avion_id || null,
-        compagnie_avion_id: compagnie_avion_id || null,
-        compagnie_id: avionInfo.compagnieId || null,
-        type_avion_id: avionInfo.typeAvionId,
-        prix_initial: avionInfo.prixInitial,
-        pourcentage_demande: POURCENTAGE_FIXE,
-        montant_revente: montant,
-        raison: null,
-        statut: 'executee',
-        execute_at: new Date().toISOString(),
-      });
-
-      const restantes = LIMITE_REVENTES_RAPIDES - ((reventesThisWeek ?? 0) + 1);
-      return NextResponse.json({
-        ok: true,
-        message: `Revente effectuée — ${montant.toLocaleString('fr-FR')} F$ crédités. Il vous reste ${restantes} revente${restantes > 1 ? 's' : ''} rapide${restantes > 1 ? 's' : ''} cette semaine.`,
-        montant,
-      });
+      const result = await executerRevente(admin, user.id, { inventaire_avion_id, compagnie_avion_id });
+      if (!result.success) return NextResponse.json({ error: result.error }, { status: result.status || 400 });
+      return NextResponse.json({ ok: true, message: result.message, montant: result.montant });
     }
 
     // ============================
@@ -139,8 +75,8 @@ export async function POST(req: NextRequest) {
     if (action === 'demande_revente') {
       const { inventaire_avion_id, compagnie_avion_id } = body;
 
-      if (!inventaire_avion_id && !compagnie_avion_id) {
-        return NextResponse.json({ error: 'Sélectionnez un avion' }, { status: 400 });
+      if (Boolean(inventaire_avion_id) === Boolean(compagnie_avion_id)) {
+        return NextResponse.json({ error: 'Sélectionnez un seul avion' }, { status: 400 });
       }
 
       // Récupérer l'avion et vérifier la propriété
@@ -211,22 +147,8 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Demande introuvable ou déjà traitée' }, { status: 404 });
       }
 
-      // Marquer comme approuvée
-      await admin.from('hangar_market_reventes')
-        .update({
-          statut: 'approuvee',
-          admin_id: user.id,
-          admin_commentaire: body.commentaire || null,
-          traite_at: new Date().toISOString(),
-        })
-        .eq('id', demande_id);
-
-      // Exécuter la revente
-      const result = await executerRevente(admin, demande.demandeur_id, {
-        inventaire_avion_id: demande.inventaire_avion_id,
-        compagnie_avion_id: demande.compagnie_avion_id,
-        pourcentage: demande.pourcentage_demande,
-        demandeId: demande_id,
+      const result = await executerRevente(admin, user.id, {
+        demandeId: demande_id, commentaire: typeof body.commentaire === 'string' ? body.commentaire : null,
       });
 
       if (!result.success) {
@@ -264,14 +186,15 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: 'Demande introuvable ou déjà traitée' }, { status: 404 });
       }
 
-      await admin.from('hangar_market_reventes')
+      const { data: refused, error: refusalError } = await admin.from('hangar_market_reventes')
         .update({
           statut: 'refusee',
           admin_id: user.id,
           admin_commentaire: commentaire || null,
           traite_at: new Date().toISOString(),
         })
-        .eq('id', demande_id);
+        .eq('id', demande_id).eq('statut', 'en_attente').select('id').maybeSingle();
+      if (refusalError || !refused) return NextResponse.json({ error: 'Cette demande a déjà été traitée. Actualisez la liste.' }, { status: 409 });
 
       // Notifier le demandeur
       await admin.from('messages').insert({
@@ -424,55 +347,19 @@ async function getAvionInfo(
 
 async function executerRevente(
   admin: AdminClient,
-  userId: string,
-  options: {
-    inventaire_avion_id?: string;
-    compagnie_avion_id?: string;
-    pourcentage: number;
-    demandeId?: string;
-  }
+  actorId: string,
+  options: { inventaire_avion_id?: string; compagnie_avion_id?: string; demandeId?: string; commentaire?: string | null }
 ): Promise<{ success: boolean; error?: string; status?: number; message?: string; montant?: number }> {
-  const avionInfo = await getAvionInfo(admin, userId, options.inventaire_avion_id, options.compagnie_avion_id);
-  if (!avionInfo.success) {
-    return { success: false, error: avionInfo.error, status: avionInfo.status };
-  }
-
-  if (!avionInfo.compteId) {
-    return { success: false, error: 'Compte Felitz introuvable', status: 404 };
-  }
-
-  const montant = Math.round(avionInfo.prixInitial! * options.pourcentage / 100);
-
-  // Créditer le compte
-  const { data: creditOk } = await admin.rpc('crediter_compte_safe', { p_compte_id: avionInfo.compteId, p_montant: montant });
-  if (!creditOk) {
-    return { success: false, error: 'Erreur lors du crédit', status: 500 };
-  }
-
-  // Transaction
-  const libelle = `Revente avion ${avionInfo.typeAvionNom} (${options.pourcentage}% du prix initial)`;
-  await admin.from('felitz_transactions').insert({
-    compte_id: avionInfo.compteId,
-    type: 'credit',
-    montant,
-    libelle,
+  const { data, error } = await admin.rpc('revendre_avion_atomic', {
+    p_actor: actorId, p_inventaire: options.inventaire_avion_id || null,
+    p_flotte: options.compagnie_avion_id || null, p_demande: options.demandeId || null,
+    p_commentaire: options.commentaire || null,
   });
-
-  // Détruire l'avion
-  if (options.inventaire_avion_id) {
-    await admin.from('inventaire_avions').delete().eq('id', options.inventaire_avion_id);
+  if (error) {
+    console.error('Revente atomique:', error);
+    return { success: false, error: error.code === 'P0001' || error.code === '42501' ? error.message : 'Revente non effectuée. Réessayez.', status: error.code === '42501' ? 403 : error.message?.includes('Limite de 2') ? 429 : 409 };
   }
-  if (options.compagnie_avion_id) {
-    await admin.from('compagnie_avions').delete().eq('id', options.compagnie_avion_id);
-  }
-
-  // Mettre à jour la demande si applicable
-  if (options.demandeId) {
-    await admin.from('hangar_market_reventes')
-      .update({ statut: 'executee', execute_at: new Date().toISOString() })
-      .eq('id', options.demandeId);
-  }
-
-  const msg = `${avionInfo.typeAvionNom} revendu pour ${montant.toLocaleString('fr-FR')} F$ (${options.pourcentage}% de ${avionInfo.prixInitial!.toLocaleString('fr-FR')} F$).`;
-  return { success: true, message: msg, montant };
+  if (!data?.ok) return { success: false, error: 'Revente non confirmée.', status: 500 };
+  const message = data.type_nom + ' revendu pour ' + Number(data.montant).toLocaleString('fr-FR') + ' F$ (' + data.pourcentage + '%).' + (!options.demandeId ? ' Il vous reste ' + data.restantes + ' revente(s) rapide(s) cette semaine.' : '');
+  return { success: true, montant: data.montant, message };
 }
