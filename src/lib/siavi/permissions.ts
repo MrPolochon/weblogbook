@@ -11,12 +11,13 @@ export async function isChefDeBrigade(
 ): Promise<boolean> {
   const { data: profile } = await admin
     .from('profiles')
-    .select('role, siavi_grade_id')
+    .select('role, siavi, siavi_grade_id')
     .eq('id', userId)
     .single();
 
   if (!profile) return false;
   if (profile.role === 'admin') return true;
+  if (!profile.siavi && profile.role !== 'siavi') return false;
   if (!profile.siavi_grade_id) return false;
 
   const { data: grade } = await admin

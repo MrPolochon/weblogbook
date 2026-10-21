@@ -1,3 +1,4 @@
+import { canAccessSiavi } from '@/lib/siavi/permissions';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
@@ -32,6 +33,10 @@ export async function POST(
     if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
 
     const admin = createAdminClient();
+    if(!(await canAccessSiavi(admin,user.id))) return NextResponse.json({error:'Accès SIAVI requis'},{status:403});
+    const {data:groundSession,error:groundError}=await admin.from('afis_sessions').select('id').eq('user_id',user.id).maybeSingle();
+    if(groundError) return NextResponse.json({error:'Impossible de vérifier le service au sol.'},{status:503});
+    if(groundSession) return NextResponse.json({error:'Quittez votre service au sol avant de reprendre une mission MEDEVAC.'},{status:409});
     const body = await request.json();
     const {
       sid_depart,

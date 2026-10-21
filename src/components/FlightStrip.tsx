@@ -60,6 +60,8 @@ export type StripData = {
   pending_transfer_aeroport?: string | null;
   pending_transfer_position?: string | null;
   siavi_avion_id?: string | null;
+  medevac_segment_index?: number | null;
+  medevac_total_segments?: number | null;
 };
 
 type EditableField =
@@ -1030,7 +1032,7 @@ function FlightStripImpl({
                 → {strip.pending_transfer_position || 'ATC'} {strip.pending_transfer_aeroport}
               </Chip>
             )}
-            {isMedevac && <Chip tone="bg-[#b91c1c] text-[#ffffff]" title="Mission MEDEVAC">Medevac</Chip>}
+            {isMedevac && <Chip tone="bg-[#b91c1c] text-[#ffffff]" title="Mission MEDEVAC">MEDEVAC{strip.medevac_total_segments ? ` ${strip.medevac_segment_index ?? 1}/${strip.medevac_total_segments}` : ''}</Chip>}
             {strip.automonitoring && <Chip tone={autoTone} title="Vol en autosurveillance">Auto</Chip>}
           </div>
 

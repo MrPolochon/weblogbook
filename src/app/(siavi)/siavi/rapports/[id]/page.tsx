@@ -52,6 +52,7 @@ export default async function RapportViewPage({
         <RapportPrintButton />
       </div>
 
+      <div className="print:hidden flex flex-wrap gap-3"><a href="/siavi/medevac" className="rounded-xl bg-rose-600 px-4 py-3 font-semibold text-white hover:bg-rose-500">Retour à l’espace MEDEVAC</a><Link href="/siavi/medevac/nouveau" className="rounded-xl border border-rose-400/40 px-4 py-3 font-semibold text-rose-100 hover:bg-rose-950/50">Nouvelle mission</Link></div>
       {/* Official Report Document */}
       <div id="rapport-medevac" className="bg-white border border-slate-300 shadow-lg rounded-lg max-w-3xl mx-auto print:shadow-none print:border-none print:rounded-none print:max-w-none">
         <div className="p-8 sm:p-12 space-y-8 text-slate-900">
@@ -156,6 +157,7 @@ export default async function RapportViewPage({
             </section>
           )}
 
+          {Array.isArray(rapport.participants) && rapport.participants.length > 0 && <section><h2 className="mb-3 border-b border-red-200 pb-1 text-sm font-bold uppercase tracking-wider text-red-800">Équipage participant et rémunération</h2>{rapport.remuneration?.version===2 ? <p className="mb-3 text-sm">Recette : {Number(rapport.remuneration.revenu_total).toLocaleString('fr-FR')} F$ · SIAVI (50 %) : {Number(rapport.remuneration.part_siavi).toLocaleString('fr-FR')} F$ · Équipage (50 %) : {Number(rapport.remuneration.part_equipage).toLocaleString('fr-FR')} F$</p>:<p className="mb-3 text-sm">Mission rémunérée selon l’ancien barème.</p>}<ul className="space-y-1 text-sm">{rapport.participants.map((p:{id:string;identifiant:string;montant:number})=><li key={p.id}>{p.identifiant}{rapport.remuneration?.version===2 ? ' — '+Number(p.montant).toLocaleString('fr-FR')+' F$ versés' : ''}</li>)}</ul></section>}
           {/* 9. Final Statement */}
           <section>
             <h2 className="text-sm font-bold text-red-800 uppercase tracking-wider border-b border-red-200 pb-1 mb-3">

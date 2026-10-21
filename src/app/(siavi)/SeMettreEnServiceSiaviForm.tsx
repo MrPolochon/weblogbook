@@ -7,11 +7,11 @@ import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 // Aéroports exclusivement SIAVI
 const AEROPORTS_SIAVI_EXCLUSIFS = ['IBTH', 'IJAF', 'IBAR', 'IHEN', 'IDCS', 'ILKL', 'ISCM'];
 
-export default function SeMettreEnServiceSiaviForm() {
+export default function SeMettreEnServiceSiaviForm({ initialMode }: { initialMode?: 'pompier' | 'afis' }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [aeroport, setAeroport] = useState('');
-  const [mode, setMode] = useState('pompier');
+  const [mode, setMode] = useState(initialMode ?? 'pompier');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -42,7 +42,7 @@ export default function SeMettreEnServiceSiaviForm() {
         throw new Error(data.error || 'Erreur lors de la mise en service');
       }
 
-      startTransition(() => router.refresh());
+      startTransition(() => { router.push(mode === 'afis' ? '/siavi/afis' : '/siavi/pompier'); router.refresh(); });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -78,7 +78,7 @@ export default function SeMettreEnServiceSiaviForm() {
       </div>
 
       <label className="block text-sm text-slate-200">Fonction de service
-        <select value={mode} onChange={e=>setMode(e.target.value)} className="input mt-1">
+        <select disabled={!!initialMode} value={mode} onChange={e=>setMode(e.target.value as 'afis' | 'pompier')} className="input mt-1">
           <option value="pompier">Pompier — secours et interventions</option>
           <option value="afis">Pompier + AFIS — information des vols</option>
         </select>

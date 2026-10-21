@@ -1,3 +1,4 @@
+import { medevacRevenue } from '@/lib/siavi/medevac-remuneration';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
@@ -30,11 +31,12 @@ export default async function NouveauRapportPage({
 
   // Charger le plan de vol MEDEVAC
   const { data: plan } = await admin.from('plans_vol')
-    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, temps_prev_min, type_vol, accepted_at, cloture_at, created_at, siavi_avion_id, pilote_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, statut')
+    .select('id, numero_vol, aeroport_depart, aeroport_arrivee, temps_prev_min, type_vol, accepted_at, cloture_at, created_at, siavi_avion_id, pilote_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, medevac_remuneration_version, statut')
     .eq('id', planId)
     .single();
 
   if (!plan || !plan.siavi_avion_id) redirect('/siavi/rapports');
+  if (plan.pilote_id !== user.id && profile?.role !== 'admin') redirect('/siavi/medevac');
 
   // Rapport seulement après clôture du dernier segment (pas un segment intermédiaire « cloture » lors de la reprise du suivant)
   if (plan.statut !== 'cloture') {
@@ -77,12 +79,20 @@ export default async function NouveauRapportPage({
 
   // Charger les infos de l'avion
   const { data: avion } = await admin.from('siavi_avions')
-    .select('immatriculation, types_avion:type_avion_id(nom)')
+    .select('immatriculation, types_avion:type_avion_id(nom,categorie)')
     .eq('id', plan.siavi_avion_id)
     .single();
 
-  const ta = avion?.types_avion as { nom?: string } | { nom?: string }[] | null | undefined;
+  const ta = avion?.types_avion as { nom?: string; categorie?: string } | { nom?: string; categorie?: string }[] | null | undefined;
   const aircraftType = ta ? (Array.isArray(ta) ? (ta[0]?.nom || 'N/A') : (ta.nom || 'N/A')) : 'N/A';
+
+  const {data:agents,error:agentsError}=await admin.from('profiles').select('id,identifiant').or('siavi.eq.true,role.eq.siavi,role.eq.admin').order('identifiant');
+  if(agentsError) throw new Error('Impossible de charger les participants SIAVI.');
+  const typeDetails=Array.isArray(ta)?ta[0]:ta;
+  const {data:timings,error:timingsError}=await admin.from('plans_vol').select('accepted_at,heure_depart_reelle,cloture_at,demande_cloture_at').in('id',missionPlanIds);
+  if(timingsError) throw new Error('Impossible de calculer la rémunération.');
+  const minutes=(timings??[]).reduce((total,p)=>{const from=p.heure_depart_reelle??p.accepted_at;const to=p.demande_cloture_at??p.cloture_at;return total+(from&&to?Math.max(0,(new Date(to).getTime()-new Date(from).getTime())/60000):0);},0);
+  const remunerationPreview=plan.medevac_remuneration_version===2?medevacRevenue(minutes,typeDetails?.categorie==='helicoptere'):null;
 
   // Construire le trajet complet pour affichage (ex: IRFD → IBTH → IPPH → ITKO)
   const isMultiSegment = segments.length > 1;
@@ -155,6 +165,9 @@ export default async function NouveauRapportPage({
 
       <RapportMedevacForm
         key={plan.id}
+        agents={agents??[]}
+        pilotId={plan.pilote_id}
+        remunerationPreview={remunerationPreview}
         planVolId={plan.id}
         numeroVol={plan.numero_vol}
         aeroportDepart={segments[0]?.aeroport_depart || plan.aeroport_depart}

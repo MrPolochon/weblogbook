@@ -8,7 +8,7 @@ export default function SiaviServiceControls({ estAfis, available }: { estAfis: 
   const [error,setError] = useState('');
   async function change() {
     setBusy(true); setError('');
-    try { await fetchJson('/api/siavi/session',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:estAfis?'pompier':'afis'})}); router.refresh(); }
+    try { await fetchJson('/api/siavi/session',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:estAfis?'pompier':'afis'})}); router.push(estAfis?'/siavi/pompier':'/siavi/afis'); router.refresh(); }
     catch(e) { setError(e instanceof Error?e.message:'Changement impossible.'); }
     finally { setBusy(false); }
   }

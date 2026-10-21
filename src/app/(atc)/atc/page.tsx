@@ -185,6 +185,8 @@ export default async function AtcPage({ searchParams: searchParamsPromise }: { s
       pending_transfer_aeroport: plan.pending_transfer_aeroport || null,
       pending_transfer_position: plan.pending_transfer_position || null,
       siavi_avion_id: plan.siavi_avion_id || null,
+        medevac_segment_index: plan.medevac_segment_index ?? null,
+        medevac_total_segments: plan.medevac_total_segments ?? null,
       sid_depart: plan.sid_depart || null,
       star_arrivee: plan.star_arrivee || null,
       route_ifr: plan.route_ifr || null,

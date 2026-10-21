@@ -33,93 +33,20 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
-
-    const admin = createAdminClient();
-    const ok = await canAccessSiavi(admin, user.id);
-    if (!ok) return NextResponse.json({ error: 'Accès SIAVI requis' }, { status: 403 });
-
-    const body = await request.json();
-    const {
-      plan_vol_id, commander, co_pilot, medical_team,
-      mission_timeline, medical_summary, ground_event,
-      outcome, safety_remarks
-    } = body;
-
-    if (!plan_vol_id) return NextResponse.json({ error: 'plan_vol_id requis' }, { status: 400 });
-    if (!commander?.trim()) return NextResponse.json({ error: 'Commandant de bord requis' }, { status: 400 });
-    if (!medical_summary?.trim()) return NextResponse.json({ error: 'Résumé médical requis' }, { status: 400 });
-    if (!outcome?.trim()) return NextResponse.json({ error: 'Issue de la mission requise' }, { status: 400 });
-
-    // Vérifier que le plan de vol existe, est un MEDEVAC et est clôturé
-    const { data: plan } = await admin.from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, siavi_avion_id, statut, medevac_mission_id, medevac_next_plan_id')
-      .eq('id', plan_vol_id)
-      .single();
-
-    if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable' }, { status: 404 });
-    if (!plan.siavi_avion_id) return NextResponse.json({ error: 'Ce plan de vol n\'est pas un vol MEDEVAC SIAVI' }, { status: 400 });
-    if (plan.statut !== 'cloture') {
-      return NextResponse.json({ error: 'Le vol doit être clôturé avant d\'enregistrer le rapport.' }, { status: 400 });
-    }
-    // Segment intermédiaire (clôturé lors de l\'activation du segment suivant) : rapport uniquement sur le dernier segment
-    if (plan.medevac_next_plan_id) {
-      return NextResponse.json({ error: 'Le rapport MEDEVAC s\'enregistre sur le dernier segment de mission.' }, { status: 400 });
-    }
-
-    let missionPlanIds = [plan.id];
-    if (plan.medevac_mission_id) {
-      const { data: missionSegs } = await admin
-        .from('plans_vol')
-        .select('id')
-        .eq('medevac_mission_id', plan.medevac_mission_id);
-      missionPlanIds = (missionSegs || []).map((r) => r.id);
-    }
-    const { data: existingAny } = await admin.from('siavi_rapports_medevac')
-      .select('id')
-      .in('plan_vol_id', missionPlanIds)
-      .maybeSingle();
-
-    if (existingAny) return NextResponse.json({ error: 'Un rapport existe déjà pour cette mission.' }, { status: 400 });
-
-    // Récupérer les infos de l'avion SIAVI
-    const { data: avion } = await admin.from('siavi_avions')
-      .select('immatriculation, types_avion:type_avion_id(nom)')
-      .eq('id', plan.siavi_avion_id)
-      .single();
-
-    const ta = avion?.types_avion as { nom?: string } | { nom?: string }[] | null | undefined;
-    const typeName = ta ? (Array.isArray(ta) ? (ta[0]?.nom || 'Unknown') : (ta.nom || 'Unknown')) : 'Unknown';
-
-    const { data: rapport, error } = await admin.from('siavi_rapports_medevac').insert({
-      plan_vol_id,
-      date_mission: new Date().toISOString().split('T')[0],
-      operator_base: `${plan.aeroport_depart}`,
-      aircraft_registration: avion?.immatriculation || 'N/A',
-      aircraft_type: typeName || 'N/A',
-      aircraft_role: 'Medical transport configuration',
-      commander: commander.trim(),
-      co_pilot: co_pilot?.trim() || null,
-      medical_team: medical_team?.trim() || null,
-      mission_timeline: Array.isArray(mission_timeline) ? mission_timeline : [],
-      medical_summary: medical_summary.trim(),
-      ground_event: ground_event?.trim() || null,
-      outcome: outcome.trim(),
-      safety_remarks: safety_remarks?.trim() || null,
-      created_by: user.id,
-    }).select('id, numero_mission').single();
-
-    if (error) {
-      console.error('SIAVI rapport insert error:', error);
-      return NextResponse.json({ error: error.message }, { status: 400 });
-    }
-
-    return NextResponse.json({ ok: true, id: rapport.id, numero_mission: rapport.numero_mission });
-  } catch (e) {
-    console.error('SIAVI rapports POST:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
-  }
+ try {
+  const supabase=await createClient(); const {data:{user}}=await supabase.auth.getUser();
+  if(!user) return NextResponse.json({error:'Non authentifié'},{status:401});
+  const admin=createAdminClient();
+  if(!(await canAccessSiavi(admin,user.id))) return NextResponse.json({error:'Accès SIAVI requis'},{status:403});
+  const body=await request.json().catch(()=>null);
+  if(!body || typeof body.plan_vol_id!=='string' || !/^[0-9a-f-]{36}$/i.test(body.plan_vol_id)) return NextResponse.json({error:'Plan de vol invalide'},{status:400});
+  if(!Array.isArray(body.participant_ids) || body.participant_ids.length>100 || body.participant_ids.some((id:unknown)=>typeof id!=='string'||!/^[0-9a-f-]{36}$/i.test(id))) return NextResponse.json({error:'Participants invalides'},{status:400});
+  const fields=['commander','co_pilot','medical_team','medical_summary','ground_event','outcome','safety_remarks'];
+  if(fields.some(key=>body[key]!=null&&(typeof body[key]!=='string'||body[key].length>20000))) return NextResponse.json({error:'Champs du rapport invalides'},{status:400});
+  if(!Array.isArray(body.mission_timeline)||body.mission_timeline.length>200) return NextResponse.json({error:'Chronologie invalide'},{status:400});
+  const report:Record<string,unknown>={mission_timeline:body.mission_timeline}; for(const key of fields) report[key]=body[key]??null;
+  const {data,error}=await admin.rpc('submit_medevac_report',{p_plan_id:body.plan_vol_id,p_author_id:user.id,p_report:report,p_participant_ids:body.participant_ids});
+  if(error) { console.error('MEDEVAC report:',error); return NextResponse.json({error:error.code==='PGRST202'?'La mise à jour MEDEVAC doit être appliquée à la base avant de valider un rapport.':error.message},{status:error.code==='PGRST202'?503:400}); }
+  return NextResponse.json(data);
+ } catch(e) { console.error('SIAVI rapport:',e); return NextResponse.json({error:'Erreur serveur'},{status:500}); }
 }

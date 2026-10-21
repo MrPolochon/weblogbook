@@ -1124,6 +1124,10 @@ export async function finaliserCloturePlan(
         })
         .eq('id', siaviAvion.id);
 
+      // Version 2 pays the whole crew once, atomically with the final report.
+      const { data: remunerationPlan, error: remunerationError } = await admin.from('plans_vol').select('medevac_remuneration_version').eq('id', plan.id).single();
+      if (remunerationError || !remunerationPlan) throw new Error('Impossible de vérifier la rémunération MEDEVAC.');
+      if (remunerationPlan.medevac_remuneration_version !== 2) {
       // Calcul revenu MEDEVAC via décote exponentielle.
       // Hors armée, l'écart se base sur l'arrivée prévue si l'heure de départ a été saisie.
       const { data: config } = await admin.from('siavi_config')
@@ -1172,6 +1176,7 @@ export async function finaliserCloturePlan(
             });
           }
         }
+      }
       }
     }
   }

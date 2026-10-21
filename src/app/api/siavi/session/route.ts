@@ -30,6 +30,10 @@ export async function POST(request: Request) {
     const apt = aeroport.toUpperCase();
     const admin = createAdminClient();
 
+    const {count:activeFlights,error:flightError}=await admin.from('plans_vol').select('id',{count:'exact',head:true}).eq('pilote_id',user.id).not('siavi_avion_id','is',null).in('statut',['depose','en_attente','accepte','en_cours','automonitoring','en_attente_cloture','en_pause','planifie_suivant']);
+    if(flightError) return NextResponse.json({error:'Impossible de vérifier votre mission MEDEVAC.'},{status:503});
+    if(activeFlights) return NextResponse.json({error:'Terminez votre mission MEDEVAC avant de prendre un service au sol.'},{status:409});
+
     // Vérifier si déjà en service
     const { data: existingSession } = await supabase.from('afis_sessions').select('id').eq('user_id', user.id).single();
     if (existingSession) {

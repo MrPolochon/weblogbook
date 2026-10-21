@@ -7,19 +7,22 @@ import { Flame, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashbo
 import { createClient } from '@/lib/supabase/client';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import SpaceNavHeader, { SPACE_NAV_BUTTON } from '@/components/SpaceNavHeader';
+import { SIAVI_WORKSPACES } from '@/lib/siavi/workspaces';
 import { cn } from '@/lib/utils';
 
 interface SiaviNavBarProps {
   isAdmin: boolean;
+  isChief?: boolean;
   enService: boolean;
   estAfis: boolean;
   sessionInfo: { aeroport: string; started_at: string } | null;
   messagesNonLusCount: number;
 }
 
-export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, messagesNonLusCount }: SiaviNavBarProps) {
+export default function SiaviNavBar({ isAdmin, isChief, enService, estAfis, sessionInfo, messagesNonLusCount }: SiaviNavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const isMedevac = pathname.startsWith('/siavi/medevac');
   const [, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -57,8 +60,9 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
   }
 
   const links = [
-    { href: '/siavi', label: 'Console', icon: Flame },
-    { href: '/siavi/medevac/nouveau', label: 'MEDEVAC', icon: HeartPulse },
+    { href: '/siavi', label: 'Changer de fonction', icon: Flame },
+    ...Object.values(SIAVI_WORKSPACES).map(item => ({href:item.href,label:item.label,icon:item.href.includes('medevac')?HeartPulse:Flame})),
+
     { href: '/siavi/flotte', label: 'Flotte', icon: Plane },
     { href: '/siavi/rapports', label: 'Rapports', icon: ClipboardList },
     { href: '/siavi/documents', label: 'Documents', icon: FileText },
@@ -66,6 +70,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
     { href: '/siavi/messagerie', label: 'Messagerie', icon: Mail },
     { href: '/siavi/felitz-bank', label: 'Banque', icon: Landmark },
     { href: '/siavi/compte', label: 'Compte', icon: User },
+    ...(isChief ? [{href:'/siavi/brigade',label:'Chef de brigade',icon:LayoutDashboard}] : []),
     ...(isAdmin ? [{ href: '/siavi/admin', label: 'Administration', icon: LayoutDashboard }] : []),
   ];
   const active = (href: string) => pathname === href || (href !== '/siavi' && pathname.startsWith(`${href}/`));
@@ -76,7 +81,7 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
       <div className="mx-auto flex min-h-14 max-w-screen-2xl flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
         <nav aria-label="Navigation SIAVI" className="flex min-w-0 items-center gap-2">
           <Link href="/siavi" aria-label="Console SIAVI" className="flex shrink-0 items-center gap-2 rounded-xl border border-red-800/40 bg-red-950/40 px-3 py-2 text-sm font-bold text-red-200">
-            <Flame className="h-4 w-4" /><span>SIAVI</span>
+            <Flame className="h-4 w-4" /><span>{isMedevac ? 'MEDEVAC' : 'SIAVI'}</span>
           </Link>
           <div ref={menuRef} className="relative">
             <button ref={triggerRef} type="button" aria-expanded={open} aria-controls="siavi-navigation-menu" onClick={() => setOpen(!open)} className={cn(SPACE_NAV_BUTTON, open ? 'border-orange-500/50 bg-orange-950/50 text-orange-200' : idle)}>
@@ -90,10 +95,10 @@ export default function SiaviNavBar({ isAdmin, enService, estAfis, sessionInfo, 
               </Link>)}
             </div>}
           </div>
-          <Link href="/siavi/medevac/nouveau" aria-label="Nouvelle mission MEDEVAC" className={cn(SPACE_NAV_BUTTON, idle, 'hidden sm:inline-flex')}><HeartPulse className="h-4 w-4" /><span className="hidden lg:inline">MEDEVAC</span></Link>
+          <Link href="/siavi/medevac" aria-label="Console MEDEVAC" className={cn(SPACE_NAV_BUTTON, idle, 'hidden sm:inline-flex')}><HeartPulse className="h-4 w-4" /><span className="hidden lg:inline">MEDEVAC</span></Link>
         </nav>
         <div className="order-3 flex w-full items-center justify-center gap-2 text-xs sm:order-none sm:w-auto" aria-label="État du service">
-          {enService && sessionInfo ? <div className="flex items-center gap-2 rounded-xl border border-emerald-800/60 bg-emerald-950/50 px-3 py-1.5 text-emerald-200">
+          {isMedevac ? <span className="rounded-xl border border-rose-500/40 bg-rose-950/50 px-3 py-1.5 text-rose-200">Équipage de vol · MEDEVAC</span> : enService && sessionInfo ? <div className="flex items-center gap-2 rounded-xl border border-emerald-800/60 bg-emerald-950/50 px-3 py-1.5 text-emerald-200">
             <MapPin className="h-3.5 w-3.5" /><span className="font-mono font-bold">{sessionInfo.aeroport}</span>
             <span className="rounded bg-slate-900 px-1.5 py-0.5 font-semibold">{estAfis ? 'AFIS' : 'Pompier'}</span>
             <Clock className="h-3.5 w-3.5" /><span className="font-mono">{elapsed}</span>

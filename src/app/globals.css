@@ -1527,3 +1527,17 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
  animation: none; left: var(--join-x) !important; top: var(--join-y) !important;
  transform: none !important; z-index: 1 !important;
 }
+
+/* SIAVI: stable dark surfaces, readable controls, reduced-motion support. */
+.siavi-workspace { color: #e2e8f0; }
+.siavi-workspace input, .siavi-workspace select, .siavi-workspace textarea {
+  color: #f1f5f9; background-color: #0f172a; border-color: #475569; color-scheme: dark;
+}
+.siavi-workspace input::placeholder, .siavi-workspace textarea::placeholder { color: #94a3b8; }
+.siavi-workspace :is(input, select, textarea, button, a):focus-visible {
+  outline: 2px solid #fb7185; outline-offset: 3px;
+}
+.siavi-flight-space .siavi-afis-sidebar, .siavi-flight-space .siavi-service-phone { display: none; }
+@keyframes siavi-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+@media (prefers-reduced-motion: no-preference) { .siavi-enter { animation: siavi-enter .22s ease-out both; } }
+@media (prefers-reduced-motion: reduce) { .siavi-workspace *, .siavi-flight-space * { animation: none !important; transition-duration: 0s !important; } }

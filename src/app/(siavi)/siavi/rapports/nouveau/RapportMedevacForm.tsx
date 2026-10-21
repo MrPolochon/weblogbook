@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { splitMedevacRevenue } from '@/lib/siavi/medevac-remuneration';
 import { Plus, Trash2, Clock, AlertCircle, CheckCircle2, Loader2, Send } from 'lucide-react';
 
 function newTimelineRowKey(): string {
@@ -24,6 +24,9 @@ interface SegmentBrief {
 }
 
 interface Props {
+  agents: {id:string;identifiant:string}[];
+  pilotId: string;
+  remunerationPreview: number | null;
   planVolId: string;
   numeroVol: string;
   aeroportDepart: string;
@@ -39,10 +42,11 @@ interface Props {
 export default function RapportMedevacForm({
   planVolId, numeroVol, aeroportDepart, aeroportArrivee,
   aircraftRegistration, aircraftType, commanderDefault, segments,
-  initialChronologie,
+  initialChronologie, agents, pilotId, remunerationPreview,
 }: Props) {
-  const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [participantIds,setParticipantIds]=useState<string[]>([pilotId]);
+  const split=remunerationPreview===null?null:splitMedevacRevenue(remunerationPreview,participantIds.length);
+
 
   const [commander, setCommander] = useState(commanderDefault);
   const [coPilot, setCoPilot] = useState('');
@@ -107,6 +111,7 @@ export default function RapportMedevacForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           plan_vol_id: planVolId,
+          participant_ids: participantIds,
           commander: commander.trim(),
           co_pilot: coPilot.trim() || null,
           medical_team: medicalTeam.trim() || null,
@@ -123,12 +128,8 @@ export default function RapportMedevacForm({
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
       setSuccess(`Rapport de mission n°${data.numero_mission} enregistré.`);
-      setTimeout(() => {
-        startTransition(() => {
-          router.refresh();
-          router.push(`/siavi/rapports/${data.id}`);
-        });
-      }, 1500);
+      // Reload the server layout so the completed report no longer locks navigation.
+      window.location.assign('/siavi/medevac');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
@@ -136,64 +137,66 @@ export default function RapportMedevacForm({
     }
   }
 
-  const inputCls = 'w-full px-3 py-2 rounded-lg border border-red-300 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white';
+  const inputCls = 'w-full px-3 py-2 rounded-lg border border-rose-400/40 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900';
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 siavi-workspace siavi-enter">
       {error && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800">
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/25 text-rose-200">
           <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       )}
       {success && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800">
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-950/50 border border-emerald-200 text-emerald-200">
           <CheckCircle2 className="h-5 w-5 mt-0.5 flex-shrink-0" />
           <p className="text-sm">{success}</p>
         </div>
       )}
 
       {/* Infos auto-remplies */}
-      <div className="rounded-xl bg-red-50 border border-red-200 p-4">
-        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider mb-3">1. Informations générales & aéronef</h3>
+      <div className="rounded-xl bg-rose-950/40 border border-rose-500/25 p-4">
+        <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider mb-3">1. Informations générales & aéronef</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-          <div><span className="text-red-600">Mission</span><p className="font-mono font-bold text-red-900">{numeroVol}</p></div>
-          <div><span className="text-red-600">Base</span><p className="font-mono font-bold text-red-900">{aeroportDepart}</p></div>
-          <div><span className="text-red-600">Immat.</span><p className="font-mono font-bold text-red-900">{aircraftRegistration}</p></div>
-          <div><span className="text-red-600">Type</span><p className="font-bold text-red-900">{aircraftType}</p></div>
+          <div><span className="text-rose-300">Mission</span><p className="font-mono font-bold text-rose-100">{numeroVol}</p></div>
+          <div><span className="text-rose-300">Base</span><p className="font-mono font-bold text-rose-100">{aeroportDepart}</p></div>
+          <div><span className="text-rose-300">Immat.</span><p className="font-mono font-bold text-rose-100">{aircraftRegistration}</p></div>
+          <div><span className="text-rose-300">Type</span><p className="font-bold text-rose-100">{aircraftType}</p></div>
         </div>
       </div>
 
       {/* Équipage */}
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
-        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">3. Équipage de vol</h3>
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-4">
+        <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider">3. Équipage de vol</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Commandant de bord / Pilote médical *</label>
+            <label className="block text-sm font-medium text-slate-200 mb-1">Commandant de bord / Pilote médical *</label>
             <input type="text" value={commander} onChange={e => setCommander(e.target.value)} className={inputCls} required />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Co-pilote / Pilote médical</label>
+            <label className="block text-sm font-medium text-slate-200 mb-1">Co-pilote / Pilote médical</label>
             <input type="text" value={coPilot} onChange={e => setCoPilot(e.target.value)} className={inputCls} placeholder="Optionnel" />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Équipe médicale</label>
+          <label className="block text-sm font-medium text-slate-200 mb-1">Équipe médicale</label>
           <input type="text" value={medicalTeam} onChange={e => setMedicalTeam(e.target.value)} className={inputCls} placeholder="Ex: 2 Medical Pilots + 1 Nurse" />
         </div>
       </div>
 
+      <fieldset className="rounded-xl border border-rose-500/30 bg-slate-900 p-6 space-y-3"><legend className="px-2 text-lg font-semibold text-rose-100">Participants et rémunération</legend><p className="text-sm text-slate-300">Sélectionnez les agents ayant participé. Le pilote est inclus. La moitié de la recette va au SIAVI ; le reste est partagé à parts égales entre les membres de cet équipage.</p><div className="grid gap-2 sm:grid-cols-2">{agents.map(agent=><label key={agent.id} className="flex items-center gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-sm text-slate-100"><input type="checkbox" checked={participantIds.includes(agent.id)} disabled={agent.id===pilotId} onChange={e=>setParticipantIds(prev=>e.target.checked?[...prev,agent.id]:prev.filter(id=>id!==agent.id))} className="h-4 w-4 accent-rose-500" /><span>{agent.identifiant}{agent.id===pilotId?' · Pilote':''}</span></label>)}</div>{split?<div className="rounded-lg border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p>Recette : {remunerationPreview?.toLocaleString('fr-FR')} F$ · SIAVI : {split.siavi.toLocaleString('fr-FR')} F$</p><p className="mt-1">Équipage : {split.crew.toLocaleString('fr-FR')} F$ pour {participantIds.length} participant(s), soit environ {Math.floor(split.crew/participantIds.length).toLocaleString('fr-FR')} F$ chacun.</p><p className="mt-2 text-xs text-slate-300">Le montant définitif est calculé et versé une seule fois à la validation du rapport.</p></div>:<p className="text-sm text-amber-200">Mission antérieure : ancien barème déjà appliqué à la clôture. Aucun second paiement ne sera effectué.</p>}</fieldset>
+
       {/* Chronologie */}
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-4">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">4. Chronologie de la mission (UTC)</h3>
-            <p className="text-xs text-slate-500 mt-1">
+            <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider">4. Chronologie de la mission (UTC)</h3>
+            <p className="text-xs text-slate-400 mt-1">
               Heures proposées automatiquement en UTC : alerte fictive entre 30 et 60 minutes avant le 1er départ, puis enchaînement selon les durées prévues par segment. À ajuster selon les heures réelles.
             </p>
           </div>
           <button type="button" onClick={addTimelineEntry}
-            className="inline-flex items-center gap-1 px-3 py-1 bg-red-100 hover:bg-red-200 text-red-800 rounded-lg text-xs font-medium transition-colors">
+            className="inline-flex items-center gap-1 px-3 py-1 bg-rose-950/60 hover:bg-red-200 text-rose-200 rounded-lg text-xs font-medium transition-colors">
             <Plus className="h-3.5 w-3.5" /> Ajouter
           </button>
         </div>
@@ -204,14 +207,14 @@ export default function RapportMedevacForm({
                 <Clock className="h-3.5 w-3.5 text-red-400" />
                 <input type="text" value={entry.heure} onChange={e => updateTimeline(idx, 'heure', e.target.value)}
                   placeholder="HH:MM"
-                  className="w-full px-2 py-1.5 rounded border border-red-300 focus:ring-2 focus:ring-red-500 font-mono text-sm bg-white text-slate-900 placeholder-slate-400" />
+                  className="w-full px-2 py-1.5 rounded border border-rose-400/40 focus:ring-2 focus:ring-red-500 font-mono text-sm bg-slate-900 text-slate-100 placeholder-slate-400" />
               </div>
               <input type="text" value={entry.description} onChange={e => updateTimeline(idx, 'description', e.target.value)}
                 placeholder="Description de l'événement..."
-                className="flex-1 px-3 py-1.5 rounded border border-red-300 focus:ring-2 focus:ring-red-500 text-sm bg-white text-slate-900 placeholder-slate-400" />
+                className="flex-1 px-3 py-1.5 rounded border border-rose-400/40 focus:ring-2 focus:ring-red-500 text-sm bg-slate-900 text-slate-100 placeholder-slate-400" />
               {timeline.length > 1 && (
                 <button type="button" onClick={() => removeTimelineEntry(idx)}
-                  className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors">
+                  className="p-1.5 text-red-400 hover:text-rose-300 hover:bg-rose-950/40 rounded transition-colors">
                   <Trash2 className="h-4 w-4" />
                 </button>
               )}
@@ -221,32 +224,32 @@ export default function RapportMedevacForm({
       </div>
 
       {/* Résumé médical */}
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
-        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">5. Résumé de l&apos;événement médical *</h3>
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-4">
+        <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider">5. Résumé de l&apos;événement médical *</h3>
         <textarea value={medicalSummary} onChange={e => setMedicalSummary(e.target.value)}
           rows={4} placeholder="État du patient, traitement administré, événements médicaux en vol..."
           className={inputCls} required />
       </div>
 
       {/* Événement au sol */}
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
-        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">6. Événement au sol — arrivée</h3>
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-4">
+        <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider">6. Événement au sol — arrivée</h3>
         <textarea value={groundEvent} onChange={e => setGroundEvent(e.target.value)}
           rows={3} placeholder="Optionnel : incidents au sol, transfert médical, interventions..."
           className={inputCls} />
       </div>
 
       {/* Issue */}
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
-        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">7. Issue de la mission *</h3>
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-4">
+        <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider">7. Issue de la mission *</h3>
         <textarea value={outcome} onChange={e => setOutcome(e.target.value)}
           rows={3} placeholder="État final du patient, résultat de l'intervention..."
           className={inputCls} required />
       </div>
 
       {/* Remarques sécurité */}
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-4">
-        <h3 className="text-sm font-bold text-red-800 uppercase tracking-wider">8. Remarques sécurité & opérationnelles</h3>
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-4">
+        <h3 className="text-sm font-bold text-rose-200 uppercase tracking-wider">8. Remarques sécurité & opérationnelles</h3>
         <textarea value={safetyRemarks} onChange={e => setSafetyRemarks(e.target.value)}
           rows={3} placeholder="Optionnel : observations, recommandations..."
           className={inputCls} />

@@ -79,6 +79,10 @@ export async function POST(request: Request) {
     const ok = await canAccessSiavi(admin, user.id);
     if (!ok) return NextResponse.json({ error: 'Accès SIAVI requis' }, { status: 403 });
 
+    const {data:groundSession,error:groundError}=await admin.from('afis_sessions').select('id').eq('user_id',user.id).maybeSingle();
+    if(groundError) return NextResponse.json({error:'Impossible de vérifier votre service au sol.'},{status:503});
+    if(groundSession) return NextResponse.json({error:'Quittez votre service Pompier ou AFIS avant de démarrer une mission MEDEVAC.'},{status:409});
+
     const body = await request.json();
     const { aeroport_depart, numero_vol, siavi_avion_id, vol_sans_atc, segments } = body;
 
@@ -176,6 +180,7 @@ export async function POST(request: Request) {
     const seg0 = segmentsValidated[0];
     const buildInsertFromSegment = (seg: SegmentInput, holderFields: Record<string, unknown>, mission: { id: string | null; index: number | null; total: number | null }) => ({
       pilote_id: user.id,
+      medevac_remuneration_version: 2,
       aeroport_depart: seg.aeroport_depart,
       aeroport_arrivee: seg.aeroport_arrivee,
       numero_vol: numeroVolFinal,

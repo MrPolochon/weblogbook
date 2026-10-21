@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
+import { medevacRevenue } from '@/lib/siavi/medevac-remuneration';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
@@ -10,6 +11,7 @@ interface TypeAvion {
   id: string;
   nom: string;
   code_oaci: string | null;
+  categorie?: string;
   capacite_pax: number;
   capacite_cargo_kg: number;
 }
@@ -114,6 +116,10 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
     }
   }, [aeroport_depart, flotte, siavi_avion_id]);
 
+  const selectedAircraft=flotte.find(a=>a.id===siavi_avion_id);
+  const plannedMinutes=segments.reduce((sum,s)=>sum+(Number(s.temps_prev_min)||0),0);
+  const estimatedRevenue=medevacRevenue(plannedMinutes,firstTypeAvion(selectedAircraft?.types_avion)?.categorie==='helicoptere');
+
   function segmentDepart(index: number): string {
     if (index === 0) return aeroport_depart;
     return segments[index - 1]?.aeroport_arrivee || '';
@@ -190,7 +196,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
 
   async function handleSubmit(e: React.FormEvent, forceNoAtc = false) {
     e.preventDefault();
-    if (submitBusyRef.current) return;
+    if (submitBusyRef.current || success) return;
     setError(null); setSuccess(null);
 
     if (!aeroport_depart) { setError('Sélectionnez l\'aéroport de départ.'); return; }
@@ -243,7 +249,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
       }
 
       setTimeout(() => {
-        startTransition(() => router.push('/siavi'));
+        startTransition(() => router.push(`/siavi/medevac/vol/${data.id}`));
         router.refresh();
       }, 2000);
     } catch (err) {
@@ -255,23 +261,23 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form onSubmit={handleSubmit} className="space-y-6 siavi-workspace siavi-enter">
       {error && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 border border-red-200 text-red-800">
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/25 text-rose-200">
           <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
       )}
       {success && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800">
+        <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-950/50 border border-emerald-200 text-emerald-200">
           <CheckCircle2 className="h-5 w-5 mt-0.5 flex-shrink-0" />
           <p className="text-sm">{success}</p>
         </div>
       )}
 
       {showNoAtcConfirm && (
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 space-y-3">
-          <p className="text-amber-900 text-sm font-medium">Aucun ATC en ligne. Voulez-vous décoller en autosurveillance ?</p>
+        <div className="p-4 rounded-xl bg-amber-950/50 border border-amber-300 space-y-3">
+          <p className="text-amber-100 text-sm font-medium">Aucun ATC en ligne. Voulez-vous décoller en autosurveillance ?</p>
           <div className="flex gap-2">
             <button type="button" onClick={(e) => { setShowNoAtcConfirm(false); handleSubmit(e as unknown as React.FormEvent, true); }}
               className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">
@@ -285,16 +291,16 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         </div>
       )}
 
-      <div className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-5">
-        <h2 className="text-lg font-semibold text-red-900 flex items-center gap-2">
-          <HeartPulse className="h-5 w-5 text-red-600" />
+      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-5">
+        <h2 className="text-lg font-semibold text-rose-100 flex items-center gap-2">
+          <HeartPulse className="h-5 w-5 text-rose-300" />
           Plan de vol MEDEVAC
         </h2>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Indicatif d&apos;appel</label>
+          <label className="block text-sm font-medium text-slate-200 mb-1">Indicatif d&apos;appel</label>
           <div className="flex">
-            <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-red-300 bg-red-100 text-red-800 font-mono font-bold text-sm">
+            <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-rose-400/40 bg-rose-950/60 text-rose-200 font-mono font-bold text-sm">
               MEDEVAC
             </span>
             <input
@@ -302,38 +308,38 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
               value={numero_vol}
               onChange={e => setNumeroVol(e.target.value.replace(/\D/g, ''))}
               placeholder="01"
-              className="flex-1 px-3 py-2 rounded-r-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono"
+              className="flex-1 px-3 py-2 rounded-r-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono"
               maxLength={4}
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
-            <MapPin className="inline h-4 w-4 mr-1 text-red-600" />
+          <label className="block text-sm font-medium text-slate-200 mb-1">
+            <MapPin className="inline h-4 w-4 mr-1 text-rose-300" />
             Aéroport de départ initial
           </label>
           <select value={aeroport_depart} onChange={e => setAeroportDepart(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+            className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
             <option value="">Choisir...</option>
             {aeroports.map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
           </select>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">
+          <label className="block text-sm font-medium text-slate-200 mb-1">
             <Plane className="inline h-4 w-4 mr-1" />
             Avion SIAVI
           </label>
           {avionsDisponibles.length === 0 ? (
-            <p className="text-sm text-red-600 italic">
+            <p className="text-sm text-rose-300 italic">
               {aeroport_depart
                 ? `Aucun avion SIAVI disponible à ${aeroport_depart.toUpperCase()}`
                 : 'Sélectionnez un aéroport de départ'}
             </p>
           ) : (
             <select value={siavi_avion_id} onChange={e => setSiaviAvionId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+              className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
               <option value="">Choisir un avion...</option>
               {avionsDisponibles.map(a => {
                 const ta = firstTypeAvion(a.types_avion);
@@ -357,24 +363,24 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         const starList = starCache[starKey] || [];
 
         return (
-          <div key={index} className="rounded-xl bg-white border border-red-200 shadow-sm p-6 space-y-5">
+          <div key={index} className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-5">
             <div className="flex items-center justify-between">
-              <h3 className="text-base font-semibold text-red-900 flex items-center gap-2">
+              <h3 className="text-base font-semibold text-rose-100 flex items-center gap-2">
                 <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-600 text-white text-sm font-bold">
                   {index + 1}
                 </span>
                 Segment {index + 1}
                 {dep && seg.aeroport_arrivee && (
-                  <span className="text-sm text-slate-500 font-normal">
-                    <span className="font-mono text-red-700">{dep.toUpperCase()}</span>
+                  <span className="text-sm text-slate-400 font-normal">
+                    <span className="font-mono text-rose-200">{dep.toUpperCase()}</span>
                     <ArrowRight className="inline h-3 w-3 mx-1" />
-                    <span className="font-mono text-red-700">{seg.aeroport_arrivee.toUpperCase()}</span>
+                    <span className="font-mono text-rose-200">{seg.aeroport_arrivee.toUpperCase()}</span>
                   </span>
                 )}
               </h3>
               {segments.length > 1 && (
                 <button type="button" onClick={() => removeSegment(index)}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-red-600 hover:bg-red-50 text-sm">
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-300 hover:bg-rose-950/40 text-sm">
                   <Trash2 className="h-4 w-4" />
                   Retirer
                 </button>
@@ -383,15 +389,15 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Départ du segment</label>
-                <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 font-mono text-sm">
+                <label className="block text-sm font-medium text-slate-200 mb-1">Départ du segment</label>
+                <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-800 text-slate-200 font-mono text-sm">
                   {dep ? `${dep.toUpperCase()}` : <span className="italic text-slate-400">Défini par le segment précédent</span>}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Destination</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Destination</label>
                 <select value={seg.aeroport_arrivee} onChange={e => updateSegment(index, { aeroport_arrivee: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+                  className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
                   <option value="">Choisir...</option>
                   {aeroports.filter(a => a.code !== dep.toUpperCase()).map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
                 </select>
@@ -400,13 +406,13 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Temps prévu (min)</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Temps prévu (min)</label>
                 <input type="number" value={seg.temps_prev_min} onChange={e => updateSegment(index, { temps_prev_min: e.target.value })}
                   min="1" placeholder="30"
-                  className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                  className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
+                <label className="block text-sm font-medium text-slate-200 mb-1">
                   Heure de départ (UTC) <span className="text-slate-400 font-normal">(optionnel)</span>
                 </label>
                 <div className="relative">
@@ -415,22 +421,22 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
                     value={seg.heure_depart}
                     onChange={e => updateSegment(index, { heure_depart: e.target.value })}
                     placeholder="14:30"
-                    className="w-full px-3 py-2 pr-10 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono tabular-nums"
+                    className="w-full px-3 py-2 pr-10 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono tabular-nums"
                   />
                   <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-slate-400">UTC</span>
                 </div>
-                <p className="text-[10px] text-slate-500 mt-1 leading-snug">
-                  Affichée dans la case <span className="font-mono text-red-600/80">CTOT</span> du strip ATC.
+                <p className="text-[10px] text-slate-400 mt-1 leading-snug">
+                  Affichée dans la case <span className="font-mono text-rose-300/80">CTOT</span> du strip ATC.
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Type de vol</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Type de vol</label>
                 <div className="flex gap-2">
                   {(['VFR', 'IFR'] as const).map(tv => (
                     <button key={tv} type="button" onClick={() => updateSegment(index, { type_vol: tv })}
                       className={`flex-1 py-2 rounded-lg border text-sm font-bold transition-all ${seg.type_vol === tv
                         ? 'bg-red-600 border-red-600 text-white'
-                        : 'bg-white border-red-300 text-red-700 hover:bg-red-50'}`}>
+                        : 'bg-slate-900 border-rose-400/40 text-rose-200 hover:bg-rose-950/40'}`}>
                       {tv}
                     </button>
                   ))}
@@ -440,18 +446,18 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
 
             {seg.type_vol === 'VFR' && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Intentions de vol</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Intentions de vol</label>
                 <textarea value={seg.intentions_vol} onChange={e => updateSegment(index, { intentions_vol: e.target.value })}
                   rows={2} placeholder="Ex: Transit sud-nord, altitude 3500 ft..."
-                  className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                  className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
               </div>
             )}
 
             {seg.type_vol === 'IFR' && (
-              <div className="space-y-4 p-4 rounded-lg bg-red-50 border border-red-200">
+              <div className="space-y-4 p-4 rounded-lg bg-rose-950/40 border border-rose-500/25">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">SID de départ ({dep.toUpperCase() || '?'})</label>
+                    <label className="block text-sm font-medium text-slate-200 mb-1">SID de départ ({dep.toUpperCase() || '?'})</label>
                     {sidList.length > 0 && !seg.sidCustomMode ? (
                       <select
                         value={sidList.some(s => s.nom === seg.sid_depart) ? seg.sid_depart : ''}
@@ -461,7 +467,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
                           const proc = sidList.find(s => s.nom === v);
                           updateSegment(index, { sid_depart: v, selectedSidRoute: proc?.route || null });
                         }}
-                        className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+                        className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
                         <option value="">Choisir SID...</option>
                         {sidList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
                         <option value="__custom__">Saisie libre...</option>
@@ -469,11 +475,11 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
                     ) : (
                       <input type="text" value={seg.sid_depart} onChange={e => updateSegment(index, { sid_depart: e.target.value })}
                         placeholder="Ex: RADAR VECTORS"
-                        className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                        className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">STAR d&apos;arrivée ({seg.aeroport_arrivee.toUpperCase() || '?'})</label>
+                    <label className="block text-sm font-medium text-slate-200 mb-1">STAR d&apos;arrivée ({seg.aeroport_arrivee.toUpperCase() || '?'})</label>
                     {starList.length > 0 && !seg.starCustomMode ? (
                       <select
                         value={starList.some(s => s.nom === seg.star_arrivee) ? seg.star_arrivee : ''}
@@ -483,7 +489,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
                           const proc = starList.find(s => s.nom === v);
                           updateSegment(index, { star_arrivee: v, selectedStarRoute: proc?.route || null });
                         }}
-                        className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-white">
+                        className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
                         <option value="">Choisir STAR...</option>
                         {starList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
                         <option value="__custom__">Saisie libre...</option>
@@ -491,22 +497,22 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
                     ) : (
                       <input type="text" value={seg.star_arrivee} onChange={e => updateSegment(index, { star_arrivee: e.target.value })}
                         placeholder="Ex: RADAR VECTORS"
-                        className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                        className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
                     )}
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Route IFR</label>
+                  <label className="block text-sm font-medium text-slate-200 mb-1">Route IFR</label>
                   <input type="text" value={seg.route_ifr}
                     onChange={e => updateSegment(index, { route_ifr: e.target.value, manualRoutePart: e.target.value })}
                     placeholder="DCT VOR1 AWY VOR2..."
-                    className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm" />
+                    className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Niveau de croisière</label>
+                  <label className="block text-sm font-medium text-slate-200 mb-1">Niveau de croisière</label>
                   <input type="text" value={seg.niveau_croisiere} onChange={e => updateSegment(index, { niveau_croisiere: e.target.value })}
                     placeholder="Ex: 350 (= FL350)"
-                    className="w-full px-3 py-2 rounded-lg border border-red-300 text-slate-900 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono" />
+                    className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono" />
                 </div>
               </div>
             )}
@@ -514,19 +520,20 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         );
       })}
 
+      {selectedAircraft && <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p className="font-semibold">Recette estimée : {estimatedRevenue.toLocaleString('fr-FR')} F$</p><p className="mt-1">50 % au SIAVI, 50 % à partager entre les participants du rapport. Estimation sur {plannedMinutes} min prévues ; versement final selon la durée enregistrée, au maximum 1 000 000 F$ par mission.</p></section>}
       {/* Bouton ajouter destination */}
       {segments.length < MAX_SEGMENTS && (
         <button type="button" onClick={addSegment}
-          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-red-300 text-red-700 hover:border-red-500 hover:bg-red-50 transition-colors font-medium">
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-rose-400/40 text-rose-200 hover:border-red-500 hover:bg-rose-950/40 transition-colors font-medium">
           <Plus className="h-4 w-4" />
           Ajouter une destination (segment {segments.length + 1}/{MAX_SEGMENTS})
         </button>
       )}
 
       {segments.length > 1 && (
-        <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+        <div className="p-4 rounded-xl bg-amber-950/50 border border-amber-200 text-amber-100 text-sm">
           <p className="font-semibold mb-1">Mission multi-segments ({segments.length} escales)</p>
-          <p>Seul le 1<sup>er</sup> segment sera envoyé à l&apos;ATC dès le dépôt. Après chaque atterrissage, clôturez le segment puis activez le suivant depuis la page « Mes plans de vol » en choisissant la SID/STAR (ou vos intentions VFR).</p>
+          <p>Seul le 1<sup>er</sup> segment sera envoyé à l&apos;ATC dès le dépôt. Après chaque atterrissage, clôturez le segment puis activez le suivant depuis votre console MEDEVAC en choisissant la SID/STAR (ou vos intentions VFR).</p>
         </div>
       )}
 

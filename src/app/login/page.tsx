@@ -1,4 +1,5 @@
 'use client';
+import { SIAVI_WORKSPACES, type SiaviWorkspace } from '@/lib/siavi/workspaces';
 import MajorEventBanner from '@/components/MajorEventBanner';
 
 import React, { Suspense, useEffect, useRef, useState, useMemo, useTransition } from 'react';
@@ -80,6 +81,7 @@ function LoginPageContent() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [mode, setMode] = useState<LoginMode>('pilote');
+  const [siaviWorkspace, setSiaviWorkspace] = useState<SiaviWorkspace>('pompier');
   const [step, setStep] = useState<LoginStep>('form');
   const [emailMasked, setEmailMasked] = useState<string>('');
   const [loginEmail, setLoginEmail] = useState('');
@@ -145,7 +147,13 @@ function LoginPageContent() {
 
   useEffect(() => {
     const r = searchParams.get('redirect');
-    if (isSafeRedirectPath(r)) setRedirectTo(r);
+    if (isSafeRedirectPath(r)) {
+      setRedirectTo(r);
+      if(r === '/siavi' || r.startsWith('/siavi/')) {
+        setMode('siavi');
+        setSiaviWorkspace(r.startsWith('/siavi/medevac')?'medevac':r.startsWith('/siavi/afis')?'afis':'pompier');
+      }
+    }
   }, [searchParams]);
 
   useEffect(() => {
@@ -281,8 +289,8 @@ function LoginPageContent() {
       if (mode === 'siavi') {
         const canSiavi = profile?.role === 'admin' || profile?.role === 'siavi' || Boolean(profile?.siavi);
         if (!canSiavi) throw new Error('Ce compte n\'a pas accès à l\'espace SIAVI.');
-        targetPath = '/siavi';
-        setRedirectTo('/siavi');
+        targetPath = redirectTo === '/siavi' || redirectTo.startsWith('/siavi/') ? redirectTo : SIAVI_WORKSPACES[siaviWorkspace].href;
+        setRedirectTo(targetPath);
       } else if (mode === 'atc') {
         const canAtc = profile?.role === 'admin' || profile?.role === 'atc' || profile?.atc;
         if (!canAtc) throw new Error('Ce compte n\'a pas accès à l\'espace ATC.');
@@ -471,7 +479,7 @@ function LoginPageContent() {
           <div className="flex gap-2 p-1 bg-slate-900/45 rounded-2xl backdrop-blur-md border border-white/10 shadow-xl shadow-cyan-950/30">
             <button
               type="button"
-              onClick={() => setMode('pilote')}
+              onClick={() => { setMode('pilote'); setRedirectTo('/logbook'); }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
                 mode === 'pilote'
                   ? 'bg-sky-500 text-white'
@@ -483,7 +491,7 @@ function LoginPageContent() {
             </button>
             <button
               type="button"
-              onClick={() => setMode('atc')}
+              onClick={() => { setMode('atc'); setRedirectTo('/atc'); }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
                 mode === 'atc'
                   ? 'bg-sky-500 text-white'
@@ -495,7 +503,7 @@ function LoginPageContent() {
             </button>
             <button
               type="button"
-              onClick={() => setMode('siavi')}
+              onClick={() => { setMode('siavi'); setRedirectTo(SIAVI_WORKSPACES[siaviWorkspace].href); }}
               className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 sm:py-3.5 px-2 sm:px-3 rounded-xl font-semibold transition-all duration-300 ${
                 mode === 'siavi'
                   ? 'bg-sky-500 text-white'
@@ -506,10 +514,11 @@ function LoginPageContent() {
               <span className="text-xs sm:text-sm">SIAVI</span>
             </button>
           </div>
+          {mode === 'siavi' && <fieldset className="grid gap-2 rounded-xl border border-rose-400/30 bg-slate-950/80 p-3"><legend className="px-1 text-xs font-semibold text-rose-200">Votre fonction SIAVI</legend>{Object.entries(SIAVI_WORKSPACES).map(([key, item]) => <button key={key} type="button" aria-pressed={siaviWorkspace === key} onClick={() => { setSiaviWorkspace(key as SiaviWorkspace); setRedirectTo(item.href); }} className={siaviWorkspace === key ? 'rounded-lg border border-rose-400 bg-rose-600/25 px-3 py-2 text-left text-white transition-colors' : 'rounded-lg border border-slate-700 px-3 py-2 text-left text-slate-300 transition-colors hover:bg-slate-800'}><span className="block text-sm font-semibold">{item.label}</span><span className="block text-xs text-slate-300">{item.description}</span></button>)}</fieldset>}
           {/* Ligne secondaire : Ground Crew */}
           <button
             type="button"
-            onClick={() => setMode('ground_crew')}
+            onClick={() => { setMode('ground_crew'); setRedirectTo('/ground'); }}
             className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-semibold text-sm transition-all duration-300 border ${
               mode === 'ground_crew'
                 ? 'bg-orange-500/25 border-orange-500/60 text-orange-200 shadow-lg shadow-orange-500/20'
@@ -652,7 +661,7 @@ function LoginPageContent() {
                   <>
                     {mode === 'pilote' ? 'Accéder à l\'espace pilote'
                       : mode === 'atc' ? 'Accéder à l\'espace ATC'
-                      : mode === 'siavi' ? 'Accéder à l\'espace SIAVI'
+                      : mode === 'siavi' ? `Accéder · ${SIAVI_WORKSPACES[siaviWorkspace].label}`
                       : 'Accéder à l\'espace Ground Crew'}
                     <span className="ml-2">→</span>
                   </>

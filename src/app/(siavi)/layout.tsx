@@ -1,3 +1,5 @@
+import { isChefDeBrigade } from '@/lib/siavi/permissions';
+import SiaviWorkspaceShell from '@/components/siavi/SiaviWorkspaceShell';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
@@ -40,6 +42,7 @@ export default async function SiaviLayout({
   if (!canAccessSiavi) redirect('/logbook');
 
   const admin = createAdminClient();
+  const isChief = await isChefDeBrigade(admin, user.id);
 
   // Rapport MEDEVAC obligatoire : si l'agent a un vol clôturé sans rapport, le forcer
   const pendingPlanId = await getPendingMedevacReport(admin, user.id);
@@ -59,7 +62,7 @@ export default async function SiaviLayout({
   let plansAuto: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansSurveilles: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
   let plansTransfertAfis: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[] = [];
-  
+
   if (enService && estAfis && session) {
     const [{ data: dataAuto }, { data: dataSurveilles }, { data: dataTransfert }] = await Promise.all([
       admin.from('plans_vol').select('id, numero_vol, aeroport_depart, aeroport_arrivee')
@@ -80,23 +83,23 @@ export default async function SiaviLayout({
   }
 
   return (
-    <div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+    <SiaviWorkspaceShell><div className="min-h-dvh flex flex-col safe-x" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
       {pendingPlanId && <PendingReportGuard pendingPlanId={pendingPlanId} />}
       <InactivityLogout />
       <AutoRefresh
         intervalSeconds={15}
-        pauseRefreshWhenPathStartsWith={['/siavi/rapports']}
+        pauseRefreshWhenPathStartsWith={['/siavi/rapports', '/siavi/medevac/nouveau', '/siavi/medevac/vol/']}
       />
       <SiaviModeBg isAdmin={isAdmin} />
-      <SiaviNavBar 
-        isAdmin={isAdmin} 
-        enService={enService} 
+      <SiaviNavBar
+        isAdmin={isAdmin} isChief={isChief}
+        enService={enService}
         estAfis={estAfis}
-        sessionInfo={enService && session ? { aeroport: session.aeroport, started_at: session.started_at } : null} 
-        messagesNonLusCount={messagesNonLusCount || 0} 
+        sessionInfo={enService && session ? { aeroport: session.aeroport, started_at: session.started_at } : null}
+        messagesNonLusCount={messagesNonLusCount || 0}
       />
       {enService && estAfis && (
-        <div className="md:hidden border-b border-red-800 bg-[#3a0f18] px-3 py-2 space-y-2">
+        <div className="siavi-afis-sidebar md:hidden border-b border-red-800 bg-[#3a0f18] px-3 py-2 space-y-2">
           {plansTransfertAfis.length > 0 && (
             <div className="space-y-1.5">
               <p className="text-[10px] font-black uppercase tracking-wider text-amber-300">
@@ -136,7 +139,7 @@ export default async function SiaviLayout({
       )}
       <div className="flex flex-1 w-full min-h-0">
         {enService && estAfis && (
-          <aside className="w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">
+          <aside className="siavi-afis-sidebar w-52 flex-shrink-0 border-r border-red-400/30 bg-gradient-to-b from-red-950/50 to-red-950/30 py-4 px-3 hidden md:flex flex-col backdrop-blur-sm">
             {plansTransfertAfis.length > 0 && (
               <div className="mb-4">
                 <p className="text-xs font-bold uppercase tracking-wider text-amber-400 px-2 mb-2 flex items-center gap-2">
@@ -212,12 +215,12 @@ export default async function SiaviLayout({
         <main className="flex-1 min-w-0 mx-auto w-full max-w-7xl px-4 sm:px-5 lg:px-6 py-8">{children}</main>
       </div>
       {enService && session && (
-        <SiaviTelephone 
-          aeroport={session.aeroport} 
+        <div className="siavi-service-phone"><SiaviTelephone
+          aeroport={session.aeroport}
           estAfis={estAfis}
-          userId={user.id} 
-        />
+          userId={user.id}
+        /></div>
       )}
-    </div>
+    </div></SiaviWorkspaceShell>
   );
 }
