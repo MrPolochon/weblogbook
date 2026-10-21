@@ -8,9 +8,9 @@ import { CheckCircle2, X, Plane, FileText } from 'lucide-react';
 
 const STATUTS_OUVERTS = ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
-type Props = { planId: string; statut: string; isMedevac?: boolean; automonitoring?: boolean };
+type Props = { planId: string; statut: string; isMedevac?: boolean; automonitoring?: boolean; buttonLabel?: string; buttonClassName?: string };
 
-export default function PlanVolCloturerButton({ planId, statut, isMedevac, automonitoring }: Props) {
+export default function PlanVolCloturerButton({ planId, statut, isMedevac, automonitoring, buttonLabel, buttonClassName }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
@@ -63,8 +63,8 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac, autom
 
   return (
     <>
-      <button type="button" onClick={handleCloture} disabled={loading} className="text-sm text-sky-400 hover:underline disabled:opacity-50">
-        {loading ? '…' : 'Clôturer le vol'}
+      <button type="button" onClick={handleCloture} disabled={loading} className={buttonClassName ?? "text-sm text-sky-400 hover:underline disabled:opacity-50"}>
+        {loading ? 'Envoi en cours…' : buttonLabel ?? 'Clôturer le vol'}
       </button>
 
       {/* Modal de succès */}

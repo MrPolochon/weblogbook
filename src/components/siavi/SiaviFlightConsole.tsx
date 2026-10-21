@@ -130,7 +130,7 @@ export default async function SiaviPlanPage({ params, medevacOnly = false }: { p
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div className="flex-1">
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto">
             <h1 className="text-2xl font-bold text-rose-100 font-mono">{plan.numero_vol}</h1>
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
               {statusConfig.icon}
@@ -171,9 +171,10 @@ export default async function SiaviPlanPage({ params, medevacOnly = false }: { p
         </div>
       )}
 
+      {estLePilote && <nav aria-label="Sections de la console de vol" className="flex flex-wrap gap-2">{statutActif && plan.statut !== 'en_pause' && <a href="#flight-controls" className="inline-flex min-h-11 items-center rounded-xl border border-slate-600 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">Transpondeur et contrôle</a>}{statutOuvrable && <a href="#flight-end" className="inline-flex min-h-11 items-center rounded-xl border border-slate-600 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">Fin du trajet</a>}<a href="#flight-details" className="inline-flex min-h-11 items-center rounded-xl border border-slate-600 bg-slate-900 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800">Informations de vol</a></nav>}
       {/* Interface pilote complète : transpondeur (si vol actif) */}
       {estLePilote && statutActif && plan.statut !== 'en_pause' && (
-        <TranspondeurInterface
+        <section id="flight-controls" className="scroll-mt-36 space-y-4"><div><h2 className="text-xl font-semibold text-white">1. Transpondeur et contrôle du vol</h2><p className="mt-2 text-sm text-slate-400">Réglez votre code et votre mode de transpondeur depuis cette zone.</p></div><TranspondeurInterface
           planId={plan.id}
           numeroVol={plan.numero_vol || ''}
           aeroportDepart={plan.aeroport_depart || ''}
@@ -186,15 +187,15 @@ export default async function SiaviPlanPage({ params, medevacOnly = false }: { p
           controleurPosition={plan.current_holder_position ?? null}
           controleurAeroport={plan.current_holder_aeroport ?? null}
           automonitoring={plan.automonitoring || false}
-        />
+        /></section>
       )}
 
       {/* Actions pilote : reprendre (si en pause), clôturer, annuler */}
       {estLePilote && statutOuvrable && (
-        <div className="rounded-xl border border-rose-500/25 bg-slate-900 p-4 shadow-sm">
+        <section id="flight-end" className="scroll-mt-36 rounded-2xl border border-emerald-500/30 bg-slate-900 p-5 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
-              <p className="text-sm font-medium text-rose-100">Actions sur votre vol</p>
+              <h2 className="text-xl font-semibold text-white">2. Terminer ou reprendre le trajet</h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 {plan.statut === 'en_pause' && segmentSuivantId
                   ? 'Mission en pause — activez le segment suivant pour reprendre le vol.'
@@ -213,15 +214,15 @@ export default async function SiaviPlanPage({ params, medevacOnly = false }: { p
                   Reprendre la mission
                 </Link>
               )}
-              <PlanVolCloturerButton planId={plan.id} statut={plan.statut} isMedevac={!!plan.siavi_avion_id} automonitoring={!!plan.automonitoring} />
-              <PlanVolAnnulerButton planId={plan.id} statut={plan.statut} />
+              <PlanVolCloturerButton planId={plan.id} statut={plan.statut} isMedevac={!!plan.siavi_avion_id} automonitoring={!!plan.automonitoring} buttonLabel={plan.current_holder_user_id && !plan.automonitoring ? 'Demander la clôture à l’ATC' : 'Terminer ce trajet'} buttonClassName="inline-flex min-h-12 items-center justify-center rounded-xl bg-emerald-400 px-5 py-3 text-sm font-bold text-slate-950 transition-colors hover:bg-emerald-300 disabled:opacity-40" />
+              <details className="w-full border-t border-slate-700 pt-4"><summary className="cursor-pointer text-sm font-semibold text-slate-400 hover:text-rose-200">Autres actions · annulation</summary><p className="my-3 text-xs leading-relaxed text-slate-400">L’annulation met fin à ce vol sans rémunération. Utilisez la clôture pour terminer normalement votre trajet.</p><PlanVolAnnulerButton planId={plan.id} statut={plan.statut} buttonLabel="Annuler ce vol" buttonClassName="inline-flex min-h-12 items-center justify-center rounded-xl border border-rose-400/50 px-4 py-3 text-sm font-semibold text-rose-200 hover:bg-rose-950/50 disabled:opacity-40" /></details>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Info vol principale */}
-      <div className="rounded-xl border border-rose-500/25 bg-slate-900 p-6 shadow-sm">
+      <div id="flight-details" className="scroll-mt-36 rounded-xl border border-rose-500/25 bg-slate-900 p-6 shadow-sm">
         <div className="grid gap-6 md:grid-cols-2">
           {/* Route */}
           <div>

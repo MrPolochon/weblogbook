@@ -31,10 +31,10 @@ export default function HorsServiceSiaviButton() {
     <button
       onClick={handleClick}
       disabled={loading}
-      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-medium transition-colors disabled:opacity-50"
+      className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-600 bg-slate-800 hover:bg-slate-700 text-slate-100 min-h-12 font-medium transition-colors disabled:opacity-50"
     >
       <LogOut className="h-4 w-4" />
-      {loading ? 'Déconnexion...' : 'Hors service'}
+      {loading ? 'Fin du service…' : 'Terminer mon service'}
     </button>
   );
 }

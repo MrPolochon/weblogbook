@@ -51,13 +51,15 @@ export default function SeMettreEnServiceSiaviForm({ initialMode }: { initialMod
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-5">
       <div>
-        <label className="block text-sm font-bold text-amber-200 mb-1">Aéroport</label>
+        <label htmlFor="siavi-service-airport" className="block text-sm font-semibold text-slate-200 mb-2">Sur quel aéroport prenez-vous votre service ?</label>
         <select
+          id="siavi-service-airport"
+          required
           value={aeroport}
           onChange={(e) => setAeroport(e.target.value)}
-          className="w-full px-3 py-2 rounded-lg border-2 border-slate-300 bg-slate-800 text-white focus:outline-none focus:ring-2 focus:ring-red-500"
+          className="min-h-12 w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-cyan-400"
         >
           <option value="">— Sélectionner un aéroport —</option>
           <optgroup label="🔥 Aéroports SIAVI (priorité AFIS)">
@@ -77,12 +79,7 @@ export default function SeMettreEnServiceSiaviForm({ initialMode }: { initialMod
         </select>
       </div>
 
-      <label className="block text-sm text-slate-200">Fonction de service
-        <select disabled={!!initialMode} value={mode} onChange={e=>setMode(e.target.value as 'afis' | 'pompier')} className="input mt-1">
-          <option value="pompier">Pompier — secours et interventions</option>
-          <option value="afis">Pompier + AFIS — information des vols</option>
-        </select>
-      </label>
+      {initialMode ? <p className="rounded-xl border border-slate-700 bg-slate-800/50 p-3 text-sm text-slate-300">Fonction choisie : <strong className="text-white">{initialMode==='afis'?'Pompier AFIS':'Pompier aéroportuaire'}</strong>. Pour changer, utilisez les onglets en haut.</p> : <label className="block text-sm text-slate-200">Votre fonction<select value={mode} onChange={e=>setMode(e.target.value as 'afis'|'pompier')} className="mt-2 min-h-12 w-full rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white"><option value="pompier">Pompier aéroportuaire</option><option value="afis">Pompier AFIS</option></select></label>}
       {error && (
         <div className="p-3 rounded-lg bg-red-100 border border-red-300 text-red-800 text-sm font-medium">
           {error}
@@ -92,9 +89,9 @@ export default function SeMettreEnServiceSiaviForm({ initialMode }: { initialMod
       <button
         type="submit"
         disabled={loading || !aeroport}
-        className="w-full py-2.5 rounded-lg bg-red-500 hover:bg-red-600 disabled:bg-red-400 text-white font-bold transition-colors"
+        className={`min-h-12 w-full rounded-xl px-4 py-3 font-bold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${mode==='afis'?'bg-cyan-400 text-slate-950 hover:bg-cyan-300':'bg-amber-400 text-slate-950 hover:bg-amber-300'}`}
       >
-        {loading ? 'Connexion...' : 'Se mettre en service'}
+        {loading ? 'Prise de service en cours…' : mode==='afis'?'Prendre mon service AFIS':'Prendre mon service pompier'}
       </button>
 
       <p className="text-xs text-amber-200 font-medium">

@@ -262,6 +262,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 siavi-workspace siavi-enter">
+      <p className="rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm leading-relaxed text-slate-300">Choisissez votre appareil et votre départ, puis ajoutez les trajets à effectuer. La création de la mission vous ouvre directement la console de vol MEDEVAC.</p>
       {error && (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/25 text-rose-200">
           <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
@@ -281,7 +282,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
           <div className="flex gap-2">
             <button type="button" onClick={(e) => { setShowNoAtcConfirm(false); handleSubmit(e as unknown as React.FormEvent, true); }}
               className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700">
-              Oui, vol sans ATC
+              Continuer en autosurveillance
             </button>
             <button type="button" onClick={() => setShowNoAtcConfirm(false)}
               className="px-4 py-2 bg-amber-200 text-amber-800 rounded-lg text-sm font-medium hover:bg-amber-300">
@@ -294,7 +295,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
       <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-5">
         <h2 className="text-lg font-semibold text-rose-100 flex items-center gap-2">
           <HeartPulse className="h-5 w-5 text-rose-300" />
-          Plan de vol MEDEVAC
+          1. Appareil et départ de la mission
         </h2>
 
         <div>
@@ -540,7 +541,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
       <button type="submit" disabled={loading || !!success}
         className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50 text-white rounded-xl font-bold text-lg shadow-lg transition-all">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <HeartPulse className="h-5 w-5" />}
-        Déposer le vol MEDEVAC
+        Créer la mission et ouvrir ma console
       </button>
     </form>
   );

@@ -6,9 +6,9 @@ import { createPortal } from 'react-dom';
 
 const STATUTS_ANNULABLES = ['depose', 'en_attente', 'en_attente_copilote', 'refuse', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'];
 
-type Props = { planId: string; statut: string };
+type Props = { planId: string; statut: string; buttonLabel?: string; buttonClassName?: string };
 
-export default function PlanVolAnnulerButton({ planId, statut }: Props) {
+export default function PlanVolAnnulerButton({ planId, statut, buttonLabel, buttonClassName }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [loading, setLoading] = useState(false);
@@ -113,9 +113,9 @@ export default function PlanVolAnnulerButton({ planId, statut }: Props) {
         type="button"
         onClick={openModal}
         disabled={loading}
-        className="text-sm text-red-400 hover:underline disabled:opacity-50"
+        className={buttonClassName ?? "text-sm text-red-400 hover:underline disabled:opacity-50"}
       >
-        Annuler
+        {buttonLabel ?? 'Annuler'}
       </button>
       {modal}
     </>
