@@ -14,7 +14,7 @@ interface FlightStripBoardWrapperProps {
   onlineSessions?: OnlineSession[];
 }
 
-export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcPosition, atcAeroport, onlineSessions }: FlightStripBoardWrapperProps) {
+export default function FlightStripBoardWrapper({ allStrips, atcPosition, atcAeroport, onlineSessions }: FlightStripBoardWrapperProps) {
   // État local des strips : initialisé depuis le SSR, mis à jour via API rapide
   const [strips, setStrips] = useState<StripData[]>(allStrips);
   const [activatedPlanIds, setActivatedPlanIds] = useState<Set<string>>(new Set());
@@ -24,20 +24,6 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcP
   useEffect(() => {
     setStrips(allStrips);
   }, [allStrips]);
-
-  // Nettoyer les activations locales si un strip disparaît du serveur
-  useEffect(() => {
-    const valid = new Set(strips.map((s) => s.id));
-    setActivatedPlanIds((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      prev.forEach((id) => {
-        if (valid.has(id)) next.add(id);
-        else changed = true;
-      });
-      return changed ? next : prev;
-    });
-  }, [strips]);
 
   /**
    * refreshStrips — fetch rapide depuis /api/atc/strips (sans router.refresh).
@@ -107,7 +93,8 @@ export default function FlightStripBoardWrapper({ allStrips, plansATraiter, atcP
 
   // Filtrer : exclure les plans « à traiter » non encore activés
   const visibleStrips = strips.filter((strip) => {
-    const isATraiter = plansATraiter.includes(strip.id);
+    // Use the current strip, not the older server-rendered pending list.
+    const isATraiter = ['depose', 'en_attente'].includes(strip.statut);
     const isActivated = activatedPlanIds.has(strip.id);
     if (isATraiter && !isActivated) return false;
     return true;

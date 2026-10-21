@@ -248,6 +248,8 @@ export default function AtcAcceptTransfertSidebar({
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
+      handleActiverPlan(planId);
+      window.dispatchEvent(new CustomEvent('atc-strips-refresh'));
       startTransition(() => router.refresh());
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erreur');

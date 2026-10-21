@@ -47,7 +47,7 @@ export async function GET() {
       `)
       .eq('current_holder_user_id', user.id)
       .or('automonitoring.eq.false,automonitoring.is.null')
-      .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
+      .in('statut', ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture', 'depose', 'en_attente'])
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -158,13 +158,18 @@ export async function GET() {
  * Même logique qu'atc/page.tsx.
  */
 async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAdminClient>): Promise<Response> {
-  const { data: plansRaw } = await admin
+  const { data: plansRaw, error } = await admin
     .from('plans_vol')
     .select('*')
     .eq('current_holder_user_id', userId)
     .or('automonitoring.eq.false,automonitoring.is.null')
-    .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
+    .in('statut', ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture', 'depose', 'en_attente'])
     .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error('GET /api/atc/strips fallback:', error.message);
+    return NextResponse.json({ error: 'Impossible de charger les strips' }, { status: 503 });
+  }
 
   const strips: StripData[] = await Promise.all((plansRaw ?? []).map(async (plan) => {
     let immatriculation: string | null = null;
