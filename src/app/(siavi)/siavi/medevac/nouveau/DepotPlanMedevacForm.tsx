@@ -520,7 +520,7 @@ export default function DepotPlanMedevacForm({ flotte }: Props) {
         );
       })}
 
-      {selectedAircraft && <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p className="font-semibold">Recette estimée : {estimatedRevenue.toLocaleString('fr-FR')} F$</p><p className="mt-1">50 % au SIAVI, 50 % à partager entre les participants du rapport. Estimation sur {plannedMinutes} min prévues ; versement final selon la durée enregistrée, au maximum 1 000 000 F$ par mission.</p></section>}
+      {selectedAircraft && <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p className="font-semibold">Recette estimée : {estimatedRevenue.toLocaleString('fr-FR')} F$</p><p className="mt-1">50 % au SIAVI, 50 % à partager entre les participants du rapport. Estimation sur {plannedMinutes} min prévues ; versement final selon la durée enregistrée, au maximum 2 000 000 F$ par mission.</p></section>}
       {/* Bouton ajouter destination */}
       {segments.length < MAX_SEGMENTS && (
         <button type="button" onClick={addSegment}

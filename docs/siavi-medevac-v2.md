@@ -28,7 +28,7 @@ Les trois fonctions gardent les droits SIAVI existants. La prise de service au s
 - Pompier : 100 000 F$/heure, au prorata du temps enregistré.
 - AFIS : 200 000 F$/heure, au prorata du temps enregistré.
 - Appel reçu et décroché : 50 000 F$ une seule fois par appel, en Pompier ou AFIS ; les appels à soi-même sont exclus.
-- Avion MEDEVAC : 150 000 + 5 000 F$ par minute enregistrée, plafond 1 000 000 F$.
+- Avion MEDEVAC : 150 000 + 5 000 F$ par minute enregistrée, plafond 2 000 000 F$.
 - Hélicoptère MEDEVAC : 100 000 + 3 000 F$/min sur les 60 premières minutes, puis 2 000 F$/min, plafond 800 000 F$.
 
 Le revenu porte sur la mission entière, en additionnant les étapes clôturées. 50 % vont au compte SIAVI ; le reste est réparti également entre les participants sélectionnés dans le rapport, pilote inclus. Les éventuels F$ indivisibles sont distribués dans un ordre stable. Le calcul définitif se fait sur les horaires stockés, sans utiliser la chronologie libre saisie dans le rapport.
