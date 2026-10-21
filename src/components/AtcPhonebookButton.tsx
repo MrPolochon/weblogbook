@@ -1,5 +1,8 @@
 'use client';
 
+import { atcStationLabel } from '@/lib/atc-positions';
+
+
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { BookText, X, Volume2, PhoneCall } from 'lucide-react';
@@ -234,7 +237,7 @@ function AtcList({ search, posFilter, onDial }: { search: string; posFilter: str
       if (!posCode) continue;
       const num = `+14${aeroCode}${posCode}`;
       if (q) {
-        const hay = `${icao} ${p.toUpperCase()} ${num} ${aeroCode}${posCode}`;
+        const hay = `${icao} ${p.toUpperCase()} ${atcStationLabel(icao, p, "").toUpperCase()} ${num} ${aeroCode}${posCode}`;
         if (!hay.includes(q)) continue;
       }
       rows.push({ icao, position: p, number: num });
@@ -251,9 +254,9 @@ function AtcList({ search, posFilter, onDial }: { search: string; posFilter: str
           type="button"
           onClick={() => onDial(r.number)}
           className="w-full grid grid-cols-[1fr_auto_auto] gap-2 items-center px-2 py-1.5 rounded bg-slate-800 hover:bg-emerald-500/20 hover:border-emerald-500/40 border border-transparent transition-colors text-left"
-          title={`${r.icao} ${r.position}`}
+          title={atcStationLabel(r.icao, r.position, `${r.icao} ${r.position}`)}
         >
-          <span className="font-mono text-slate-100">{r.icao}</span>
+          <span className="font-mono text-slate-100">{atcStationLabel(r.icao, r.position, r.icao)}</span>
           <span className={cn(
             'px-1.5 py-0.5 rounded text-[9px] font-semibold',
             r.position === 'ATIS' ? 'bg-sky-500/20 text-sky-300' :

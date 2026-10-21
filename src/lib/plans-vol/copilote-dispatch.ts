@@ -1,3 +1,4 @@
+import { atcStationLabel } from '@/lib/atc-positions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { notifyUser } from '@/lib/notifications';
 
@@ -171,7 +172,7 @@ export async function dispatchAfterCopiloteValidation(
     kind: 'atc',
     atc_contact: {
       nom: holderProfile?.identifiant || 'Contrôleur',
-      position: `${holder.aeroport} ${posLabel}`,
+      position: atcStationLabel(holder.aeroport, holder.position, `${holder.aeroport} ${posLabel}`),
       aeroport: holder.aeroport,
       frequence: vhfFreq?.frequency ? String(vhfFreq.frequency).replace('.', ' décimal ') : '',
     },

@@ -1,5 +1,8 @@
 'use client';
 
+import { atcStationLabel } from '@/lib/atc-positions';
+
+
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import FlightStrip, { STRIP_MIN_WIDTH, type StripData } from './FlightStrip';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
@@ -342,13 +345,13 @@ export default function FlightStripBoard({
 
     if (allowedPositions.includes('Center')) {
       for (const s of onlineSessions) {
-        if (s.position === 'Center') addTarget(s.aeroport, 'Center', `Center ${s.aeroport}`);
+        if (s.position === 'Center') addTarget(s.aeroport, 'Center', atcStationLabel(s.aeroport, 'Center', `Center ${s.aeroport}`));
       }
     }
     if (atcPosition === 'Center') {
       for (const s of onlineSessions) {
         if (s.position === 'Center' && s.aeroport !== atcAeroport) {
-          addTarget(s.aeroport, 'Center', `Center ${s.aeroport}`);
+          addTarget(s.aeroport, 'Center', atcStationLabel(s.aeroport, 'Center', `Center ${s.aeroport}`));
         }
       }
     }

@@ -1,3 +1,4 @@
+import { atcStationLabel } from '@/lib/atc-positions';
 // Codes de telephonie ATC partages entre frontend (AtcTelephone.tsx,
 // SiaviTelephone.tsx) et backend (/api/atc/telephone/*).
 // Format d'un numero complet : <code_aero (4 chiffres)><code_position (2-4 chiffres)>
@@ -128,7 +129,7 @@ export function parseDialedNumber(num: string, localAirport?: string): ParsedDia
       isLocal: true,
       isEmergency: false,
       isAtis: false,
-      label: position ? `${position} · local` : null,
+      label: position ? atcStationLabel(localAirport ?? "", position, `${position} · local`) : null,
       ready: Boolean(position),
     };
   }
@@ -146,7 +147,7 @@ export function parseDialedNumber(num: string, localAirport?: string): ParsedDia
       isLocal: false,
       isEmergency: false,
       isAtis: false,
-      label: parts.length > 0 ? parts.join(' · ') : null,
+      label: parts.length > 0 ? atcStationLabel(destAeroport ?? '', position ?? '', parts.join(' · ')) : null,
       ready: Boolean(destAeroport && position),
     };
   }

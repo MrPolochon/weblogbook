@@ -250,7 +250,8 @@ function tmaRunwayPhrase(a: TmaAirportDraft, lang: 'en' | 'fr'): string {
   const loc = lang === 'fr' ? `en service à ${a.nom}` : `in service at ${a.nom}`;
   const approach = a.approach?.trim().replace(/\s+approach$/i, '');
   const expected = approach ? (lang === 'fr' ? `, approche ${approach} prévue` : ` expect ${approach} approach`) : '';
-  return `${bits.join(', ')}, ${loc}${expected}`;
+  const runwayWord = lang === 'fr' ? 'Piste' : 'Runway';
+  return `${runwayWord} ${bits.join(', ')}, ${loc}${expected}`;
 }
 
 export function composeTmaRunwayEn(airports: TmaAirportDraft[]): string {

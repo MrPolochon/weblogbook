@@ -1,5 +1,8 @@
 'use client';
 
+import { atcStationLabel } from '@/lib/atc-positions';
+
+
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { RADAR_ENABLED } from '@/lib/radar-status';
@@ -1141,7 +1144,7 @@ export default function AtcMapClient() {
                           s.position === 'Ground' ? 'bg-amber-400' :
                           'bg-emerald-400'
                         }`} />
-                        <span className="text-slate-300">{s.position}</span>
+                        <span className="text-slate-300">{atcStationLabel(s.aeroport, s.position, s.position)}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         {s.callsign && <span className="text-slate-500">{s.callsign}</span>}
