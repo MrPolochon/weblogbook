@@ -1,4 +1,5 @@
 'use client';
+import { MEDEVAC_HOSPITALS, medevacRoutingError, type MedevacMissionType } from '@/lib/siavi/mission-routing';
 
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import { medevacRevenue } from '@/lib/siavi/medevac-remuneration';
@@ -29,6 +30,7 @@ interface SiaviAvion {
 }
 
 interface Props {
+  bases: string[];
   initialAircraftId?: string;
   flotte: SiaviAvion[];
 }
@@ -80,10 +82,11 @@ function emptySegment(): SegmentForm {
   };
 }
 
-export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Props) {
+export default function DepotPlanMedevacForm({ flotte, initialAircraftId, bases }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const submitBusyRef = useRef(false);
+  const [missionType,setMissionType] = useState<MedevacMissionType>('evacuation');
   const [step, setStep] = useState(0);
   const feedbackRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -123,6 +126,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
     }
   }, [aeroport_depart, flotte, siavi_avion_id]);
 
+  const returnBase=bases.includes(aeroport_depart)?aeroport_depart:bases[0];
   const selectedAircraft=flotte.find(a=>a.id===siavi_avion_id);
   const plannedMinutes=segments.reduce((sum,s)=>sum+(Number(s.temps_prev_min)||0),0);
   const estimatedRevenue=medevacRevenue(plannedMinutes,firstTypeAvion(selectedAircraft?.types_avion)?.categorie==='helicoptere');
@@ -214,13 +218,14 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
     if (step === 1) {
       for (let i=0;i<segments.length;i++) {
         const seg=segments[i];
-        if (!seg.aeroport_arrivee || seg.aeroport_arrivee === segmentDepart(i)) { setError('Trajet '+(i+1)+' : choisissez une destination différente du départ.'); return; }
+        if (!seg.aeroport_arrivee) { setError('Trajet '+(i+1)+' : choisissez une destination.'); return; }
         if (!/^\d+$/.test(seg.temps_prev_min) || Number(seg.temps_prev_min)<1 || Number(seg.temps_prev_min)>1440) { setError('Trajet '+(i+1)+' : indiquez une durée entière de 1 à 1 440 minutes.'); return; }
         if (seg.heure_depart && !/^([01]\d|2[0-3]):[0-5]\d$/.test(seg.heure_depart)) { setError('Trajet '+(i+1)+' : utilisez HH:MM en UTC, par exemple 14:30.'); return; }
         if (seg.type_vol==='VFR' && !seg.intentions_vol.trim()) { setError('Trajet '+(i+1)+' : décrivez vos intentions de vol à vue.'); return; }
         if (seg.type_vol==='IFR' && (!seg.sid_depart.trim() || !seg.star_arrivee.trim())) { setError('Trajet '+(i+1)+' : renseignez la SID et la STAR prévues.'); return; }
       }
     }
+    if(step===1){const routingError=medevacRoutingError(missionType,segments.map((s,i)=>({aeroport_depart:segmentDepart(i),aeroport_arrivee:s.aeroport_arrivee})),bases);if(routingError){setError(routingError);return;}}
     setStep(Math.min(2,step+1));
   }
 
@@ -238,17 +243,20 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
       const seg = segments[i];
       const dep = i === 0 ? aeroport_depart : segments[i - 1].aeroport_arrivee;
       if (!seg.aeroport_arrivee) { setError(`Segment ${i + 1} : destination requise.`); return; }
-      if (dep.toUpperCase() === seg.aeroport_arrivee.toUpperCase()) { setError(`Segment ${i + 1} : la destination doit être différente du départ (${dep}).`); return; }
+
       if (!seg.temps_prev_min || parseInt(seg.temps_prev_min, 10) < 1) { setError(`Segment ${i + 1} : temps prévu invalide.`); return; }
       if (seg.type_vol === 'IFR' && (!seg.sid_depart.trim() || !seg.star_arrivee.trim())) { setError(`Segment ${i + 1} : SID et STAR requises pour IFR.`); return; }
       if (seg.type_vol === 'VFR' && !seg.intentions_vol.trim()) { setError(`Segment ${i + 1} : intentions de vol requises pour VFR.`); return; }
     }
 
+    const routingError=medevacRoutingError(missionType,segments.map((s,i)=>({aeroport_depart:segmentDepart(i),aeroport_arrivee:s.aeroport_arrivee})),bases);
+    if(routingError){setError(routingError);return;}
     submitBusyRef.current = true;
     setLoading(true);
 
     try {
       const payload = {
+        mission_type: missionType,
         aeroport_depart: aeroport_depart.toUpperCase(),
         numero_vol: numero_vol.trim(),
         siavi_avion_id,
@@ -274,7 +282,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
       const nbSeg = segments.length;
       const suffixe = nbSeg > 1 ? ` (mission ${nbSeg} segments)` : '';
       if (data.atc_contact) {
-        setSuccess(`Vol MEDEVAC${numero_vol.trim()} déposé${suffixe} ! Contactez ${data.atc_contact.nom} sur ${data.atc_contact.position}${data.atc_contact.frequence ? ` (${data.atc_contact.frequence})` : ''}.`);
+        setSuccess(`Vol ${missionType==='evacuation'?'MEDEVAC':'SIAVI'}${numero_vol.trim()} déposé${suffixe} ! Contactez ${data.atc_contact.nom} sur ${data.atc_contact.position}${data.atc_contact.frequence ? ` (${data.atc_contact.frequence})` : ''}.`);
       } else {
         setSuccess(`Vol MEDEVAC${numero_vol.trim()} déposé en autosurveillance${suffixe}.`);
       }
@@ -293,7 +301,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
 
   return (
     <form noValidate onSubmit={handleSubmit} className="space-y-6 siavi-workspace siavi-enter">
-      <header className="rounded-2xl border border-rose-500/30 bg-slate-900 p-5"><p className="text-xs font-bold uppercase tracking-widest text-rose-300">Préparer une mission sanitaire</p><h2 ref={headingRef} tabIndex={-1} className="mt-2 text-2xl font-bold text-white outline-none">{['1. Choisir votre appareil','2. Construire vos trajets','3. Vérifier et déposer'][step]}</h2><ol aria-label="Étapes de création" className="mt-5 grid grid-cols-3 gap-2">{['Appareil','Trajets','Vérification'].map((label,i)=><li key={label} aria-current={step===i?'step':undefined} className={`rounded-xl border p-3 text-sm font-semibold ${step===i?'border-rose-400 bg-rose-950 text-white':'border-slate-700 text-slate-400'}`}>{i<step?'✓':i+1} · {label}</li>)}</ol><p className="mt-4 text-sm leading-relaxed text-slate-300">Une mission peut contenir un seul trajet ou plusieurs étapes : rejoindre le lieu de prise en charge, transporter le patient, puis revenir à la base. Exemple fictif : IRFD → IBTH → IRFD. Vous gardez le même appareil pour toute la mission.</p></header>
+      <header className="rounded-2xl border border-rose-500/30 bg-slate-900 p-5"><p className="text-xs font-bold uppercase tracking-widest text-rose-300">Préparer un vol du service SIAVI</p><h2 ref={headingRef} tabIndex={-1} className="mt-2 text-2xl font-bold text-white outline-none">{['1. Choisir votre appareil','2. Construire vos trajets','3. Vérifier et déposer'][step]}</h2><ol aria-label="Étapes de création" className="mt-5 grid grid-cols-3 gap-2">{['Appareil','Trajets','Vérification'].map((label,i)=><li key={label} aria-current={step===i?'step':undefined} className={`rounded-xl border p-3 text-sm font-semibold ${step===i?'border-rose-400 bg-rose-950 text-white':'border-slate-700 text-slate-400'}`}>{i<step?'✓':i+1} · {label}</li>)}</ol><p className="mt-4 text-sm leading-relaxed text-slate-300">{missionType==='evacuation'?'Une évacuation peut comporter plusieurs trajets : rejoindre le patient, le transporter vers un hôpital, puis éventuellement revenir à la base. Exemple : IRFD → IBTH → ITKO. Vous gardez le même appareil pour toute la mission.':'Sans évacuation sanitaire, chaque trajet doit se terminer à une base MEDEVAC achetée. Une reconnaissance peut partir et revenir à la même base. Depuis un hôpital, prévoyez le retour à une base.'}</p></header>
       <div ref={feedbackRef} tabIndex={-1} className="space-y-4 outline-none">{error && (
         <div role="alert" className="flex items-start gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/25 text-rose-200">
           <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
@@ -327,14 +335,14 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
         <h2 className="text-lg font-semibold text-rose-100 flex items-center gap-2">
           <HeartPulse className="h-5 w-5 text-rose-300" />
           Appareil et départ de la mission
-        </h2>
+        </h2><fieldset className="space-y-3 rounded-xl border border-slate-600 p-4"><legend className="px-2 font-semibold text-white">Nature du vol</legend><label className="flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="mission-type" checked={missionType==='evacuation'} onChange={()=>setMissionType('evacuation')} className="mt-1"/><span>Évacuation sanitaire — MEDEVAC<br/><span className="text-slate-400">Prise en charge possible sur un autre terrain ; fin de mission à un hôpital ou une base MEDEVAC.</span></span></label><label className="flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="mission-type" checked={missionType==='service'} onChange={()=>setMissionType('service')} className="mt-1"/><span>Vol de service SIAVI — reconnaissance ou retour à base<br/><span className="text-slate-400">Sans évacuation sanitaire : chaque trajet doit se terminer à une base MEDEVAC. Une boucle base → même base est autorisée.</span></span></label></fieldset>
 
         {!flotte.length && <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-100">Aucun appareil disponible pour le moment. Consultez la flotte pour vérifier les missions en cours et les appareils en entretien.</p>}
         <div>
           <label className="block text-sm font-medium text-slate-200 mb-1">Indicatif d&apos;appel</label>
           <div className="flex">
             <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-rose-400/40 bg-rose-950/60 text-rose-200 font-mono font-bold text-sm">
-              MEDEVAC
+              {missionType==='evacuation'?'MEDEVAC':'SIAVI'}
             </span>
             <input
               type="text"
@@ -345,7 +353,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
               aria-label="Numéro de mission MEDEVAC"
               maxLength={4}
             />
-          </div><p className="mt-2 text-xs text-slate-400">Saisissez seulement les chiffres : 01 donne MEDEVAC01.</p>
+          </div><p className="mt-2 text-xs text-slate-400">Saisissez seulement les chiffres : 01 donne {missionType==='evacuation'?'MEDEVAC01':'SIAVI01'}.</p>
         </div>
 
         <div>
@@ -390,6 +398,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
 
       </section>
       <section hidden={step!==1} className="space-y-5"><div className="rounded-xl border border-sky-500/30 bg-sky-950/30 p-4 text-sm leading-relaxed text-sky-100"><p className="font-semibold">Un trajet = un décollage et un atterrissage</p><p className="mt-2">Ajoutez seulement les trajets que vous allez effectuer, dans l’ordre. Le départ du trajet suivant reprend automatiquement votre dernière destination. Jusqu’à 5 trajets par mission.</p><p className="mt-2">La durée correspond au temps de vol de ce trajet, pas à la mission entière. Les horaires UTC sont facultatifs.</p></div>
+      <aside className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-sm text-emerald-100"><p className="font-semibold">Où terminer la mission ?</p><p className="mt-2">Bases MEDEVAC achetées : {bases.length?bases.join(', '):'aucune base achetée pour le moment'}.</p><p className="mt-2">Hôpitaux (évacuation uniquement) : {Object.entries(MEDEVAC_HOSPITALS).map(([code,name])=>code+' — '+name).join(' ; ')}.</p><p className="mt-2">Exemples : IRFD → IBTH → ITKO pour une évacuation ; IRFD → IKFL → IMLR → IRFD pour une prise en charge avec retour ; IRFD → IRFD pour une reconnaissance si IRFD est une base achetée.</p></aside>
       {/* Segments */}
       {segments.map((seg, index) => {
         const dep = segmentDepart(index);
@@ -414,7 +423,6 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                   </span>
                 )}
               </h3>
-              {segments.length<MAX_SEGMENTS && aeroport_depart && segments[segments.length-1].aeroport_arrivee && segments[segments.length-1].aeroport_arrivee!==aeroport_depart && <button type="button" onClick={()=>setSegments(prev=>[...prev,{...emptySegment(),aeroport_arrivee:aeroport_depart}])} className="min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 font-semibold text-slate-200">Ajouter un trajet de retour à {aeroport_depart}</button>}
       {segments.length > 1 && (
                 <button type="button" onClick={() => removeSegment(index)}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-300 hover:bg-rose-950/40 text-sm">
@@ -432,11 +440,11 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Destination</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Destination · {missionType==='service'?'base MEDEVAC requise':index===segments.length-1?'hôpital ou base pour finir':'escale de prise en charge possible'}</label>
                 <select aria-label={`Destination du trajet ${index+1}`} value={seg.aeroport_arrivee} onChange={e => updateSegment(index, { aeroport_arrivee: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
                   <option value="">Choisir...</option>
-                  {aeroports.filter(a => a.code !== dep.toUpperCase()).map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
+                  {aeroports.filter(a => missionType==='evacuation'||bases.includes(a.code)).map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
                 </select>
               </div>
             </div>
@@ -558,6 +566,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
       })}
 
       {selectedAircraft && <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p className="font-semibold">Recette estimée : {estimatedRevenue.toLocaleString('fr-FR')} F$</p><p className="mt-1">50 % au SIAVI, 50 % à partager entre les participants du rapport. Estimation sur {plannedMinutes} min prévues ; versement final selon la durée enregistrée, au maximum {firstTypeAvion(selectedAircraft.types_avion)?.categorie==='helicoptere'?'800 000':'2 000 000'} F$ par mission.</p></section>}
+{segments.length<MAX_SEGMENTS && returnBase && segments[segments.length-1].aeroport_arrivee && segments[segments.length-1].aeroport_arrivee!==returnBase && <button type="button" onClick={()=>setSegments(prev=>[...prev,{...emptySegment(),aeroport_arrivee:returnBase}])} className="min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 font-semibold text-slate-200">Ajouter un trajet de retour à la base {returnBase}</button>}
       {/* Bouton ajouter destination */}
       {segments.length < MAX_SEGMENTS && (
         <button type="button" onClick={addSegment}
@@ -575,7 +584,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
       )}
 
       </section>
-      {step===2 && <section className="space-y-5 rounded-2xl border border-rose-500/30 bg-slate-900 p-5"><h3 className="text-xl font-bold text-white">Votre mission MEDEVAC{numero_vol}</h3><p className="text-slate-300">{selectedAircraft?.immatriculation} · {firstTypeAvion(selectedAircraft?.types_avion)?.nom}</p><ol className="space-y-3">{segments.map((seg,i)=><li key={i} className="rounded-xl border border-slate-700 p-4"><p className="font-mono font-bold text-white">{i+1}. {segmentDepart(i)} → {seg.aeroport_arrivee}</p><p className="mt-2 text-sm text-slate-300">{seg.type_vol} · {seg.temps_prev_min} min {seg.heure_depart?'· '+seg.heure_depart+' UTC':''}</p><p className="mt-2 break-words text-sm text-slate-400">{seg.type_vol==='VFR'?seg.intentions_vol:[seg.sid_depart,seg.route_ifr,seg.star_arrivee].filter(Boolean).join(' · ')}</p></li>)}</ol><div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4"><h3 className="font-semibold text-cyan-100">Comment sera suivi votre premier départ ?</h3><label className="mt-3 flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="atc-mode" checked={!vol_sans_atc} onChange={()=>setVolSansAtc(false)} className="mt-1"/><span>Demander la prise en charge ATC<br/><span className="text-slate-400">Le site cherche un contrôleur au départ. S’il n’y en a aucun, vous pourrez confirmer l’autosurveillance.</span></span></label><label className="mt-4 flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="atc-mode" checked={vol_sans_atc} onChange={()=>setVolSansAtc(true)} className="mt-1"/><span>Vol sans ATC · autosurveillance<br/><span className="text-slate-400">À utiliser en l’absence de contrôle : vous gérez le suivi du vol depuis votre console MEDEVAC.</span></span></label></div><div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-sm text-emerald-100"><p className="font-semibold">Estimation de la mission : {estimatedRevenue.toLocaleString('fr-FR')} F$ pour {plannedMinutes} min prévues</p><p className="mt-2">50 % au SIAVI ; 50 % à partager entre les participants choisis dans le rapport final. La rémunération réelle dépend de la durée enregistrée, avec un plafond de {firstTypeAvion(selectedAircraft?.types_avion)?.categorie==='helicoptere'?'800 000':'2 000 000'} F$.</p></div><div className="text-sm leading-relaxed text-slate-300"><h3 className="font-semibold text-white">Après le dépôt</h3><ol className="mt-2 list-decimal space-y-2 pl-5"><li>Ouvrez votre console MEDEVAC pour le transpondeur et le suivi du vol. Avec un ATC, attendez sa prise en charge et suivez ses instructions.</li><li>Après chaque atterrissage, clôturez le trajet, puis activez le suivant s’il y en a un.</li><li>Après le dernier trajet, remplissez le rapport et sélectionnez les participants pour répartir les salaires.</li></ol></div></section>}
+      {step===2 && <section className="space-y-5 rounded-2xl border border-rose-500/30 bg-slate-900 p-5"><h3 className="text-xl font-bold text-white">Votre vol {missionType==='evacuation'?'MEDEVAC':'SIAVI'}{numero_vol}</h3><p className="text-sm font-semibold text-rose-200">{missionType==='evacuation'?'Évacuation sanitaire — MEDEVAC':'Vol de service SIAVI — hors évacuation'}</p><p className="text-slate-300">{selectedAircraft?.immatriculation} · {firstTypeAvion(selectedAircraft?.types_avion)?.nom}</p><ol className="space-y-3">{segments.map((seg,i)=><li key={i} className="rounded-xl border border-slate-700 p-4"><p className="font-mono font-bold text-white">{i+1}. {segmentDepart(i)} → {seg.aeroport_arrivee}</p><p className="mt-2 text-sm text-slate-300">{seg.type_vol} · {seg.temps_prev_min} min {seg.heure_depart?'· '+seg.heure_depart+' UTC':''}</p><p className="mt-2 break-words text-sm text-slate-400">{seg.type_vol==='VFR'?seg.intentions_vol:[seg.sid_depart,seg.route_ifr,seg.star_arrivee].filter(Boolean).join(' · ')}</p></li>)}</ol><div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4"><h3 className="font-semibold text-cyan-100">Comment sera suivi votre premier départ ?</h3><label className="mt-3 flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="atc-mode" checked={!vol_sans_atc} onChange={()=>setVolSansAtc(false)} className="mt-1"/><span>Demander la prise en charge ATC<br/><span className="text-slate-400">Le site cherche un contrôleur au départ. S’il n’y en a aucun, vous pourrez confirmer l’autosurveillance.</span></span></label><label className="mt-4 flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="atc-mode" checked={vol_sans_atc} onChange={()=>setVolSansAtc(true)} className="mt-1"/><span>Vol sans ATC · autosurveillance<br/><span className="text-slate-400">À utiliser en l’absence de contrôle : vous gérez le suivi du vol depuis votre console MEDEVAC.</span></span></label></div><div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-sm text-emerald-100"><p className="font-semibold">Estimation de la mission : {estimatedRevenue.toLocaleString('fr-FR')} F$ pour {plannedMinutes} min prévues</p><p className="mt-2">50 % au SIAVI ; 50 % à partager entre les participants choisis dans le rapport final. La rémunération réelle dépend de la durée enregistrée, avec un plafond de {firstTypeAvion(selectedAircraft?.types_avion)?.categorie==='helicoptere'?'800 000':'2 000 000'} F$.</p></div><div className="text-sm leading-relaxed text-slate-300"><h3 className="font-semibold text-white">Après le dépôt</h3><ol className="mt-2 list-decimal space-y-2 pl-5"><li>Ouvrez votre console MEDEVAC pour le transpondeur et le suivi du vol. Avec un ATC, attendez sa prise en charge et suivez ses instructions.</li><li>Après chaque atterrissage, clôturez le trajet, puis activez le suivant s’il y en a un.</li><li>Après le dernier trajet, remplissez le rapport et sélectionnez les participants pour répartir les salaires.</li></ol></div></section>}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4">{step>0?<button type="button" disabled={loading||!!success} onClick={()=>{setStep(step-1);setError(null);setShowNoAtcConfirm(false);}} className="min-h-12 rounded-xl border border-slate-600 px-5 font-semibold text-slate-200">Retour · modifier</button>:<Link href="/siavi/flotte" className="min-h-12 rounded-xl border border-slate-600 px-5 py-3 text-slate-200">Consulter la flotte</Link>}{step<2&&<button type="button" onClick={advanceStep} className="min-h-12 rounded-xl bg-rose-700 px-5 font-bold text-white">{step===0?'Continuer vers les trajets':'Vérifier ma mission'} →</button>}</div>
       {step===2 && <button type="submit" disabled={loading || !!success}
         className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50 text-white rounded-xl font-bold text-lg shadow-lg transition-all">

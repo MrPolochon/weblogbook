@@ -132,6 +132,7 @@ export default async function SiaviPlanPage({ params, medevacOnly = false }: { p
         <div className="flex-1">
           <div className="flex w-full flex-col items-stretch gap-3 sm:w-auto">
             <h1 className="text-2xl font-bold text-rose-100 font-mono">{plan.numero_vol}</h1>
+            {plan.siavi_avion_id && <p className="mt-1 text-sm text-rose-200">{plan.medevac_mission_type === 'service' ? 'Vol de service SIAVI · retour à une base' : 'MEDEVAC · évacuation sanitaire'}</p>}
             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-sm font-medium ${statusConfig.bgColor} ${statusConfig.color}`}>
               {statusConfig.icon}
               {statusConfig.label}

@@ -1,3 +1,4 @@
+import { medevacRoutingError } from '@/lib/siavi/mission-routing';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
@@ -32,9 +33,6 @@ function validateSegment(seg: unknown, index: number): { ok: true; seg: SegmentI
   const aa = String(s.aeroport_arrivee || '').toUpperCase();
   if (!CODES_OACI_VALIDES.has(ad) || !CODES_OACI_VALIDES.has(aa)) {
     return { ok: false, error: `Segment ${index + 1} : aéroports invalides.` };
-  }
-  if (ad === aa) {
-    return { ok: false, error: `Segment ${index + 1} : départ et arrivée identiques.` };
   }
   const t = Number(s.temps_prev_min);
   if (!Number.isFinite(t) || t < 1) {
@@ -84,7 +82,8 @@ export async function POST(request: Request) {
     if(groundSession) return NextResponse.json({error:'Quittez votre service Pompier ou AFIS avant de démarrer une mission MEDEVAC.'},{status:409});
 
     const body = await request.json();
-    const { aeroport_depart, numero_vol, siavi_avion_id, vol_sans_atc, segments } = body;
+    const { aeroport_depart, numero_vol, siavi_avion_id, vol_sans_atc, segments, mission_type } = body;
+    if (!['evacuation','service'].includes(mission_type)) return NextResponse.json({error:'Choisissez la nature de la mission : évacuation sanitaire ou vol de service.'},{status:400});
 
     // -- Validations globales --
     const ad0 = String(aeroport_depart || '').toUpperCase();
@@ -123,7 +122,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const numeroVolFinal = `MEDEVAC${String(numero_vol).trim()}`;
+    const {data:bases,error:baseError}=await admin.from('siavi_hubs').select('aeroport_oaci');
+    if(baseError)return NextResponse.json({error:'Impossible de vérifier les bases MEDEVAC.'},{status:503});
+    const routingError=medevacRoutingError(mission_type,segmentsValidated,(bases??[]).map(b=>b.aeroport_oaci));
+    if(routingError)return NextResponse.json({error:routingError},{status:400});
+    const numeroVolFinal = `${mission_type==='service'?'SIAVI':'MEDEVAC'}${String(numero_vol).trim()}`;
     for (const seg of segmentsValidated) {
       const slotError = await checkMajorFlight(user.id,seg.aeroport_depart,seg.aeroport_arrivee,heureDepartToIso(seg.heure_depart),seg.temps_prev_min,numeroVolFinal);
       if (slotError) return NextResponse.json({ error: slotError }, { status: 409 });
@@ -181,6 +184,7 @@ export async function POST(request: Request) {
     const buildInsertFromSegment = (seg: SegmentInput, holderFields: Record<string, unknown>, mission: { id: string | null; index: number | null; total: number | null }) => ({
       pilote_id: user.id,
       medevac_remuneration_version: 2,
+      medevac_mission_type: mission_type,
       aeroport_depart: seg.aeroport_depart,
       aeroport_arrivee: seg.aeroport_arrivee,
       numero_vol: numeroVolFinal,

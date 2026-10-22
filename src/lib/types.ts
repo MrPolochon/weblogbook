@@ -215,6 +215,7 @@ export interface PlanVol {
 
   // MEDEVAC multi-segments
   siavi_avion_id?: string | null;
+  medevac_mission_type?: 'evacuation' | 'service';
   medevac_mission_id?: string | null;
   medevac_segment_index?: number | null;
   medevac_total_segments?: number | null;

@@ -40,6 +40,8 @@ export default async function NouveauMedevacPage({ searchParams }: { searchParam
 
   const { data: activeAircraft, error: activeError } = await admin.from('plans_vol').select('siavi_avion_id').not('siavi_avion_id','is',null).in('statut',['depose','en_attente','accepte','en_cours','automonitoring','en_attente_cloture','en_pause','planifie_suivant']);
   if(activeError || fleetError) throw new Error('Impossible de vérifier la disponibilité des appareils.');
+  const {data:bases,error:baseError}=await admin.from('siavi_hubs').select('aeroport_oaci');
+  if(baseError)throw new Error('Impossible de charger les bases MEDEVAC.');
   const busyAircraft = new Set((activeAircraft??[]).map(p=>p.siavi_avion_id));
   const availableFleet = (flotte??[]).filter(a=>!busyAircraft.has(a.id));
   return (
@@ -60,7 +62,7 @@ export default async function NouveauMedevacPage({ searchParams }: { searchParam
         </div>
       </div>
 
-      <DepotPlanMedevacForm flotte={availableFleet} initialAircraftId={appareil} />
+      <DepotPlanMedevacForm bases={(bases??[]).map(b=>b.aeroport_oaci)} flotte={availableFleet} initialAircraftId={appareil} />
     </div>
   );
 }

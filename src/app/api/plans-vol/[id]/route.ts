@@ -1,3 +1,4 @@
+import { validateMedevacItineraryChange } from '@/lib/siavi/mission-routing-server';
 export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -544,6 +545,10 @@ export async function PATCH(
         if (!star_arrivee || !String(star_arrivee).trim()) return NextResponse.json({ error: 'STAR d\'arrivee requise pour IFR.' }, { status: 400 });
       }
 
+      if(plan.siavi_avion_id && (ad!==plan.aeroport_depart || aa!==plan.aeroport_arrivee)) {
+        const routingError=await validateMedevacItineraryChange(admin,id,{aeroport_depart:ad,aeroport_arrivee:aa});
+        if(routingError)return NextResponse.json({error:routingError},{status:400});
+      }
       // Récupérer toutes les sessions ATC de l'aéroport en une seule requête,
       // puis choisir la position la plus prioritaire selon ORDRE_ACCEPTATION_PLANS.
       const { data: sessionsAD } = await admin
