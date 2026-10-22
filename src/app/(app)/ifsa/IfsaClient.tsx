@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useTransition } from 'react';
+import { ifsaSanctionStatus, matchesIfsaSanctionFilter } from '@/lib/ifsa-sanction-status';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -62,6 +63,8 @@ interface EnqueteEditState {
 }
 
 interface Sanction {
+  amende_payee?: boolean;
+  amende_payee_at?: string | null;
   id: string;
   type_sanction: string;
   cible_type: string;
@@ -655,9 +658,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const filteredSanctions = useMemo(() => {
     const search = sanctionSearch.trim().toLowerCase();
     return sanctions.filter((s) => {
-      if (sanctionStatutFilter === 'actives' && !s.actif) return false;
-      if (sanctionStatutFilter === 'levees' && s.actif) return false;
-      if (sanctionStatutFilter === 'amendes_impayees' && (!s.actif || s.type_sanction !== 'amende')) return false;
+      if (!matchesIfsaSanctionFilter(s, sanctionStatutFilter)) return false;
       if (!search) return true;
       const haystack = [
         s.type_sanction,
@@ -1645,7 +1646,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                 />
               </div>
               <div className="inline-flex p-0.5 rounded-lg bg-slate-900/60 border border-slate-700/60">
-                {(['actives', 'all', 'amendes_impayees', 'levees'] as const).map((f) => (
+                {(['actives', 'all', 'amendes_impayees', 'amendes_payees', 'levees'] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setSanctionStatutFilter(f)}
@@ -1655,7 +1656,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         : 'text-slate-400 hover:text-slate-200'
                     }`}
                   >
-                    {f === 'all' ? 'Toutes' : f === 'actives' ? 'Actives' : f === 'amendes_impayees' ? 'Amendes impayées' : 'Levées'}
+                    {f === 'all' ? 'Toutes' : f === 'actives' ? 'Actives' : f === 'amendes_impayees' ? 'Amendes impayées' : f === 'amendes_payees' ? 'Amendes payées' : 'Levées'}
                   </button>
                 ))}
               </div>
@@ -1674,7 +1675,9 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
             <div className="space-y-3 stagger-enter">
               {filteredSanctions.map((sanc) => {
                 const typeInfo = TYPES_SANCTIONS.find(t => t.value === sanc.type_sanction);
-                const isAmendeImpayee = sanc.type_sanction === 'amende' && sanc.actif;
+                const statutSanction = ifsaSanctionStatus(sanc);
+                const isAmendeImpayee = statutSanction === 'impayee';
+                const isAmendePayee = statutSanction === 'payee';
                 return (
                   <div
                     key={sanc.id}
@@ -1686,7 +1689,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                         : 'bg-slate-800/30 border-slate-700/50 opacity-70 hover:opacity-100'
                     }`}
                   >
-                    {sanc.actif && (
+                    {sanc.actif && !isAmendePayee && (
                       <span aria-hidden className="absolute top-3 right-3 inline-flex h-2 w-2">
                         <span className={`absolute inline-flex h-full w-full rounded-full opacity-75 animate-ping ${isAmendeImpayee ? 'bg-amber-400' : 'bg-red-400'}`}></span>
                         <span className={`relative inline-flex rounded-full h-2 w-2 ${isAmendeImpayee ? 'bg-amber-400' : 'bg-red-400'}`}></span>
@@ -1698,10 +1701,10 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                           <span className={`text-sm font-semibold ${typeInfo?.color || 'text-slate-400'}`}>
                             {typeInfo?.label || sanc.type_sanction}
                           </span>
-                          {!sanc.actif && (
+                          {(statutSanction === 'levee' || isAmendePayee) && (
                             <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 inline-flex items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" />
-                              Levée
+                              {isAmendePayee ? 'Payée' : sanc.type_sanction === 'amende' ? 'Levée sans paiement' : 'Levée'}
                             </span>
                           )}
                           {isAmendeImpayee && (
@@ -1722,16 +1725,17 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
                           <span>Par: <span className="text-slate-300">{sanc.emis_par?.identifiant || 'Système'}</span></span>
                           {sanc.duree_jours && <span className="text-orange-300">Durée: {sanc.duree_jours} j</span>}
                           {sanc.montant_amende && <span className="text-amber-300 font-semibold">{sanc.montant_amende.toLocaleString('fr-FR')} F$</span>}
-                          {sanc.cleared_by && (
+                          {!isAmendePayee && sanc.cleared_by && (
                             <span className="text-emerald-400">Levée par: {sanc.cleared_by.identifiant}</span>
                           )}
+                          {isAmendePayee && sanc.amende_payee_at && <span className="text-emerald-300">Payée le {toLocaleStringUTC(sanc.amende_payee_at)} UTC</span>}
                           <span className="inline-flex items-center gap-1">
                             <Clock className="h-3 w-3" />
                             {toLocaleDateStringUTC(sanc.created_at)}
                           </span>
                         </div>
                       </div>
-                      {sanc.actif && (
+                      {sanc.actif && !isAmendePayee && (
                         <button
                           onClick={() => handleLeverSanction(sanc.id)}
                           disabled={loading}

@@ -189,8 +189,7 @@ export async function POST(req: NextRequest) {
         amende_payee: true,
         amende_payee_at: new Date().toISOString(),
         amende_payee_par_id: user.id,
-        actif: false,
-        cleared_at: new Date().toISOString()
+        actif: false
       })
       .eq('id', sanction_id);
 

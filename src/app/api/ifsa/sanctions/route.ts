@@ -309,12 +309,15 @@ export async function PATCH(req: NextRequest) {
 
     // Vérifier que la sanction existe et est active
     const { data: existing } = await admin.from('ifsa_sanctions')
-      .select('id, actif, type_sanction, motif, cible_pilote_id, cible_compagnie_id')
+      .select('id, actif, type_sanction, amende_payee, motif, cible_pilote_id, cible_compagnie_id')
       .eq('id', id)
       .single();
 
     if (!existing) {
       return NextResponse.json({ error: 'Sanction introuvable' }, { status: 404 });
+    }
+    if (existing.type_sanction === 'amende' && existing.amende_payee) {
+      return NextResponse.json({ error: 'Cette amende est déjà payée et ne peut pas être levée.' }, { status: 409 });
     }
     if (!existing.actif) {
       return NextResponse.json({ error: 'Cette sanction est déjà levée' }, { status: 400 });
