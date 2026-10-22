@@ -28,6 +28,7 @@ interface SiaviAvion {
 }
 
 interface Props {
+  initialAircraftId?: string;
   flotte: SiaviAvion[];
 }
 
@@ -78,14 +79,14 @@ function emptySegment(): SegmentForm {
   };
 }
 
-export default function DepotPlanMedevacForm({ flotte }: Props) {
+export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
   const submitBusyRef = useRef(false);
 
-  const [aeroport_depart, setAeroportDepart] = useState('');
+  const [aeroport_depart, setAeroportDepart] = useState(flotte.find(a=>a.id===initialAircraftId)?.aeroport_actuel ?? '');
   const [numero_vol, setNumeroVol] = useState('');
-  const [siavi_avion_id, setSiaviAvionId] = useState('');
+  const [siavi_avion_id, setSiaviAvionId] = useState(flotte.find(a=>a.id===initialAircraftId)?.id ?? '');
   const [vol_sans_atc, setVolSansAtc] = useState(false);
   const [showNoAtcConfirm, setShowNoAtcConfirm] = useState(false);
 

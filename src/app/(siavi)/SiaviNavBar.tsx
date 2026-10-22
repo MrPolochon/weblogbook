@@ -22,7 +22,7 @@ interface SiaviNavBarProps {
 export default function SiaviNavBar({ isAdmin, isChief, enService, estAfis, sessionInfo, messagesNonLusCount }: SiaviNavBarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isMedevac = pathname.startsWith('/siavi/medevac');
+  const isMedevac = ['/siavi/medevac', '/siavi/flotte', '/siavi/rapports'].some(path => pathname.startsWith(path));
   const [, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -62,7 +62,7 @@ export default function SiaviNavBar({ isAdmin, isChief, enService, estAfis, sess
   const links = [
 
 
-    { href: '/siavi/flotte', label: 'Flotte', icon: Plane },
+    { href: '/siavi/flotte', label: 'Flotte MEDEVAC', icon: Plane },
     { href: '/siavi/rapports', label: 'Rapports', icon: ClipboardList },
     { href: '/siavi/documents', label: 'Documents', icon: FileText },
     { href: '/siavi/calendrier', label: 'Calendrier', icon: CalendarDays },
@@ -72,7 +72,7 @@ export default function SiaviNavBar({ isAdmin, isChief, enService, estAfis, sess
     ...(isChief ? [{href:'/siavi/brigade',label:'Chef de brigade',icon:LayoutDashboard}] : []),
     ...(isAdmin ? [{ href: '/siavi/admin', label: 'Administration', icon: LayoutDashboard }] : []),
   ];
-  const active = (href: string) => (href === '/siavi/afis' && pathname.startsWith('/siavi/plan/')) || pathname === href || (href !== '/siavi' && pathname.startsWith(`${href}/`));
+  const active = (href: string) => (href === '/siavi/medevac' && isMedevac) || (href === '/siavi/afis' && pathname.startsWith('/siavi/plan/')) || pathname === href || (href !== '/siavi' && pathname.startsWith(`${href}/`));
   const idle = 'border-slate-700/50 bg-slate-950/40 text-slate-200 hover:bg-slate-800 hover:text-white';
 
   return (

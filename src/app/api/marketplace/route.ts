@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
       }
 
     } else if (pour_siavi) {
+      if (avion.est_militaire) return NextResponse.json({ error: 'La flotte MEDEVAC est réservée aux appareils civils.' }, { status: 400 });
       // Achat pour la flotte SIAVI - réservé au Chef de brigade
       const chefOk = await isChefDeBrigade(admin, user.id);
       if (!chefOk) {

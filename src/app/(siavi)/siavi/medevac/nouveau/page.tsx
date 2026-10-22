@@ -5,7 +5,8 @@ import { ArrowLeft, HeartPulse } from 'lucide-react';
 import Link from 'next/link';
 import DepotPlanMedevacForm from './DepotPlanMedevacForm';
 
-export default async function NouveauMedevacPage() {
+export default async function NouveauMedevacPage({ searchParams }: { searchParams: Promise<{ appareil?: string }> }) {
+  const { appareil } = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
@@ -34,7 +35,7 @@ export default async function NouveauMedevacPage() {
   // Charger la flotte SIAVI
   const { data: flotte } = await admin.from('siavi_avions')
     .select('*, types_avion:type_avion_id(id, nom, code_oaci, categorie, capacite_pax, capacite_cargo_kg)')
-    .eq('statut', 'ground')
+    .eq('statut', 'ground').gt('usure_percent', 0)
     .order('aeroport_actuel');
 
   return (
@@ -55,7 +56,7 @@ export default async function NouveauMedevacPage() {
         </div>
       </div>
 
-      <DepotPlanMedevacForm flotte={flotte || []} />
+      <DepotPlanMedevacForm flotte={flotte || []} initialAircraftId={appareil} />
     </div>
   );
 }
