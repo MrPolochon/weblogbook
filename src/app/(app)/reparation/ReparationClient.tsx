@@ -799,6 +799,13 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
               </div>
             )}
 
+            {d.commentaire_entreprise && (
+              <div className="mx-4 mb-3 rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200">
+                <p className="mb-1 font-semibold">Compte rendu de l’entreprise</p>
+                <p className="whitespace-pre-wrap break-words">{d.commentaire_entreprise}</p>
+              </div>
+            )}
+
             {/* Actions */}
             <div className="border-t border-slate-700/30 px-4 py-3 flex gap-2 flex-wrap">
               {d.statut === 'demandee' && (
