@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import { medevacRevenue } from '@/lib/siavi/medevac-remuneration';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AEROPORTS_PTFS } from '@/lib/aeroports-ptfs';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
@@ -83,6 +84,10 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
   const router = useRouter();
   const [, startTransition] = useTransition();
   const submitBusyRef = useRef(false);
+  const [step, setStep] = useState(0);
+  const feedbackRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => { headingRef.current?.focus(); }, [step]);
 
   const [aeroport_depart, setAeroportDepart] = useState(flotte.find(a=>a.id===initialAircraftId)?.aeroport_actuel ?? '');
   const [numero_vol, setNumeroVol] = useState('');
@@ -98,6 +103,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  useEffect(() => { if(error || showNoAtcConfirm || success) { feedbackRef.current?.scrollIntoView({block:'center',behavior:'smooth'}); feedbackRef.current?.focus(); } }, [error,showNoAtcConfirm,success]);
 
   const avionsDisponibles = useMemo(() =>
     flotte.filter(a =>
@@ -161,7 +167,11 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
   }, [segments.map(s => `${s.type_vol}|${s.selectedSidRoute}|${s.selectedStarRoute}|${s.manualRoutePart}`).join('#')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function updateSegment(index: number, patch: Partial<SegmentForm>) {
-    setSegments(prev => prev.map((s, i) => i === index ? { ...s, ...patch } : s));
+    setSegments(prev => prev.map((s, i) => {
+      if(i===index) return {...s,...patch,...(patch.aeroport_arrivee!==undefined && patch.aeroport_arrivee!==s.aeroport_arrivee ? {star_arrivee:'',selectedStarRoute:null,starCustomMode:false}: {})};
+      if(i===index+1 && patch.aeroport_arrivee!==undefined) return {...s,sid_depart:'',selectedSidRoute:null,sidCustomMode:false};
+      return s;
+    }));
   }
 
   function addSegment() {
@@ -171,7 +181,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
 
   function removeSegment(index: number) {
     if (segments.length <= 1) return;
-    setSegments(prev => prev.filter((_, i) => i !== index));
+    setSegments(prev => prev.filter((_, i) => i !== index).map((s,i)=>i===index?{...s,sid_depart:'',selectedSidRoute:null,sidCustomMode:false}:s));
   }
 
   function buildSegmentsPayload() {
@@ -195,8 +205,28 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
     });
   }
 
+  function advanceStep() {
+    setError(null);
+    if (step === 0) {
+      if (!numero_vol.trim() || !/^\d{1,4}$/.test(numero_vol)) { setError('Choisissez un numéro de 1 à 4 chiffres, par exemple 01.'); return; }
+      if (!selectedAircraft || !aeroport_depart) { setError('Choisissez un appareil disponible et son aéroport de départ.'); return; }
+    }
+    if (step === 1) {
+      for (let i=0;i<segments.length;i++) {
+        const seg=segments[i];
+        if (!seg.aeroport_arrivee || seg.aeroport_arrivee === segmentDepart(i)) { setError('Trajet '+(i+1)+' : choisissez une destination différente du départ.'); return; }
+        if (!/^\d+$/.test(seg.temps_prev_min) || Number(seg.temps_prev_min)<1 || Number(seg.temps_prev_min)>1440) { setError('Trajet '+(i+1)+' : indiquez une durée entière de 1 à 1 440 minutes.'); return; }
+        if (seg.heure_depart && !/^([01]\d|2[0-3]):[0-5]\d$/.test(seg.heure_depart)) { setError('Trajet '+(i+1)+' : utilisez HH:MM en UTC, par exemple 14:30.'); return; }
+        if (seg.type_vol==='VFR' && !seg.intentions_vol.trim()) { setError('Trajet '+(i+1)+' : décrivez vos intentions de vol à vue.'); return; }
+        if (seg.type_vol==='IFR' && (!seg.sid_depart.trim() || !seg.star_arrivee.trim())) { setError('Trajet '+(i+1)+' : renseignez la SID et la STAR prévues.'); return; }
+      }
+    }
+    setStep(Math.min(2,step+1));
+  }
+
   async function handleSubmit(e: React.FormEvent, forceNoAtc = false) {
     e.preventDefault();
+    if (step < 2) { advanceStep(); return; }
     if (submitBusyRef.current || success) return;
     setError(null); setSuccess(null);
 
@@ -262,10 +292,10 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 siavi-workspace siavi-enter">
-      <p className="rounded-xl border border-slate-700 bg-slate-900 p-4 text-sm leading-relaxed text-slate-300">Choisissez votre appareil et votre départ, puis ajoutez les trajets à effectuer. La création de la mission vous ouvre directement la console de vol MEDEVAC.</p>
-      {error && (
-        <div className="flex items-start gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/25 text-rose-200">
+    <form noValidate onSubmit={handleSubmit} className="space-y-6 siavi-workspace siavi-enter">
+      <header className="rounded-2xl border border-rose-500/30 bg-slate-900 p-5"><p className="text-xs font-bold uppercase tracking-widest text-rose-300">Préparer une mission sanitaire</p><h2 ref={headingRef} tabIndex={-1} className="mt-2 text-2xl font-bold text-white outline-none">{['1. Choisir votre appareil','2. Construire vos trajets','3. Vérifier et déposer'][step]}</h2><ol aria-label="Étapes de création" className="mt-5 grid grid-cols-3 gap-2">{['Appareil','Trajets','Vérification'].map((label,i)=><li key={label} aria-current={step===i?'step':undefined} className={`rounded-xl border p-3 text-sm font-semibold ${step===i?'border-rose-400 bg-rose-950 text-white':'border-slate-700 text-slate-400'}`}>{i<step?'✓':i+1} · {label}</li>)}</ol><p className="mt-4 text-sm leading-relaxed text-slate-300">Une mission peut contenir un seul trajet ou plusieurs étapes : rejoindre le lieu de prise en charge, transporter le patient, puis revenir à la base. Exemple fictif : IRFD → IBTH → IRFD. Vous gardez le même appareil pour toute la mission.</p></header>
+      <div ref={feedbackRef} tabIndex={-1} className="space-y-4 outline-none">{error && (
+        <div role="alert" className="flex items-start gap-3 p-4 rounded-xl bg-rose-950/40 border border-rose-500/25 text-rose-200">
           <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
           <p className="text-sm">{error}</p>
         </div>
@@ -293,12 +323,13 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
         </div>
       )}
 
-      <div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-5">
+      </div><section hidden={step!==0}><div className="rounded-xl bg-slate-900 border border-rose-500/25 shadow-sm p-6 space-y-5">
         <h2 className="text-lg font-semibold text-rose-100 flex items-center gap-2">
           <HeartPulse className="h-5 w-5 text-rose-300" />
-          1. Appareil et départ de la mission
+          Appareil et départ de la mission
         </h2>
 
+        {!flotte.length && <p role="status" className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-100">Aucun appareil disponible pour le moment. Consultez la flotte pour vérifier les missions en cours et les appareils en entretien.</p>}
         <div>
           <label className="block text-sm font-medium text-slate-200 mb-1">Indicatif d&apos;appel</label>
           <div className="flex">
@@ -311,9 +342,10 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
               onChange={e => setNumeroVol(e.target.value.replace(/\D/g, ''))}
               placeholder="01"
               className="flex-1 px-3 py-2 rounded-r-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono"
+              aria-label="Numéro de mission MEDEVAC"
               maxLength={4}
             />
-          </div>
+          </div><p className="mt-2 text-xs text-slate-400">Saisissez seulement les chiffres : 01 donne MEDEVAC01.</p>
         </div>
 
         <div>
@@ -321,8 +353,8 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
             <MapPin className="inline h-4 w-4 mr-1 text-rose-300" />
             Aéroport de départ initial
           </label>
-          <select value={aeroport_depart} onChange={e => setAeroportDepart(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
+          <select aria-label="Aéroport de départ initial" value={aeroport_depart} onChange={e => {setAeroportDepart(e.target.value);setSegments(prev=>prev.map((s,i)=>i===0?{...s,sid_depart:'',selectedSidRoute:null,sidCustomMode:false}:s));}}
+            className="min-h-12 w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
             <option value="">Choisir...</option>
             {aeroports.map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
           </select>
@@ -331,7 +363,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
         <div>
           <label className="block text-sm font-medium text-slate-200 mb-1">
             <Plane className="inline h-4 w-4 mr-1" />
-            Avion SIAVI
+            Appareil MEDEVAC · avion ou hélicoptère
           </label>
           {avionsDisponibles.length === 0 ? (
             <p className="text-sm text-rose-300 italic">
@@ -340,22 +372,24 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                 : 'Sélectionnez un aéroport de départ'}
             </p>
           ) : (
-            <select value={siavi_avion_id} onChange={e => setSiaviAvionId(e.target.value)}
+            <select aria-label="Appareil MEDEVAC" value={siavi_avion_id} onChange={e => {setSiaviAvionId(e.target.value); const a=flotte.find(a=>a.id===e.target.value); if(a)setAeroportDepart(a.aeroport_actuel);}}
               className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
-              <option value="">Choisir un avion...</option>
+              <option value="">Choisir un appareil...</option>
               {avionsDisponibles.map(a => {
                 const ta = firstTypeAvion(a.types_avion);
                 return (
                   <option key={a.id} value={a.id}>
-                    {a.immatriculation} — {ta?.nom || '?'} ({a.aeroport_actuel}, {Number(a.usure_percent)}% usure)
+                    {a.immatriculation} — {ta?.nom || '?'} ({a.aeroport_actuel}, {Number(a.usure_percent)}% de santé)
                   </option>
                 );
               })}
             </select>
           )}
         </div>
-      </div>
+      {selectedAircraft&&<p className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-3 text-sm text-emerald-100">{firstTypeAvion(selectedAircraft.types_avion)?.categorie==='helicoptere'?'Hélicoptère':'Avion'} · {selectedAircraft.immatriculation} · Position {selectedAircraft.aeroport_actuel} · Santé {Number(selectedAircraft.usure_percent)} %. Le départ doit correspondre à cette position.</p>}</div>
 
+      </section>
+      <section hidden={step!==1} className="space-y-5"><div className="rounded-xl border border-sky-500/30 bg-sky-950/30 p-4 text-sm leading-relaxed text-sky-100"><p className="font-semibold">Un trajet = un décollage et un atterrissage</p><p className="mt-2">Ajoutez seulement les trajets que vous allez effectuer, dans l’ordre. Le départ du trajet suivant reprend automatiquement votre dernière destination. Jusqu’à 5 trajets par mission.</p><p className="mt-2">La durée correspond au temps de vol de ce trajet, pas à la mission entière. Les horaires UTC sont facultatifs.</p></div>
       {/* Segments */}
       {segments.map((seg, index) => {
         const dep = segmentDepart(index);
@@ -371,7 +405,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                 <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-red-600 text-white text-sm font-bold">
                   {index + 1}
                 </span>
-                Segment {index + 1}
+                Trajet {index + 1}
                 {dep && seg.aeroport_arrivee && (
                   <span className="text-sm text-slate-400 font-normal">
                     <span className="font-mono text-rose-200">{dep.toUpperCase()}</span>
@@ -380,7 +414,8 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                   </span>
                 )}
               </h3>
-              {segments.length > 1 && (
+              {segments.length<MAX_SEGMENTS && aeroport_depart && segments[segments.length-1].aeroport_arrivee && segments[segments.length-1].aeroport_arrivee!==aeroport_depart && <button type="button" onClick={()=>setSegments(prev=>[...prev,{...emptySegment(),aeroport_arrivee:aeroport_depart}])} className="min-h-12 w-full rounded-xl border border-slate-600 bg-slate-900 px-4 py-3 font-semibold text-slate-200">Ajouter un trajet de retour à {aeroport_depart}</button>}
+      {segments.length > 1 && (
                 <button type="button" onClick={() => removeSegment(index)}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-300 hover:bg-rose-950/40 text-sm">
                   <Trash2 className="h-4 w-4" />
@@ -391,14 +426,14 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Départ du segment</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Départ du trajet</label>
                 <div className="w-full px-3 py-2 rounded-lg border border-slate-200 bg-slate-800 text-slate-200 font-mono text-sm">
                   {dep ? `${dep.toUpperCase()}` : <span className="italic text-slate-400">Défini par le segment précédent</span>}
                 </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-200 mb-1">Destination</label>
-                <select value={seg.aeroport_arrivee} onChange={e => updateSegment(index, { aeroport_arrivee: e.target.value })}
+                <select aria-label={`Destination du trajet ${index+1}`} value={seg.aeroport_arrivee} onChange={e => updateSegment(index, { aeroport_arrivee: e.target.value })}
                   className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 bg-slate-900">
                   <option value="">Choisir...</option>
                   {aeroports.filter(a => a.code !== dep.toUpperCase()).map(a => <option key={a.code} value={a.code}>{a.code} — {a.nom}</option>)}
@@ -409,7 +444,7 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-200 mb-1">Temps prévu (min)</label>
-                <input type="number" value={seg.temps_prev_min} onChange={e => updateSegment(index, { temps_prev_min: e.target.value })}
+                <input aria-label={`Durée du trajet ${index+1} en minutes`} type="number" value={seg.temps_prev_min} onChange={e => updateSegment(index, { temps_prev_min: e.target.value })}
                   min="1" placeholder="30"
                   className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
               </div>
@@ -432,14 +467,14 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                 </p>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Type de vol</label>
+                <label className="block text-sm font-medium text-slate-200 mb-1">Règles de vol</label>
                 <div className="flex gap-2">
                   {(['VFR', 'IFR'] as const).map(tv => (
                     <button key={tv} type="button" onClick={() => updateSegment(index, { type_vol: tv })}
-                      className={`flex-1 py-2 rounded-lg border text-sm font-bold transition-all ${seg.type_vol === tv
+                      className={`min-h-12 flex-1 py-2 rounded-lg border text-sm font-bold transition-all ${seg.type_vol === tv
                         ? 'bg-red-600 border-red-600 text-white'
                         : 'bg-slate-900 border-rose-400/40 text-rose-200 hover:bg-rose-950/40'}`}>
-                      {tv}
+                      {tv==='VFR'?'VFR · à vue':'IFR · instruments'}
                     </button>
                   ))}
                 </div>
@@ -448,15 +483,15 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
 
             {seg.type_vol === 'VFR' && (
               <div>
-                <label className="block text-sm font-medium text-slate-200 mb-1">Intentions de vol</label>
-                <textarea value={seg.intentions_vol} onChange={e => updateSegment(index, { intentions_vol: e.target.value })}
-                  rows={2} placeholder="Ex: Transit sud-nord, altitude 3500 ft..."
+                <label className="block text-sm font-medium text-slate-200 mb-1">Intentions de vol · où allez-vous et à quelle altitude ?</label>
+                <textarea aria-label={`Intentions VFR du trajet ${index+1}`} value={seg.intentions_vol} onChange={e => updateSegment(index, { intentions_vol: e.target.value })}
+                  rows={2} placeholder="Exemple RP : évacuation vers IBTH, transit côtier à 1 500 ft, arrivée à vue. Adaptez à votre trajet."
                   className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
               </div>
             )}
 
             {seg.type_vol === 'IFR' && (
-              <div className="space-y-4 p-4 rounded-lg bg-rose-950/40 border border-rose-500/25">
+              <div className="space-y-4 p-4 rounded-lg bg-rose-950/40 border border-rose-500/25"><p className="text-sm leading-relaxed text-slate-300">IFR : choisissez la procédure de départ (SID) et d’arrivée (STAR), puis votre route et niveau prévus. La saisie libre sert uniquement à renseigner une procédure prévue ou convenue avec l’ATC ; ne choisissez pas une procédure au hasard.</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-slate-200 mb-1">SID de départ ({dep.toUpperCase() || '?'})</label>
@@ -504,16 +539,16 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-1">Route IFR</label>
-                  <input type="text" value={seg.route_ifr}
-                    onChange={e => updateSegment(index, { route_ifr: e.target.value, manualRoutePart: e.target.value })}
+                  <label className="block text-sm font-medium text-slate-200 mb-1">Route entre la SID et la STAR (facultatif)</label>
+                  <input type="text" value={seg.manualRoutePart}
+                    onChange={e => updateSegment(index, { manualRoutePart: e.target.value })}
                     placeholder="DCT VOR1 AWY VOR2..."
                     className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-200 mb-1">Niveau de croisière</label>
+                  <p className="mb-3 break-words text-xs text-slate-400">Route complète : {buildRouteWithManual(seg.selectedSidRoute,seg.manualRoutePart,seg.selectedStarRoute)||'À compléter'}</p><label className="block text-sm font-medium text-slate-200 mb-1">Niveau de croisière</label>
                   <input type="text" value={seg.niveau_croisiere} onChange={e => updateSegment(index, { niveau_croisiere: e.target.value })}
-                    placeholder="Ex: 350 (= FL350)"
+                    placeholder="Ex: 080 (= FL080, 8 000 ft)"
                     className="w-full px-3 py-2 rounded-lg border border-rose-400/40 text-slate-100 placeholder-slate-400 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono" />
                 </div>
               </div>
@@ -522,28 +557,31 @@ export default function DepotPlanMedevacForm({ flotte, initialAircraftId }: Prop
         );
       })}
 
-      {selectedAircraft && <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p className="font-semibold">Recette estimée : {estimatedRevenue.toLocaleString('fr-FR')} F$</p><p className="mt-1">50 % au SIAVI, 50 % à partager entre les participants du rapport. Estimation sur {plannedMinutes} min prévues ; versement final selon la durée enregistrée, au maximum 2 000 000 F$ par mission.</p></section>}
+      {selectedAircraft && <section className="rounded-xl border border-emerald-500/30 bg-emerald-950/30 p-4 text-sm text-emerald-100"><p className="font-semibold">Recette estimée : {estimatedRevenue.toLocaleString('fr-FR')} F$</p><p className="mt-1">50 % au SIAVI, 50 % à partager entre les participants du rapport. Estimation sur {plannedMinutes} min prévues ; versement final selon la durée enregistrée, au maximum {firstTypeAvion(selectedAircraft.types_avion)?.categorie==='helicoptere'?'800 000':'2 000 000'} F$ par mission.</p></section>}
       {/* Bouton ajouter destination */}
       {segments.length < MAX_SEGMENTS && (
         <button type="button" onClick={addSegment}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-dashed border-rose-400/40 text-rose-200 hover:border-red-500 hover:bg-rose-950/40 transition-colors font-medium">
           <Plus className="h-4 w-4" />
-          Ajouter une destination (segment {segments.length + 1}/{MAX_SEGMENTS})
+          Ajouter le trajet suivant ({segments.length + 1}/{MAX_SEGMENTS})
         </button>
       )}
 
       {segments.length > 1 && (
         <div className="p-4 rounded-xl bg-amber-950/50 border border-amber-200 text-amber-100 text-sm">
-          <p className="font-semibold mb-1">Mission multi-segments ({segments.length} escales)</p>
+          <p className="font-semibold mb-1">Mission en {segments.length} trajets</p>
           <p>Seul le 1<sup>er</sup> segment sera envoyé à l&apos;ATC dès le dépôt. Après chaque atterrissage, clôturez le segment puis activez le suivant depuis votre console MEDEVAC en choisissant la SID/STAR (ou vos intentions VFR).</p>
         </div>
       )}
 
-      <button type="submit" disabled={loading || !!success}
+      </section>
+      {step===2 && <section className="space-y-5 rounded-2xl border border-rose-500/30 bg-slate-900 p-5"><h3 className="text-xl font-bold text-white">Votre mission MEDEVAC{numero_vol}</h3><p className="text-slate-300">{selectedAircraft?.immatriculation} · {firstTypeAvion(selectedAircraft?.types_avion)?.nom}</p><ol className="space-y-3">{segments.map((seg,i)=><li key={i} className="rounded-xl border border-slate-700 p-4"><p className="font-mono font-bold text-white">{i+1}. {segmentDepart(i)} → {seg.aeroport_arrivee}</p><p className="mt-2 text-sm text-slate-300">{seg.type_vol} · {seg.temps_prev_min} min {seg.heure_depart?'· '+seg.heure_depart+' UTC':''}</p><p className="mt-2 break-words text-sm text-slate-400">{seg.type_vol==='VFR'?seg.intentions_vol:[seg.sid_depart,seg.route_ifr,seg.star_arrivee].filter(Boolean).join(' · ')}</p></li>)}</ol><div className="rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-4"><h3 className="font-semibold text-cyan-100">Comment sera suivi votre premier départ ?</h3><label className="mt-3 flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="atc-mode" checked={!vol_sans_atc} onChange={()=>setVolSansAtc(false)} className="mt-1"/><span>Demander la prise en charge ATC<br/><span className="text-slate-400">Le site cherche un contrôleur au départ. S’il n’y en a aucun, vous pourrez confirmer l’autosurveillance.</span></span></label><label className="mt-4 flex items-start gap-3 text-sm text-slate-200"><input type="radio" name="atc-mode" checked={vol_sans_atc} onChange={()=>setVolSansAtc(true)} className="mt-1"/><span>Vol sans ATC · autosurveillance<br/><span className="text-slate-400">À utiliser en l’absence de contrôle : vous gérez le suivi du vol depuis votre console MEDEVAC.</span></span></label></div><div className="rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-4 text-sm text-emerald-100"><p className="font-semibold">Estimation de la mission : {estimatedRevenue.toLocaleString('fr-FR')} F$ pour {plannedMinutes} min prévues</p><p className="mt-2">50 % au SIAVI ; 50 % à partager entre les participants choisis dans le rapport final. La rémunération réelle dépend de la durée enregistrée, avec un plafond de {firstTypeAvion(selectedAircraft?.types_avion)?.categorie==='helicoptere'?'800 000':'2 000 000'} F$.</p></div><div className="text-sm leading-relaxed text-slate-300"><h3 className="font-semibold text-white">Après le dépôt</h3><ol className="mt-2 list-decimal space-y-2 pl-5"><li>Ouvrez votre console MEDEVAC pour le transpondeur et le suivi du vol. Avec un ATC, attendez sa prise en charge et suivez ses instructions.</li><li>Après chaque atterrissage, clôturez le trajet, puis activez le suivant s’il y en a un.</li><li>Après le dernier trajet, remplissez le rapport et sélectionnez les participants pour répartir les salaires.</li></ol></div></section>}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900 p-4">{step>0?<button type="button" disabled={loading||!!success} onClick={()=>{setStep(step-1);setError(null);setShowNoAtcConfirm(false);}} className="min-h-12 rounded-xl border border-slate-600 px-5 font-semibold text-slate-200">Retour · modifier</button>:<Link href="/siavi/flotte" className="min-h-12 rounded-xl border border-slate-600 px-5 py-3 text-slate-200">Consulter la flotte</Link>}{step<2&&<button type="button" onClick={advanceStep} className="min-h-12 rounded-xl bg-rose-700 px-5 font-bold text-white">{step===0?'Continuer vers les trajets':'Vérifier ma mission'} →</button>}</div>
+      {step===2 && <button type="submit" disabled={loading || !!success}
         className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50 text-white rounded-xl font-bold text-lg shadow-lg transition-all">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <HeartPulse className="h-5 w-5" />}
         Créer la mission et ouvrir ma console
-      </button>
+      </button>}
     </form>
   );
 }

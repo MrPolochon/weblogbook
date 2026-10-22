@@ -33,11 +33,15 @@ export default async function NouveauMedevacPage({ searchParams }: { searchParam
   }
 
   // Charger la flotte SIAVI
-  const { data: flotte } = await admin.from('siavi_avions')
+  const { data: flotte, error: fleetError } = await admin.from('siavi_avions')
     .select('*, types_avion:type_avion_id(id, nom, code_oaci, categorie, capacite_pax, capacite_cargo_kg)')
     .eq('statut', 'ground').gt('usure_percent', 0)
     .order('aeroport_actuel');
 
+  const { data: activeAircraft, error: activeError } = await admin.from('plans_vol').select('siavi_avion_id').not('siavi_avion_id','is',null).in('statut',['depose','en_attente','accepte','en_cours','automonitoring','en_attente_cloture','en_pause','planifie_suivant']);
+  if(activeError || fleetError) throw new Error('Impossible de vérifier la disponibilité des appareils.');
+  const busyAircraft = new Set((activeAircraft??[]).map(p=>p.siavi_avion_id));
+  const availableFleet = (flotte??[]).filter(a=>!busyAircraft.has(a.id));
   return (
     <div className="space-y-6">
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-red-600 via-red-700 to-rose-800 p-6 shadow-xl">
@@ -56,7 +60,7 @@ export default async function NouveauMedevacPage({ searchParams }: { searchParam
         </div>
       </div>
 
-      <DepotPlanMedevacForm flotte={flotte || []} initialAircraftId={appareil} />
+      <DepotPlanMedevacForm flotte={availableFleet} initialAircraftId={appareil} />
     </div>
   );
 }
