@@ -60,6 +60,8 @@ interface Demande {
   score_qualite: number | null;
   commentaire_compagnie: string | null;
   commentaire_entreprise: string | null;
+  repare_par_identifiant?: string | null;
+  fin_reparation_at?: string | null;
   created_at: string;
   entreprise_transit_eta_at?: string | null;
   retour_transit_eta_at?: string | null;
@@ -799,6 +801,13 @@ function DemandesTab({ detail, api, flash, busy, onRefresh, router }: {
               </div>
             )}
 
+            {d.repare_par_identifiant && (
+              <p className="mx-4 mb-3 text-sm text-emerald-300">
+                Réparation effectuée par {d.repare_par_identifiant}
+                {d.fin_reparation_at ? ' le ' + new Date(d.fin_reparation_at).toLocaleString('fr-FR') : ''}
+                {d.usure_apres != null ? ' · État final : ' + d.usure_apres + ' %' : ''}
+              </p>
+            )}
             {d.commentaire_entreprise && (
               <div className="mx-4 mb-3 rounded-lg border border-emerald-500/20 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-200">
                 <p className="mb-1 font-semibold">Compte rendu de l’entreprise</p>

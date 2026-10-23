@@ -68,144 +68,17 @@ export async function POST(req: NextRequest) {
 
     const admin = createAdminClient();
 
-    // Récupérer la sanction
-    const { data: sanction, error: sanctionError } = await admin.from('ifsa_sanctions')
-      .select(`
-        *,
-        cible_compagnie:compagnies!cible_compagnie_id(id, nom, pdg_id)
-      `)
-      .eq('id', sanction_id)
-      .eq('type_sanction', 'amende')
-      .eq('actif', true)
-      .eq('amende_payee', false)
-      .single();
-
-    if (sanctionError || !sanction) {
-      return NextResponse.json({ error: 'Amende introuvable ou déjà payée' }, { status: 404 });
-    }
-
-    // Vérifier que l'utilisateur peut payer cette amende
-    const cibleCompagnie = sanction.cible_compagnie ? 
-      (Array.isArray(sanction.cible_compagnie) ? sanction.cible_compagnie[0] : sanction.cible_compagnie) : null;
-    
-    const canPay = 
-      sanction.cible_pilote_id === user.id || // Amende personnelle
-      (cibleCompagnie && cibleCompagnie.pdg_id === user.id); // Amende compagnie et user est PDG
-
-    if (!canPay) {
-      return NextResponse.json({ error: 'Non autorisé à payer cette amende' }, { status: 403 });
-    }
-
-    const montant = sanction.montant_amende;
-    if (!montant || montant <= 0) {
-      return NextResponse.json({ error: 'Montant invalide' }, { status: 400 });
-    }
-
-    // Trouver le compte à débiter
-    let compteADebiter = compte_id;
-    
-    if (compteADebiter) {
-      // Valider que le compte appartient bien à l'utilisateur ou à la compagnie ciblée
-      const { data: compteValid } = await admin.from('felitz_comptes')
-        .select('id, proprietaire_id, compagnie_id')
-        .eq('id', compteADebiter)
-        .single();
-      if (!compteValid) {
-        return NextResponse.json({ error: 'Compte introuvable' }, { status: 404 });
-      }
-      const ownsCompte = compteValid.proprietaire_id === user.id
-        || (cibleCompagnie && compteValid.compagnie_id === cibleCompagnie.id);
-      if (!ownsCompte) {
-        return NextResponse.json({ error: 'Ce compte ne vous appartient pas' }, { status: 403 });
-      }
-    } else {
-      if (cibleCompagnie) {
-        const { data: compteCompagnie } = await admin.from('felitz_comptes')
-          .select('id')
-          .eq('compagnie_id', cibleCompagnie.id)
-          .eq('type', 'entreprise')
-          .single();
-        if (compteCompagnie) compteADebiter = compteCompagnie.id;
-      } else {
-        const { data: comptePerso } = await admin.from('felitz_comptes')
-          .select('id')
-          .eq('proprietaire_id', user.id)
-          .eq('type', 'personnel')
-          .single();
-        if (comptePerso) compteADebiter = comptePerso.id;
-      }
-    }
-
-    if (!compteADebiter) {
-      return NextResponse.json({ error: 'Aucun compte trouvé pour le paiement' }, { status: 400 });
-    }
-
-    // Débit atomique
-    const { data: debitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteADebiter, p_montant: montant });
-    if (!debitOk) {
-      return NextResponse.json({ error: 'Solde insuffisant' }, { status: 400 });
-    }
-
-    // Créer la transaction de débit
-    await admin.from('felitz_transactions').insert({
-      compte_id: compteADebiter,
-      type: 'debit',
-      montant: montant,
-      libelle: `Paiement amende IFSA - ${sanction.motif}`
+    const { data, error } = await admin.rpc('payer_amende_ifsa_atomique', {
+      p_sanction_id: sanction_id,
+      p_acteur_id: user.id,
+      p_compte_id: compte_id || null,
     });
-
-    // Créditer le compte destinataire (IFSA/étatique)
-    if (sanction.compte_destination_id) {
-      const { data: compteDestination } = await admin.from('felitz_comptes')
-        .select('id, solde, vban')
-        .eq('id', sanction.compte_destination_id)
-        .single();
-      
-      if (compteDestination) {
-        await admin.rpc('crediter_compte_safe', { p_compte_id: compteDestination.id, p_montant: montant });
-
-        // Créer la transaction de crédit
-        await admin.from('felitz_transactions').insert({
-          compte_id: compteDestination.id,
-          type: 'credit',
-          montant: montant,
-          libelle: `Amende IFSA reçue - ${sanction.motif}`
-        });
-      }
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: error.code === '42501' ? 403 : 400 });
     }
-
-    // Enregistrer le paiement
-    await admin.from('ifsa_paiements_amendes').insert({
-      sanction_id: sanction_id,
-      montant: montant,
-      paye_par_id: user.id,
-      compte_debit_id: compteADebiter,
-      compte_credit_id: sanction.compte_destination_id
-    });
-
-    // Marquer l'amende comme payée
-    await admin.from('ifsa_sanctions')
-      .update({
-        amende_payee: true,
-        amende_payee_at: new Date().toISOString(),
-        amende_payee_par_id: user.id,
-        actif: false
-      })
-      .eq('id', sanction_id);
-
-    // Notifier l'agent IFSA qui a émis la sanction
-    await admin.from('messages').insert({
-      expediteur_id: user.id,
-      destinataire_id: sanction.emis_par_id,
-      titre: `✅ Amende payée - ${sanction.motif}`,
-      contenu: `L'amende de ${montant} F$ pour "${sanction.motif}" a été payée.`,
-      type_message: 'normal'
-    });
-
-    return NextResponse.json({ 
-      ok: true, 
-      message: `Amende de ${montant} F$ payée avec succès` 
-    });
+    return NextResponse.json({ ...data, message: data?.deja_payee
+      ? 'Cette amende est déjà payée.'
+      : 'Amende de ' + data?.montant + ' F$ payée avec succès' });
   } catch (e) {
     console.error('Amendes POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

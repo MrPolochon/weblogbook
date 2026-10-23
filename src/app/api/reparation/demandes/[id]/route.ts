@@ -521,9 +521,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       return NextResponse.json({ error: 'Avion introuvable ou déjà supprimé.' }, { status: 404 });
     }
 
+    const { data: reparateur } = await admin.from('profiles').select('identifiant').eq('id', user.id).single();
     const { error: demandeUpdErr } = await admin.from('reparation_demandes').update({
       statut: 'terminee',
       fin_reparation_at: new Date().toISOString(),
+      repare_par_id: user.id,
+      repare_par_identifiant: reparateur?.identifiant || user.id,
       usure_apres: usureApres,
       score_qualite: scoresMoyenne,
       prix_total: prixTotal,

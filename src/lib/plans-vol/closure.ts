@@ -736,6 +736,7 @@ export async function envoyerChequesVol(
         titre: `Salaire vol ${numeroVol}`,
         contenu: contenuSalaire,
         type_message: 'cheque_salaire',
+        metadata: { plan_vol_id: plan.id },
         cheque_montant: dest.montant,
         cheque_encaisse: false,
         cheque_destinataire_compte_id: dest.compteId,
@@ -953,7 +954,7 @@ export async function envoyerChequesVol(
       : `\n\nRevenu net: ${revenuLocataire.toLocaleString('fr-FR')} F$\n\nVeuillez encaisser le chèque ci-dessous.`;
 
     const montantCheque = revenuLocataire + taxeAlliance + codeshareTotal;
-    const metadataCheque: { taxe_alliance?: number; codeshare?: number; numero_vol?: string } = {};
+    const metadataCheque: { plan_vol_id: string; taxe_alliance?: number; codeshare?: number; numero_vol?: string } = { plan_vol_id: plan.id };
     if (taxeAlliance > 0) metadataCheque.taxe_alliance = taxeAlliance;
     if (codeshareTotal > 0) metadataCheque.codeshare = codeshareTotal;
     if (numeroVol) metadataCheque.numero_vol = numeroVol;
@@ -984,6 +985,7 @@ export async function envoyerChequesVol(
         destinataire_id: loueurInfo.pdg_id,
         expediteur_id: null,
         titre: `Revenu location - Vol ${numeroVol} (${compagnie.nom})`,
+        metadata: { plan_vol_id: plan.id },
         contenu: `Part loueur: ${revenuLoueur.toLocaleString('fr-FR')} F$\n\nVol ${numeroVol} effectué par ${compagnie.nom}.`,
         type_message: 'cheque_revenu_compagnie',
         cheque_montant: revenuLoueur,
@@ -1167,6 +1169,7 @@ export async function finaliserCloturePlan(
               titre: `Salaire MEDEVAC - Vol ${plan.numero_vol || 'N/A'}`,
               contenu: `Vol MEDEVAC effectué avec succès !\n\nTemps prévu: ${plan.temps_prev_min} min\nTemps réel: ${tempsReelMin} min${arriveePrevueAt ? `\nArrivée prévue: ${formatUtcHHMM(arriveePrevueAt)}\nArrivée réelle: ${formatUtcHHMM(dateCalculTemps)}\nÉcart horaire: ${ecartPonctualiteMin} min` : `\nÉcart durée: ${ecartPonctualiteMin} min`}\n\nRevenu total: ${revenu.toLocaleString('fr-FR')} F$\nVotre part (${pctPilote}%): ${salairePilote.toLocaleString('fr-FR')} F$`,
               type_message: 'cheque_salaire',
+              metadata: { plan_vol_id: plan.id },
               cheque_montant: salairePilote,
               cheque_encaisse: false,
               cheque_destinataire_compte_id: comptePilote.id,

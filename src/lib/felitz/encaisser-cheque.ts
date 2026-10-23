@@ -82,7 +82,7 @@ export async function encaisserChequeMessage(
     return { ok: false, error: 'Compte introuvable', status: 404 };
   }
 
-  const metadata = (message.metadata || {}) as { taxe_alliance?: number; codeshare?: number; numero_vol?: string };
+  const metadata = (message.metadata || {}) as { taxe_alliance?: number; codeshare?: number; numero_vol?: string; flight_origin?: unknown };
   const taxeAlliance = metadata.taxe_alliance ?? 0;
   const codeshare = metadata.codeshare ?? 0;
   const numeroVol = metadata.numero_vol || message.cheque_numero_vol || '';
@@ -101,6 +101,8 @@ export async function encaisserChequeMessage(
     type: 'credit',
     montant: message.cheque_montant,
     libelle: message.cheque_libelle || `Encaissement chèque vol ${numeroVol}`,
+    source_message_id: message.id,
+    flight_origin: metadata.flight_origin || null,
   });
 
   if (taxeAlliance > 0) {
