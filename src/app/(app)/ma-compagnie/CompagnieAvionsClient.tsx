@@ -502,7 +502,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
             {avionsBloques.length} avion(s) bloqué(s) à 0% d&apos;usure
           </div>
           <p className="text-sm text-slate-400">
-            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$), débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$), réparez au hub (50% du prix de l&apos;appareil) ou envoyez l&apos;appareil en{' '}
+            Affrétez des techniciens ({COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$), débloquez pour un vol ferry ({COUT_VOL_FERRY.toLocaleString('fr-FR')} F$), réparez au hub (coût proportionnel aux dégâts, jusqu’à 15 % du prix catalogue) ou envoyez l&apos;appareil en{' '}
             <span className="text-orange-300/90">réparation professionnelle</span> via le lien « Réparation pro » dans Actions (sauf si l&apos;avion est bloqué en attente d&apos;examen staff après incident).
           </p>
         </div>
