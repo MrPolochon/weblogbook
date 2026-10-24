@@ -25,7 +25,7 @@ export default function PublishBulletinForm() {
     } catch (e) { setError(e instanceof Error ? e.message : 'Publication impossible.'); }
     finally { inFlight.current = false; setBusy(false); }
   }
-  if (publishedId) return <div className="card space-y-3" role="status"><p className="text-emerald-300">Le bulletin est publié et archivé.</p><Link href={`/journal/${publishedId}`} className="btn-primary inline-block">Lire et partager le bulletin</Link><button type="button" className="ml-3 text-purple-300" onClick={() => { setPublishedId(null); setTitle(''); setContent(''); setConfirmed(false); setPreview(false); }}>Rédiger un autre bulletin</button></div>;
+  if (publishedId) return <div className="card space-y-3" role="status"><p className="text-emerald-300">Le bulletin est publié et archivé. Tous les membres ont été informés dans leur messagerie.</p><Link href={`/journal/${publishedId}`} className="btn-primary inline-block">Lire et partager le bulletin</Link><button type="button" className="ml-3 text-purple-300" onClick={() => { setPublishedId(null); setTitle(''); setContent(''); setConfirmed(false); setPreview(false); }}>Rédiger un autre bulletin</button></div>;
   return <form onSubmit={publish} className="card space-y-5">
     <fieldset disabled={busy} className="space-y-4 disabled:opacity-70">
       <label className="block space-y-1"><span className="label">Catégorie</span><select className="input w-full" value={category} onChange={e => { setCategory(e.target.value); setConfirmed(false); }}>{BULLETIN_CATEGORIES.map(c => <option key={c}>{c}</option>)}</select></label>
@@ -33,7 +33,7 @@ export default function PublishBulletinForm() {
       <label className="block space-y-1"><span className="label">Texte du bulletin</span><textarea required minLength={10} maxLength={50000} rows={14} className="input w-full resize-y" value={content} onChange={e => { setContent(e.target.value); setConfirmed(false); }} /><span className="text-xs text-slate-500">{content.length.toLocaleString('fr-FR')} / 50 000 caractères · Texte simple, paragraphes conservés.</span></label>
       <button type="button" className="text-purple-300" aria-expanded={preview} onClick={() => setPreview(!preview)}>{preview ? 'Masquer l’aperçu' : 'Relire l’aperçu'}</button>
       {preview && <article className="space-y-3 rounded-xl border border-purple-700 p-4"><p className="text-purple-300">{category} · Aperçu avant publication</p><h2 className="break-words text-xl font-semibold">{title}</h2><p className="whitespace-pre-wrap break-words">{content}</p></article>}
-      <label className="flex items-start gap-2 text-sm text-slate-300"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" /><span>J’ai relu ce bulletin. Je confirme sa publication publique et son archivage permanent. Toute rectification nécessitera un nouveau bulletin.</span></label>
+      <label className="flex items-start gap-2 text-sm text-slate-300"><input type="checkbox" required checked={confirmed} onChange={e => setConfirmed(e.target.checked)} className="mt-1" /><span>J’ai relu ce bulletin. Je confirme sa publication publique et son archivage permanent. Toute rectification nécessitera un nouveau bulletin. Un message avec un aperçu et le lien sera envoyé automatiquement à tous les membres.</span></label>
       {error && <p role="alert" className="text-red-300">{error}</p>}
       <button className="btn-primary" disabled={!confirmed || busy}>{busy ? 'Publication…' : 'Publier et archiver'}</button>
     </fieldset>
