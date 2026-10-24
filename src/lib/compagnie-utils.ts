@@ -71,7 +71,16 @@ export function calculerVolFerryAuto(): { cout: number; dureeMin: number } {
 // RÉPARATION AU HUB (payante)
 // ============================================================
 
-export const FRACTION_REPARATION_HUB = 0.5;
+/** Coût d'une reconstruction complète ; l'entretien courant est proportionnel aux dégâts. */
+export const FRACTION_REPARATION_HUB = 0.15;
+
+export function calculerCoutReparationHub(prixCatalogue: number, santePercent: number): number {
+  if (!Number.isFinite(prixCatalogue) || prixCatalogue < 0 || !Number.isFinite(santePercent)) {
+    throw new Error('Prix ou état technique invalide pour la réparation.');
+  }
+  const degats = (100 - Math.max(0, Math.min(100, santePercent))) / 100;
+  return Math.round(prixCatalogue * FRACTION_REPARATION_HUB * degats);
+}
 
 /** Statuts DB traités comme « au sol » pour la flotte compagnie (`disponible` = legacy). */
 export const STATUTS_AVION_COMPAGNIE_AU_SOL = ['ground', 'disponible'] as const;

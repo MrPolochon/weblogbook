@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { FRACTION_REPARATION_HUB } from '@/lib/compagnie-utils';
+import { calculerCoutReparationHub } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
 
 export async function POST(
@@ -29,7 +29,10 @@ export async function POST(
       .eq('id', avion.type_avion_id)
       .single();
     const prixAvion = typeAvion?.prix || 0;
-    const cout = Math.round(prixAvion * FRACTION_REPARATION_HUB);
+    if (avion.usure_percent == null) {
+      return NextResponse.json({ error: 'État technique inconnu : faites vérifier l’appareil avant réparation.' }, { status: 400 });
+    }
+    const cout = calculerCoutReparationHub(prixAvion, avion.usure_percent);
 
     const nowIso = new Date().toISOString();
     const { data: locationActive } = await admin

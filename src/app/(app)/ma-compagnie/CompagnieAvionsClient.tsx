@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useTransition } from 'react';
 import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import { Plane, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Skull, Sparkles, Trash2, Handshake, Gift, Check } from 'lucide-react';
-import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, FRACTION_REPARATION_HUB, isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
+import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, calculerCoutReparationHub, isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -122,14 +122,14 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
   function getCoutReparationHub(avion: Avion): number {
     const type = Array.isArray(avion.types_avion) ? avion.types_avion[0] : avion.types_avion;
-    return Math.round((type?.prix || 0) * FRACTION_REPARATION_HUB);
+    return calculerCoutReparationHub(type?.prix || 0, avion.usure_percent ?? 0);
   }
 
   async function handleReparer(avionId: string) {
     const avion = avions.find(a => a.id === avionId);
     if (!avion) return;
     const cout = getCoutReparationHub(avion);
-    if (!confirm(`Réparer cet avion au hub ?\n\nCoût : ${cout.toLocaleString('fr-FR')} F$ (50% du prix de l'appareil)`)) return;
+    if (!confirm(`Réparer cet avion au hub ?\n\nCoût : ${cout.toLocaleString('fr-FR')} F$ (proportionnel aux dégâts, maximum 15 % du prix catalogue)`)) return;
     setActionId(avionId);
     try {
       const res = await fetch(`/api/compagnies/avions/${avionId}/reparer`, { method: 'POST' });
