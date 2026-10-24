@@ -18,7 +18,11 @@ export function gateCodesMatch(a: string | null | undefined, b: string | null | 
   const nb = normalizeGateCode(b);
   if (na === nb) return true;
   if (na.replace(/\s/g, '') === nb.replace(/\s/g, '')) return true;
-  const numa = extractGateNumeric(na);
-  const numb = extractGateNumeric(nb);
-  return Boolean(numa && numb && numa === numb);
+  // Un même numéro ne rend pas une FATO, un parking et une porte interchangeables.
+  const key = (value: string): string => {
+    const m = value.match(/^(gate|porte|parking|fato|apron)\s*(\d+)$/);
+    if (m) return `${m[1] === 'porte' ? 'gate' : m[1]}:${Number(m[2])}`;
+    return /^\d+$/.test(value) ? `gate:${Number(value)}` : value;
+  };
+  return key(na) === key(nb);
 }

@@ -49,6 +49,7 @@ export default async function MesPlansVolPage() {
       .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min, cloture_at')
       .eq('pilote_id', user.id)
       .eq('statut', 'cloture')
+      .is('logbook_processed_at', null)
       .is('siavi_avion_id', null)
       .not('accepted_at', 'is', null)
       .not('cloture_at', 'is', null)

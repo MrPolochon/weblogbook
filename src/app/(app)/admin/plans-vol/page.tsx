@@ -45,7 +45,8 @@ export default async function AdminPlansVolPage() {
       atc_plans_controles(user_id, aeroport, position, created_at, profile:profiles(identifiant))
     `)
     .in('statut', ['cloture', 'annule'])
-    .order('cloture_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
     .limit(500);
   if (errClosed) console.error('[AdminPlansVol] Erreur plans clôturés:', errClosed.message, errClosed.details, errClosed.hint);
 

@@ -18,6 +18,8 @@ async function run() {
     admin.rpc('regenerer_cargo_aeroport'),
   ]);
   await refreshMarketplaceRuptures(admin);
+  const { error: gateCleanupError } = await admin.rpc('cleanup_stale_gate_assignments', { p_aeroport: null });
+  if (gateCleanupError) throw new Error('Nettoyage des portes : ' + gateCleanupError.message);
   // Expired anonymous challenges have no further authentication value.
   await admin.from('passkey_login_challenges').delete().lt('expires_at', new Date(Date.now()-86400000).toISOString());
   return {

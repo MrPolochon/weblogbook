@@ -98,6 +98,7 @@ export default function PlansHistorique({ plans }: { plans: PlanCloture[] }) {
     const q = search.toLowerCase();
     return plans.filter(p =>
       p.numero_vol.toLowerCase().includes(q) ||
+      p.numero_vol.toLowerCase().replace(/[^a-z0-9]/g, '').includes(q.replace(/[^a-z0-9]/g, '') || q) ||
       p.aeroport_depart.toLowerCase().includes(q) ||
       p.aeroport_arrivee.toLowerCase().includes(q) ||
       (p.pilote?.identifiant || '').toLowerCase().includes(q) ||

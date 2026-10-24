@@ -1196,7 +1196,8 @@ export async function DELETE(
     if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan ne vous appartient pas.' }, { status: 403 });
     if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul un plan cloture peut etre supprime ainsi (ne pas enregistrer).' }, { status: 400 });
 
-    const { error } = await admin.from('plans_vol').delete().eq('id', id);
+    // Retirer de la liste à enregistrer sans effacer l’historique administratif.
+    const { error } = await admin.from('plans_vol').update({ logbook_processed_at: new Date().toISOString() }).eq('id', id).eq('pilote_id', user.id).eq('statut', 'cloture');
     if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
     return NextResponse.json({ ok: true });
   } catch (e) {

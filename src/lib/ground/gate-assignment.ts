@@ -42,7 +42,10 @@ export async function loadAirportOccupancy(
   const occupied = new Map<string, GateOccupant>();
   if (gates.length === 0) return occupied;
 
-  const [{ data: onStand }, { data: assignments }] = await Promise.all([
+  const { error: cleanupError } = await admin.rpc('cleanup_stale_gate_assignments', { p_aeroport: aeroport });
+  if (cleanupError) throw new Error('Impossible de vérifier les réservations de portes : ' + cleanupError.message);
+  const now = Date.now();
+  const [{ data: onStand, error: standError }, { data: assignments, error: assignmentError }] = await Promise.all([
     admin
       .from('plans_vol')
       .select('id, numero_vol, porte, statut, aeroport_depart, aeroport_arrivee, compagnie_avion_id, inventaire_avion_id, siavi_avion_id')
@@ -51,10 +54,12 @@ export async function loadAirportOccupancy(
       .in('statut', STATUTS_AU_SOL),
     admin
       .from('gate_assignments')
-      .select('gate_id, plan_vol_id, assignment_type, status, plan_vol:plans_vol(id, numero_vol, statut, aeroport_depart, aeroport_arrivee)')
+      .select('gate_id, plan_vol_id, assignment_type, status, assigned_at, expires_at, plan_vol:plans_vol(id, numero_vol, statut, aeroport_depart, aeroport_arrivee)')
       .eq('aeroport', aeroport)
       .in('status', ['reserved', 'occupied']),
   ]);
+
+  if (standError || assignmentError) throw new Error('Impossible de charger les occupations de portes.');
 
   for (const plan of onStand ?? []) {
     const gate = gates.find((g) => gateCodesMatch(plan.porte, g.gate_code));
@@ -73,6 +78,10 @@ export async function loadAirportOccupancy(
 
   for (const row of assignments ?? []) {
     const plan = Array.isArray(row.plan_vol) ? row.plan_vol[0] : row.plan_vol;
+    if (!plan || !['depose','en_attente','accepte','en_cours','automonitoring','en_attente_cloture'].includes(plan.statut)) continue;
+    if (row.assignment_type === 'depart' && !STATUTS_AU_SOL.includes(plan.statut)) continue;
+    const expiry = row.expires_at ? Date.parse(row.expires_at) : Date.parse(row.assigned_at) + 6 * 60 * 60 * 1000;
+    if (!Number.isFinite(expiry) || expiry <= now) continue;
     if (!row.gate_id || occupied.has(row.gate_id)) continue;
     occupied.set(row.gate_id, {
       plan_vol_id: (plan?.id as string) || row.plan_vol_id,
@@ -101,10 +110,10 @@ async function checkSeparationRule(
   return !adjacentOccupied;
 }
 
-async function resolveAircraftSize(
+async function resolveAircraftProfile(
   admin: AdminClient,
   planVolId: string,
-): Promise<AircraftSize | null> {
+): Promise<{ size: AircraftSize; helicopter: boolean } | null> {
   const { data: plan } = await admin
     .from('plans_vol')
     .select('compagnie_avion_id, inventaire_avion_id, siavi_avion_id')
@@ -128,13 +137,11 @@ async function resolveAircraftSize(
   }
   if (!typeAvionId) return null;
 
-  const { data: ta } = await admin.from('types_avion').select('capacite_pax').eq('id', typeAvionId).single();
+  const { data: ta } = await admin.from('types_avion').select('capacite_pax, categorie').eq('id', typeAvionId).single();
   if (!ta) return null;
   const cap = ta.capacite_pax as number;
-  if (cap <= 19) return 'light';
-  if (cap <= 100) return 'medium';
-  if (cap <= 300) return 'heavy';
-  return 'super_heavy';
+  const size: AircraftSize = cap <= 19 ? 'light' : cap <= 100 ? 'medium' : cap <= 300 ? 'heavy' : 'super_heavy';
+  return { size, helicopter: ta.categorie === 'helicoptere' };
 }
 
 async function selectBestGate(
@@ -209,6 +216,7 @@ async function getExistingArrival(
     .eq('plan_vol_id', planVolId)
     .eq('assignment_type', 'arrivee')
     .in('status', ['reserved', 'occupied'])
+    .gt('expires_at', new Date().toISOString())
     .order('assigned_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -229,10 +237,17 @@ export async function assignGateArrival(
 ): Promise<{ gate: AirportGate; assignment: GateAssignment } | { error: string }> {
   const admin = createAdminClient();
 
+  const { data: activePlan } = await admin.from('plans_vol').select('statut, aeroport_arrivee').eq('id', planVolId).maybeSingle();
+  if (!activePlan || !['accepte','en_cours','automonitoring','en_attente_cloture'].includes(activePlan.statut) || activePlan.aeroport_arrivee !== aeroportArrivee) {
+    return { error: 'Ce vol ne peut plus recevoir de porte d’arrivée.' };
+  }
+  const { error: cleanupError } = await admin.rpc('cleanup_stale_gate_assignments', { p_aeroport: aeroportArrivee });
+  if (cleanupError) return { error: 'Impossible de vérifier les réservations existantes.' };
   const existing = await getExistingArrival(admin, planVolId);
   if (existing) return existing;
 
-  const aircraftSize = await resolveAircraftSize(admin, planVolId);
+  const aircraft = await resolveAircraftProfile(admin, planVolId);
+  const aircraftSize = aircraft?.size ?? null;
 
   const { data: allGates } = await admin
     .from('airport_gates')
@@ -250,6 +265,8 @@ export async function assignGateArrival(
 
   const candidates = gates.filter((g) => {
     if (g.gate_type === 'special') return false;
+    if (g.gate_type === 'helicopter' && !aircraft?.helicopter) return false;
+    if (aircraft?.helicopter && !['helicopter', 'general_aviation', 'unrestricted'].includes(g.gate_type)) return false;
     if (occupiedIds.has(g.id)) return false;
     return isSizeCompatible(g.max_aircraft_size, aircraftSize);
   });
@@ -347,10 +364,14 @@ export async function assignGateManual(
 
   const { data: plan } = await admin
     .from('plans_vol')
-    .select('id, aeroport_depart, aeroport_arrivee')
+    .select('id, aeroport_depart, aeroport_arrivee, statut')
     .eq('id', planVolId)
     .maybeSingle();
   if (!plan) return { error: 'Plan de vol introuvable.' };
+  if (!['depose','en_attente','accepte','en_cours','automonitoring','en_attente_cloture'].includes(plan.statut)
+    || (assignmentType === 'depart' && !STATUTS_AU_SOL.includes(plan.statut))) {
+    return { error: 'Ce vol est terminé ou a quitté sa porte de départ.' };
+  }
   if (assignmentType === 'arrivee' && plan.aeroport_arrivee !== aeroport) {
     return { error: 'Ce vol n\'arrive pas à cet aéroport.' };
   }
@@ -369,8 +390,10 @@ export async function assignGateManual(
     return { error: `Porte occupée par ${current.numero_vol || 'un autre vol'}.` };
   }
 
+  const aircraft = await resolveAircraftProfile(admin, planVolId);
+  const aircraftSize = aircraft?.size ?? null;
+  if (gate.gate_type === 'helicopter' && !aircraft?.helicopter) return { error: 'Une FATO est réservée aux hélicoptères.' };
   if (assignmentType === 'arrivee') {
-    const aircraftSize = await resolveAircraftSize(admin, planVolId);
     if (!isSizeCompatible((gate as AirportGate).max_aircraft_size, aircraftSize)) {
       return { error: 'Porte trop petite pour cet appareil.' };
     }
@@ -397,6 +420,7 @@ export async function assignGateManual(
       aeroport,
       gate_id: gateId,
       assignment_type: assignmentType,
+      expires_at: new Date(Date.now() + 6 * 60 * 60 * 1000).toISOString(),
       status: 'reserved',
     })
     .select('*')

@@ -174,7 +174,7 @@ export async function POST(request: Request) {
         plan?.siavi_avion_id != null ||
         rapportLie != null;
       if (plan && plan.pilote_id === user.id && plan.statut === 'cloture' && !preservePlan) {
-        await admin.from('plans_vol').delete().eq('id', planIdToUse);
+        await admin.from('plans_vol').update({ logbook_processed_at: new Date().toISOString() }).eq('id', planIdToUse).eq('pilote_id', user.id).eq('statut', 'cloture');
       }
     }
 
