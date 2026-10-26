@@ -1541,3 +1541,26 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 @keyframes siavi-enter { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 @media (prefers-reduced-motion: no-preference) { .siavi-enter { animation: siavi-enter .22s ease-out both; } }
 @media (prefers-reduced-motion: reduce) { .siavi-workspace *, .siavi-flight-space * { animation: none !important; transition-duration: 0s !important; } }
+
+/* UTC Halloween countdown: all ornaments remain behind the interactive content. */
+.login-halloween-night { position:absolute; inset:0; background:radial-gradient(ellipse at 12% 75%,#ed641525,transparent 48%),radial-gradient(ellipse at 88% 30%,#782ed83a,transparent 48%); opacity:0; transition:opacity 2s; }
+.login-scene:not([data-halloween-stage="0"]) .login-halloween-night { opacity:1; }
+.login-halloween-object { position:absolute; display:block; width:clamp(24px,4vw,58px); font-size:clamp(25px,3.5vw,54px); line-height:1; opacity:.55; filter:drop-shadow(0 0 12px #ff7b2433); transform:scale(var(--decoration-scale)); animation:login-halloween-haunt var(--music-float-period,14s) ease-in-out infinite; animation-delay:var(--decoration-delay); }
+.login-halloween-object svg { width:100%; height:auto; }
+.login-halloween-bat { color:#140c22; opacity:.9; filter:drop-shadow(0 0 3px #c894fc55); }
+.login-halloween-web { color:#c8b5dc; opacity:.3; }
+.login-halloween-ghost { opacity:.4; }
+.login-scene[data-halloween-finale="true"] { background:linear-gradient(180deg,#160c2c77,#150821cc); }
+.login-scene[data-halloween-finale="true"] .login-scene-moon { width:clamp(75px,12vw,170px); background:radial-gradient(circle at 35% 35%,#ffe2b9cc,#eab06b77 62%,transparent 72%); box-shadow:0 0 80px #fba75633; }
+.login-scene[data-halloween-finale="true"] .login-halloween-object { opacity:.8; }
+.login-halloween-greeting { position:absolute; left:3%; top:33%; width:25%; text-align:center; color:#ffd3a0; text-shadow:0 0 32px #ff7b2444,0 4px 10px #000; transform:rotate(-8deg); }
+.login-halloween-greeting span { display:block; font-family:Georgia,serif; font-style:italic; font-size:clamp(28px,5vw,80px); }
+.login-halloween-greeting strong { display:block; font-family:Georgia,serif; font-size:clamp(26px,4vw,66px); letter-spacing:-.04em; }
+.login-halloween-greeting small { display:block; margin-top:18px; font-size:9px; letter-spacing:.2em; color:#e1b7fa; }
+.login-halloween-horizon { position:absolute; bottom:0; width:100%; height:18%; opacity:.7; background:#10091b; clip-path:polygon(0 65%,5% 50%,9% 62%,13% 35%,14% 10%,15% 35%,18% 40%,18% 65%,25% 55%,32% 80%,40% 67%,50% 90%,60% 74%,70% 88%,80% 55%,86% 66%,86% 28%,88% 8%,90% 28%,90% 58%,95% 45%,100% 60%,100% 100%,0 100%); }
+.login-halloween-firework { position:absolute; width:1px; height:1px; color:var(--burst-color); }
+.login-halloween-firework i { position:absolute; width:4px; height:4px; border-radius:50%; background:currentColor; box-shadow:0 0 7px currentColor; opacity:0; animation:login-halloween-burst 8s ease-out infinite; animation-delay:var(--burst-delay); }
+@keyframes login-halloween-haunt { 0%,100% { transform:translateY(0) rotate(-5deg) scale(var(--decoration-scale)); } 50% { transform:translateY(-16px) rotate(5deg) scale(var(--decoration-scale)); } }
+@keyframes login-halloween-burst { 0%,12%,100% { opacity:0; transform:rotate(var(--spark-angle)) translateX(0) scale(.3); } 18% { opacity:.75; } 38% { opacity:0; transform:rotate(var(--spark-angle)) translateX(clamp(35px,5vw,85px)) scale(.5); } }
+@media(max-width:900px) { .login-halloween-greeting { left:1%; top:4%; width:98%; transform:none; opacity:.35; } .login-halloween-greeting span,.login-halloween-greeting strong { display:inline; font-size:clamp(30px,8vw,60px); } .login-halloween-greeting span { margin-right:.25em; } .login-halloween-greeting small { display:none; } .login-halloween-object { width:28px; font-size:28px; } }
+@media(prefers-reduced-motion:reduce) { .login-halloween-firework { display:none; } .login-halloween-object { animation:none!important; } }
