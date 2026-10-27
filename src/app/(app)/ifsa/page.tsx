@@ -32,6 +32,7 @@ export default async function IfsaPage() {
     { data: employes },
     { data: agentsIfsa },
     { count: autorisationsEnAttenteCount },
+    { count: identitesEnAttenteCount },
     { count: signalementsNouveauCount },
     { count: signalementsExamenCount },
     { count: enquetesOuvertesCount },
@@ -93,6 +94,7 @@ export default async function IfsaPage() {
     admin.from('autorisations_exploitation')
       .select('id', { count: 'exact', head: true })
       .eq('statut', 'en_attente'),
+    admin.from('compagnie_identite_demandes').select('id', { count: 'exact', head: true }).eq('statut', 'en_attente'),
     admin.from('ifsa_signalements').select('id', { count: 'exact', head: true }).eq('statut', 'nouveau'),
     admin.from('ifsa_signalements').select('id', { count: 'exact', head: true }).eq('statut', 'en_examen'),
     admin.from('ifsa_enquetes').select('id', { count: 'exact', head: true }).in('statut', ['ouverte', 'en_cours']),
@@ -136,7 +138,7 @@ export default async function IfsaPage() {
     || (enquetesTotalCount ?? 0) > enquetesList.length
     || (sanctionsTotalCount ?? 0) > sanctionsList.length;
   const amendesNonPayees = sanctionsList.filter(s => s.actif && s.type_sanction === 'amende' && !s.amende_payee).length;
-  const autorisationsCount = autorisationsEnAttenteCount || 0;
+  const autorisationsCount = (autorisationsEnAttenteCount || 0) + (identitesEnAttenteCount || 0);
   const totalAlerts = signalementsNouveaux + autorisationsCount + amendesNonPayees;
 
   const statCards = [

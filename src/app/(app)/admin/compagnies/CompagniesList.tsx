@@ -148,6 +148,7 @@ function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilo
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
+      if (data.identity_request) toast.success('Demande d’identité radio transmise à l’IFSA. Les appellations actuelles restent en vigueur jusqu’à approbation.');
       startTransition(() => router.refresh());
       onClose();
     } catch (err) {
@@ -210,7 +211,7 @@ function CompagnieSettings({ compagnie, pilotes, onClose }: { compagnie: C; pilo
             type="text"
             value={codeOaci}
             onChange={(e) => setCodeOaci(e.target.value.toUpperCase())}
-            maxLength={4}
+            maxLength={3}
             placeholder="AFR"
             className="input w-full text-sm font-mono uppercase"
           />

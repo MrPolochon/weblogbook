@@ -6,6 +6,7 @@ import {
   Ban, CheckCircle2, Clock, Plane, ShieldCheck, XCircle,
 } from 'lucide-react';
 import { IfsaEmptyState } from './IfsaEmptyState';
+import CompanyIdentityRequests from '@/components/CompanyIdentityRequests';
 
 interface AutorisationExploitation {
   id: string;
@@ -23,8 +24,10 @@ interface AutorisationExploitation {
 
 export default function IfsaAutorisationsTab({
   onPendingCountChange,
+  onIdentityPendingCountChange,
 }: {
   onPendingCountChange?: (count: number) => void;
+  onIdentityPendingCountChange?: (count: number) => void;
 }) {
   const [autorisationsExploit, setAutorisationsExploit] = useState<AutorisationExploitation[]>([]);
   const [loadingAutorisations, setLoadingAutorisations] = useState(false);
@@ -109,6 +112,7 @@ export default function IfsaAutorisationsTab({
 
   return (
     <div className="card animate-fade-in">
+      <CompanyIdentityRequests onPendingCountChange={onIdentityPendingCountChange} />
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
           <ShieldCheck className="h-5 w-5 text-sky-400" />

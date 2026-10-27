@@ -266,8 +266,13 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
   const [showVirementsModal, setShowVirementsModal] = useState(false);
   const compagniesPilotesCount = new Map(compagniesAvecPilotes.map((c) => [c.id, c.pilotes.length]));
   const [autorisationsEnAttenteCount, setAutorisationsEnAttenteCount] = useState(0);
+  const [identitesEnAttenteCount, setIdentitesEnAttenteCount] = useState(0);
 
   useEffect(() => {
+    fetch('/api/compagnies/identite-demandes?statut=en_attente')
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setIdentitesEnAttenteCount(Array.isArray(data) ? data.length : 0))
+      .catch(() => {});
     fetch('/api/autorisations-exploitation?toutes=true&statut=en_attente')
       .then(res => res.ok ? res.json() : [])
       .then(data => setAutorisationsEnAttenteCount(Array.isArray(data) ? data.length : 0))
@@ -699,7 +704,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       id: 'autorisations',
       label: 'Autorisations',
       icon: ShieldCheck,
-      badge: autorisationsEnAttenteCount,
+      badge: autorisationsEnAttenteCount + identitesEnAttenteCount,
       badgeColor: 'bg-amber-500/90',
     },
     { id: 'avion', label: 'Recherche avion', icon: Plane },
@@ -1621,7 +1626,7 @@ export default function IfsaClient({ signalements, enquetes, sanctions, pilotes,
       {activeTab === 'avion' && <IfsaAvionTab />}
 
       {activeTab === 'autorisations' && (
-        <IfsaAutorisationsTab onPendingCountChange={setAutorisationsEnAttenteCount} />
+        <IfsaAutorisationsTab onPendingCountChange={setAutorisationsEnAttenteCount} onIdentityPendingCountChange={setIdentitesEnAttenteCount} />
       )}
 
       {activeTab === 'sanctions' && (

@@ -107,7 +107,8 @@ export async function PATCH(
     
     // Vérifier si l'utilisateur est PDG de cette compagnie
     const admin = createAdminClient();
-    const { data: compagnie } = await admin.from('compagnies').select('pdg_id').eq('id', id).single();
+    const { data: compagnie } = await admin.from('compagnies').select('pdg_id, code_oaci, callsign_telephonie').eq('id', id).single();
+    if (!compagnie) return NextResponse.json({ error: 'Compagnie introuvable' }, { status: 404 });
     const isPdg = compagnie?.pdg_id === user.id || await isCoPdg(user.id, id, admin);
     
     if (!isAdmin && !isPdg) {
@@ -146,15 +147,31 @@ export async function PATCH(
       updates.pourcentage_salaire = Math.round(v);
     }
 
-    // Code OACI et callsign téléphonie (PDG ou admin)
-    if (code_oaci !== undefined) updates.code_oaci = code_oaci ? String(code_oaci).toUpperCase().trim().slice(0, 4) : null;
-    if (callsign_telephonie !== undefined) updates.callsign_telephonie = callsign_telephonie ? String(callsign_telephonie).toUpperCase().trim() : null;
+    // Les deux valeurs actives ne changent que dans la décision atomique IFSA.
+    let identityRequest = null;
+    if (code_oaci !== undefined || callsign_telephonie !== undefined) {
+      if ((code_oaci !== undefined && code_oaci !== null && typeof code_oaci !== 'string')
+        || (callsign_telephonie !== undefined && callsign_telephonie !== null && typeof callsign_telephonie !== 'string')) {
+        return NextResponse.json({ error: 'Identité radio invalide' }, { status: 400 });
+      }
+      const code = code_oaci === undefined ? compagnie.code_oaci : (code_oaci || '').trim().toUpperCase() || null;
+      const radio = callsign_telephonie === undefined ? compagnie.callsign_telephonie : (callsign_telephonie || '').trim().toUpperCase().replace(/\s+/g, ' ') || null;
+      if (code !== compagnie.code_oaci || radio !== compagnie.callsign_telephonie) {
+        if (!code || !/^[A-Z]{3}$/.test(code) || !radio || radio.length > 30 || !/^[A-Z]+( [A-Z]+)?$/.test(radio)) {
+          return NextResponse.json({ error: 'Code OACI : trois lettres. Radiophonie : un ou deux mots sans chiffres, au maximum 30 caractères.' }, { status: 400 });
+        }
+        const result = await admin.rpc('demander_identite_compagnie', {
+          p_compagnie_id: id, p_acteur_id: user.id, p_code: code, p_telephonie: radio,
+        });
+        if (result.error) return NextResponse.json({ error: result.error.message }, { status: result.error.code === '42501' ? 403 : 409 });
+        if (!result.data?.inchangee) identityRequest = result.data;
+      }
+    }
 
-    const { data, error } = await admin.from('compagnies')
-      .update(updates)
-      .eq('id', id)
-      .select()
-      .single();
+    const query = admin.from('compagnies');
+    const { data, error } = Object.keys(updates).length > 0
+      ? await query.update(updates).eq('id', id).select().single()
+      : await query.select('*').eq('id', id).single();
 
     if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
 
@@ -174,7 +191,7 @@ export async function PATCH(
       }
     }
 
-    return NextResponse.json(data);
+    return NextResponse.json({ ...data, identity_request: identityRequest });
   } catch (e) {
     console.error('Compagnie update error:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

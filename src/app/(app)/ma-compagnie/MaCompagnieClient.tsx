@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import CompanyPerformance from '@/components/CompanyPerformance';
+import CompanyIdentityRequests from '@/components/CompanyIdentityRequests';
 import { useRouter } from 'next/navigation';
 import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut, LayoutGrid } from 'lucide-react';
 import Image from 'next/image';
@@ -82,6 +83,11 @@ export default function MaCompagnieClient({
   const [codeOaci, setCodeOaci] = useState(compagnie.code_oaci || '');
   const [callsignTel, setCallsignTel] = useState(compagnie.callsign_telephonie || '');
   const [saving, setSaving] = useState(false);
+  const [identityRefresh, setIdentityRefresh] = useState(0);
+  useEffect(() => {
+    setCodeOaci(compagnie.code_oaci || '');
+    setCallsignTel(compagnie.callsign_telephonie || '');
+  }, [compagnie.id, compagnie.code_oaci, compagnie.callsign_telephonie]);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
@@ -338,8 +344,12 @@ export default function MaCompagnieClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Erreur');
 
-      setSuccess('Paramètres sauvegardés');
-      setTimeout(() => setSuccess(''), 3000);
+      setSuccess(data.identity_request
+        ? 'Demande transmise à l’IFSA. Continuez à utiliser les appellations actuelles jusqu’à son approbation.'
+        : 'Paramètres sauvegardés');
+      setCodeOaci(data.code_oaci || '');
+      setCallsignTel(data.callsign_telephonie || '');
+      setIdentityRefresh(value => value + 1);
       startTransition(() => router.refresh());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erreur');
@@ -598,21 +608,24 @@ export default function MaCompagnieClient({
             <p className="text-xs text-slate-400 mb-3">
               Le code OACI sert de préfixe au numéro de vol (ex: AFR4546). Le nom radio est affiché aux contrôleurs ATC (ex: AIRFRANCE).
             </p>
+            <p className="text-sm text-amber-200 mb-3">Toute modification du code OACI ou de la radiophonie doit être vérifiée et approuvée par l’IFSA. Tant que l’autorisation n’est pas accordée, la compagnie et ses pilotes doivent utiliser les appellations actuelles, jamais les nouvelles valeurs proposées.</p>
+            <p className="text-sm text-slate-300 mb-3">Valeurs actives : {compagnie.code_oaci || 'Code non renseigné'} / {compagnie.callsign_telephonie || 'Radiophonie non renseignée'}</p>
+            <CompanyIdentityRequests compagnieId={compagnie.id} refreshKey={identityRefresh} />
             <div className="grid gap-4 sm:grid-cols-2">
               <div>
-                <label className="label">Code OACI (3-4 lettres)</label>
+                <label className="label">Code OACI proposé (3 lettres)</label>
                 <input
                   type="text"
                   value={codeOaci}
                   onChange={(e) => setCodeOaci(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
-                  maxLength={4}
+                  maxLength={3}
                   placeholder="AFR"
                   className="input w-full font-mono uppercase"
                 />
-                <p className="text-xs text-slate-500 mt-1">Ex: AFR, LUF, BAW, UAE</p>
+                <p className="text-xs text-slate-500 mt-1">Ex: AFR, DLH, BAW, UAE, SBU</p>
               </div>
               <div>
-                <label className="label">Nom radio (téléphonie)</label>
+                <label className="label">Nom radio proposé (téléphonie)</label>
                 <input
                   type="text"
                   value={callsignTel}
