@@ -1,304 +1,163 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useRouter } from 'next/navigation';
-import { PhoneOff, Radio, Mic, MicOff } from 'lucide-react';
-import { toast } from 'sonner';
-import { ConversationProvider, useConversation } from '@elevenlabs/react';
-import { setBriaCooldown, getBriaCooldownRemaining } from '@/lib/bria/cooldown';
-import { createBriaClientTools, type BriaMessage } from '@/lib/bria/tools';
-import { playPhoneRing, playPhoneEnd } from '@/lib/phone-sounds';
-import { isIOS } from '@/lib/utils';
+import { Radio, Square, Volume2, X } from 'lucide-react';
+import { buildBriaBriefing, type BriaDraft } from '@/lib/bria/briefing';
 
-export { getBriaCooldownRemaining } from '@/lib/bria/cooldown';
-
-// ─── Inner component (must be inside ConversationProvider) ───
-
-interface BriaInnerProps {
-  onClose: () => void;
-}
-
-function BriaInner({ onClose }: BriaInnerProps) {
-  const router = useRouter();
-  const [messages, setMessages] = useState<BriaMessage[]>([]);
-  const [phase, setPhase] = useState<'ringing' | 'connected' | 'ended' | 'submitted'>('ringing');
-  const [submittedPlanId, setSubmittedPlanId] = useState<string | null>(null);
-  const messagesRef = useRef<BriaMessage[]>([]);
-  const chatEndRef = useRef<HTMLDivElement>(null);
-  const closedRef = useRef(false);
-  const submittedRef = useRef(false);
-  // Conserve une ref vers conv pour pouvoir raccrocher depuis les outils
-  // (callback appelé après soumission réussie d'un plan de vol).
-  const convRef = useRef<{ endSession: () => void } | null>(null);
-
-  const tools = useMemo(
-    () =>
-      createBriaClientTools({
-        getConversationLog: () => messagesRef.current,
-        router,
-        onPlanSubmitted: (planId: string) => {
-          submittedRef.current = true;
-          setSubmittedPlanId(planId);
-          setPhase('submitted');
-          try { convRef.current?.endSession(); } catch { /* noop */ }
-        },
-      }),
-    [router],
-  );
-
-  function handleEnd() {
-    if (submittedRef.current) {
-      setPhase('submitted');
-      return;
-    }
-    if (closedRef.current) return;
-    closedRef.current = true;
-    playPhoneEnd();
-    setBriaCooldown();
-    setPhase('ended');
-    setTimeout(() => onClose(), 600);
-  }
-
-  const conv = useConversation({
-    clientTools: tools,
-    onConnect: () => {
-      setPhase('connected');
-    },
-    onMessage: (payload: { message: string; role: 'user' | 'agent' }) => {
-      const role: 'bria' | 'pilote' = payload.role === 'agent' ? 'bria' : 'pilote';
-      const entry: BriaMessage = { role, text: payload.message };
-      messagesRef.current = [...messagesRef.current, entry];
-      setMessages([...messagesRef.current]);
-      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-    },
-    onError: (message: string) => {
-      console.error('BRIA error:', message);
-      toast.error('Erreur BRIA');
-      handleEnd();
-    },
-    onDisconnect: () => {
-      handleEnd();
-    },
-  });
-
-  useEffect(() => {
-    convRef.current = { endSession: () => conv.endSession() };
-  }, [conv]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      playPhoneRing();
-      await new Promise((r) => setTimeout(r, 1500));
-      if (cancelled) return;
-      try {
-        const res = await fetch('/api/bria-session', { method: 'POST' });
-        const body = await res.json().catch(() => ({}));
-        if (res.status === 429) {
-          const secs = Math.ceil(Number(body.remainingMs || 0) / 1000);
-          toast.error(body.error || `BRIA en cooldown (${secs}s).`);
-          handleEnd();
-          return;
-        }
-        if (!res.ok) throw new Error(body.error || 'Session BRIA impossible');
-        const { signedUrl } = body;
-        if (cancelled) return;
-        conv.startSession({ signedUrl });
-      } catch (e) {
-        console.error('BRIA session start:', e);
-        toast.error('Impossible de contacter le BRIA');
-        handleEnd();
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const isMuted = conv.isMuted;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center"
-      style={{ zIndex: 99999 }}
-    >
-      <div
-        className="bg-[#0a0f1a] border border-emerald-500/20 rounded-lg shadow-[0_0_40px_rgba(16,185,129,0.06)] w-full max-w-2xl flex flex-col overflow-hidden"
-        style={isIOS() ? { height: '85dvh', maxHeight: '85dvh' } : { height: '85vh' }}
-      >
-        {/* Header */}
-        <div className="bg-slate-950 border-b border-emerald-500/15 px-5 py-3.5 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-center">
-                <Radio className="h-4 w-4 text-emerald-400" />
-              </div>
-              <div>
-                <h2 className="text-sm font-mono font-bold text-emerald-300 tracking-widest">
-                  BRIA // FPL SERVICE
-                </h2>
-                <p className="text-[10px] font-mono text-slate-500 flex items-center gap-1.5 mt-0.5">
-                  {phase === 'ringing' ? (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                      CONNECTING...
-                    </>
-                  ) : phase === 'submitted' ? (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      PLAN DÉPOSÉ
-                    </>
-                  ) : phase === 'ended' ? (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                      COMM TERMINATED
-                    </>
-                  ) : conv.isSpeaking ? (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      BRIA SPEAKING
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                      ON AIR — LISTENING
-                    </>
-                  )}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => conv.setMuted(!isMuted)}
-                className={`p-2 rounded border transition-colors ${
-                  !isMuted
-                    ? 'border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10'
-                    : 'border-red-500/30 text-red-400 hover:bg-red-500/10'
-                }`}
-                title={isMuted ? 'Réactiver le micro' : 'Couper le micro'}
-              >
-                {isMuted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  conv.endSession();
-                }}
-                disabled={phase === 'ended'}
-                className="flex items-center gap-1.5 px-3 py-2 rounded border border-red-500/30 text-red-400 text-xs font-mono tracking-wide hover:bg-red-500/10 transition-colors disabled:opacity-30"
-                title="Raccrocher"
-              >
-                <PhoneOff className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">END</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {phase === 'submitted' && (
-          <div className="px-5 py-6 bg-emerald-950 border-b border-emerald-700 text-center space-y-3">
-            <p className="text-sm font-bold text-emerald-200">Plan de vol déposé</p>
-            <p className="text-xs text-emerald-300/80">
-              Le briefing BRIA est terminé. Réglez ensuite le transpondeur sur la page des plans.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                router.push('/logbook/plans-vol');
-                router.refresh();
-              }}
-              className="inline-flex items-center justify-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-500"
-            >
-              Ouvrir le plan {submittedPlanId ? '· transpondeur' : ''}
-            </button>
-          </div>
-        )}
-
-        {phase === 'ringing' && (
-          <div className="px-5 py-2.5 bg-amber-500/5 border-b border-amber-500/20">
-            <p className="text-xs font-mono text-amber-400/80 text-center tracking-wide">
-              STANDBY — CONNECTING TO BRIA...
-            </p>
-          </div>
-        )}
-
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2.5 bg-[#060a12]">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'bria' ? 'justify-start' : 'justify-end'}`}>
-              <div
-                className={`max-w-[85%] rounded px-3.5 py-2 text-sm whitespace-pre-line font-mono leading-relaxed ${
-                msg.role === 'bria'
-                  ? 'bg-emerald-950/50 border border-emerald-500/15 text-emerald-100/90'
-                  : 'bg-cyan-950/50 border border-cyan-500/15 text-cyan-100/90'
-                }`}
-              >
-                <span
-                  className={`text-[10px] font-bold tracking-[0.2em] block mb-1 ${
-                  msg.role === 'bria' ? 'text-emerald-500/70' : 'text-cyan-500/70'
-                  }`}
-                >
-                  {msg.role === 'bria' ? 'BRIA' : 'PLT'}
-                </span>
-                {msg.text}
-              </div>
-            </div>
-          ))}
-
-          {phase === 'connected' && conv.isSpeaking && messages.length > 0 && (
-            <div className="flex justify-start">
-              <div className="bg-emerald-950/50 border border-emerald-500/15 rounded px-3.5 py-2">
-                <span className="text-[10px] font-bold tracking-[0.2em] text-emerald-500/70 block mb-1.5 font-mono">
-                  BRIA
-                </span>
-                <div className="flex items-center gap-0.5">
-                  <span className="w-1.5 h-4 bg-emerald-400 animate-pulse" />
-                  <span className="text-[10px] font-mono text-emerald-500/50 ml-1">TRANSMITTING</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div ref={chatEndRef} />
-        </div>
-
-        {/* Footer — voice mode indicator */}
-        <div className="border-t border-emerald-500/10 px-4 py-3 bg-slate-950/80 shrink-0">
-          <div className="flex items-center justify-center gap-2 text-xs font-mono text-slate-500">
-            {phase === 'connected' ? (
-              <>
-                <Mic className="h-3 w-3 text-emerald-400" />
-                <span className="text-emerald-400/70">
-                  {isMuted ? 'MICRO COUPÉ' : 'MODE VOCAL ACTIF'}
-                </span>
-              </>
-            ) : phase === 'ringing' ? (
-              <span className="text-amber-400/70 animate-pulse">APPEL EN COURS...</span>
-            ) : (
-              <span>COMMUNICATION TERMINÉE</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-// ─── Outer wrapper with ConversationProvider ───
+// Kept for older callers. Opening a text briefing does not consume a quota.
+export function getBriaCooldownRemaining(): number { return 0; }
 
 interface BriaDialogProps {
   onClose: () => void;
+  draft?: BriaDraft;
+  onReviewStep?: (step: number) => void;
+  availableSteps?: boolean[];
 }
 
-export default function BriaDialog({ onClose }: BriaDialogProps) {
-  return (
-    <ConversationProvider>
-      <BriaInner onClose={onClose} />
-    </ConversationProvider>
+export default function BriaDialog({ onClose, draft, onReviewStep, availableSteps }: BriaDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closedRef = useRef(false);
+  const [voiceSupported, setVoiceSupported] = useState(false);
+  const [reading, setReading] = useState(false);
+  const [voiceMessage, setVoiceMessage] = useState('');
+  const briefing = useMemo(() => buildBriaBriefing(draft), [draft]);
+
+  function stopReading() {
+    if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+    speechTimerRef.current = null;
+    const utterance = utteranceRef.current;
+    utteranceRef.current = null;
+    if (utterance) {
+      utterance.onend = null;
+      utterance.onerror = null;
+      window.speechSynthesis?.cancel();
+    }
+    setReading(false);
+  }
+
+  function close() {
+    if (closedRef.current) return;
+    closedRef.current = true;
+    stopReading();
+    onClose();
+  }
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement;
+    const dialog = dialogRef.current;
+    setVoiceSupported(typeof window.speechSynthesis !== 'undefined' && typeof window.SpeechSynthesisUtterance === 'function');
+    if (dialog) {
+      if (typeof dialog.showModal === 'function') dialog.showModal();
+      else dialog.setAttribute('open', '');
+      dialog.querySelector<HTMLButtonElement>('[data-close-dialog]')?.focus();
+    }
+    const handlePageHide = () => stopReading();
+    window.addEventListener('pagehide', handlePageHide);
+    return () => {
+      window.removeEventListener('pagehide', handlePageHide);
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+      const utterance = utteranceRef.current;
+      utteranceRef.current = null;
+      if (utterance) {
+        utterance.onend = null;
+        utterance.onerror = null;
+        window.speechSynthesis?.cancel();
+      }
+      if (dialog?.open && typeof dialog.close === 'function') dialog.close();
+      if (previouslyFocused instanceof HTMLElement && previouslyFocused.isConnected) previouslyFocused.focus();
+    };
+    // The modal owns its audio and focus for its whole mounted lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function readBriefing() {
+    if (!voiceSupported) {
+      setVoiceMessage('La lecture vocale n’est pas disponible dans ce navigateur. Le briefing reste consultable ci-dessus.');
+      return;
+    }
+    stopReading();
+    if (window.speechSynthesis.speaking) {
+      setVoiceMessage('Une autre lecture est en cours. Vous pourrez lancer ce briefing lorsqu’elle sera terminée.');
+      return;
+    }
+    try {
+      const utterance = new window.SpeechSynthesisUtterance(briefing.speechText);
+      utterance.lang = 'fr-FR';
+      utterance.rate = 0.95;
+      utterance.volume = 0.85;
+      const finish = () => {
+        if (utteranceRef.current !== utterance) return;
+        utteranceRef.current = null;
+        if (speechTimerRef.current) clearTimeout(speechTimerRef.current);
+        speechTimerRef.current = null;
+        setReading(false);
+      };
+      utterance.onend = finish;
+      utterance.onerror = () => {
+        finish();
+        setVoiceMessage('La lecture vocale a été interrompue. Vous pouvez continuer à lire le briefing.');
+      };
+      utteranceRef.current = utterance;
+      setReading(true);
+      setVoiceMessage('Lecture du briefing en cours.');
+      speechTimerRef.current = setTimeout(() => {
+        stopReading();
+        setVoiceMessage('Lecture terminée. Le briefing reste disponible.');
+      }, 90_000);
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      stopReading();
+      setVoiceMessage('Lecture vocale indisponible. Vous pouvez continuer à lire le briefing.');
+    }
+  }
+
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
+    <dialog
+      ref={dialogRef}
+      aria-labelledby="bria-title"
+      aria-describedby="bria-description"
+      className="fixed inset-0 z-[100] max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-2xl overflow-y-auto rounded-2xl border border-slate-600 bg-slate-950 p-0 text-slate-200 shadow-2xl backdrop:bg-black/70"
+      onCancel={event => { event.preventDefault(); close(); }}
+      onKeyDown={event => {
+        if (event.key === 'Escape') { event.preventDefault(); close(); return; }
+        if (event.key !== 'Tab') return;
+        const controls = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href], [tabindex="0"]') ?? []);
+        const first = controls[0];
+        const last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}
+    >
+      <div className="space-y-5 p-5 sm:p-6">
+        <header className="flex items-start justify-between gap-4">
+          <div><h2 id="bria-title" className="flex items-center gap-2 text-xl font-bold"><Radio aria-hidden className="h-5 w-5 text-sky-400" />BRIA · Préparation du vol</h2><p id="bria-description" className="mt-2 text-sm text-slate-400">Relisez votre préparation, puis complétez le formulaire de dépôt.</p></div>
+          <button type="button" data-close-dialog aria-label="Fermer le briefing" onClick={close} className="rounded-lg p-2 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"><X aria-hidden className="h-5 w-5" /></button>
+        </header>
+
+        <section aria-labelledby="bria-summary-title" className="rounded-xl border border-slate-700 bg-slate-900 p-4">
+          <h3 id="bria-summary-title" className="font-semibold text-sky-200">Votre préparation actuelle</h3>
+          <ul className="mt-3 space-y-2 text-sm">{briefing.lines.map(line => <li key={line}>{line}</li>)}</ul>
+        </section>
+
+        <section aria-labelledby="bria-check-title">
+          <h3 id="bria-check-title" className="font-semibold">À vérifier avant le dépôt</h3>
+          {briefing.missing.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-amber-200">{briefing.missing.map(item => <li key={item}>{item}</li>)}</ul> : <p className="mt-2 text-sm text-slate-300">Les principaux champs sont renseignés. Vérifiez aussi les autorisations de l’appareil, la porte et les autres informations demandées par le formulaire.</p>}
+          <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-400">{briefing.advice.map(item => <li key={item}>{item}</li>)}</ul>
+        </section>
+
+        {onReviewStep && <nav aria-label="Reprendre la préparation" className="flex flex-wrap gap-2">{['Appareil et route', 'Horaires et procédures', 'Récapitulatif'].map((label, index) => <button key={label} type="button" disabled={availableSteps?.[index] === false} onClick={() => { stopReading(); onReviewStep(index + 1); }} className="rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40">{label}</button>)}</nav>}
+
+        <p className="rounded-lg border border-sky-900 bg-sky-950/30 p-3 text-sm text-sky-100">Ce briefing ne crée aucun plan de vol et ne modifie ni votre indicatif ni votre chargement. Vous gardez la main sur le dépôt final.</p>
+        <footer className="border-t border-slate-800 pt-4">
+          <div className="flex flex-wrap gap-2"><button type="button" onClick={readBriefing} disabled={!voiceSupported || reading} className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-40"><Volume2 aria-hidden className="h-4 w-4" />Lire le briefing</button><button type="button" onClick={() => { stopReading(); setVoiceMessage('Lecture arrêtée.'); }} disabled={!reading} className="inline-flex items-center gap-2 rounded-lg border border-slate-600 px-3 py-2 text-sm hover:bg-slate-800 disabled:opacity-40"><Square aria-hidden className="h-4 w-4" />Arrêter la lecture</button></div>
+          <p role="status" aria-live="polite" className="mt-2 text-xs text-slate-400">{voiceMessage || (voiceSupported ? 'Lecture facultative avec la voix de votre navigateur.' : 'La lecture vocale n’est pas disponible dans ce navigateur. Le briefing reste accessible en texte.')}</p>
+        </footer>
+      </div>
+    </dialog>, document.body,
   );
 }

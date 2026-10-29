@@ -338,7 +338,7 @@ export default function HangarMarketClient({
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-              activeTab === tab.key ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/20' : 'bg-slate-700/70 text-slate-300 hover:bg-slate-600'
+              activeTab === tab.key ? 'bg-sky-600 text-white  ' : 'bg-slate-700/70 text-slate-300 hover:bg-slate-600'
             }`}
           >
             {tab.icon}
@@ -443,7 +443,7 @@ export default function HangarMarketClient({
                     <div className="relative h-5 flex items-center">
                       <div className="absolute w-full h-1.5 rounded-full bg-slate-700/60" />
                       <div
-                        className="absolute h-1.5 rounded-full bg-gradient-to-r from-emerald-400 to-amber-400"
+                        className="absolute h-1.5 rounded-full bg-sky-500"
                         style={{
                           left: `${globalMax > globalMin ? ((prixMin - globalMin) / (globalMax - globalMin)) * 100 : 0}%`,
                           right: `${globalMax > globalMin ? (1 - (prixMax - globalMin) / (globalMax - globalMin)) * 100 : 0}%`,
@@ -489,7 +489,7 @@ export default function HangarMarketClient({
                 {hasActiveFilters ? 'Essayez de modifier vos filtres.' : 'Revenez plus tard !'}
               </p>
               {hasActiveFilters && (
-                <button onClick={clearFilters} className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-300 hover:text-amber-200 px-4 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors ring-1 ring-amber-500/30">
+                <button onClick={clearFilters} className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-300 hover:text-amber-200 px-4 py-2 rounded-lg bg-amber-500/10 hover:bg-sky-500/20 transition-colors ring-1 ring-amber-500/30">
                   <X className="h-4 w-4" /> Réinitialiser les filtres
                 </button>
               )}
@@ -505,7 +505,7 @@ export default function HangarMarketClient({
                   : compagnies.filter(c => c.id !== annonce.compagnie_vendeur_id).some(c => canBuyForCompagnie(annonce.prix, c));
 
                 return (
-                  <div key={annonce.id} className={`card group hover:border-amber-500/60 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-200 overflow-hidden ${isMine ? 'border-sky-500/30' : ''}`}>
+                  <div key={annonce.id} className={`card group hover:border-amber-500/60    transition-all duration-200 overflow-hidden ${isMine ? 'border-sky-500/30' : ''}`}>
                     {/* Bande état */}
                     <div className={`h-1 w-full mb-3 -mt-4 -mx-4 ${
                       etatInfo?.value === 'neuf' ? 'bg-green-500/60' :
@@ -577,7 +577,7 @@ export default function HangarMarketClient({
                       )}
                       <span className="text-slate-600">·</span>
                       <Clock className="h-3 w-3" />
-                      <span>{new Date(annonce.created_at).toLocaleDateString('fr-FR')}</span>
+                      <span>{new Date(annonce.created_at).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}</span>
                     </div>
 
                     {/* Prix + actions */}
@@ -603,10 +603,10 @@ export default function HangarMarketClient({
                           <button
                             onClick={() => openAchatModal(annonce)}
                             disabled={!canBuy}
-                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 shadow-lg ${
+                            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5  ${
                               canBuy
-                                ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-500/20 hover:shadow-amber-500/40'
-                                : 'bg-slate-700 text-slate-500 cursor-not-allowed shadow-none'
+                                ? 'bg-sky-600 hover:bg-sky-500 text-white  '
+                                : 'bg-slate-700 text-slate-500 cursor-not-allowed '
                             }`}
                           >
                             <ShoppingCart className="h-4 w-4" />
@@ -629,14 +629,14 @@ export default function HangarMarketClient({
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => openVendreModal('personnel')}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 shadow-lg shadow-amber-500/20"
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2  "
             >
               <Plus className="h-5 w-5" /> Vendre un avion personnel
             </button>
             {isPdg && flotteDisponible.length > 0 && (
               <button
                 onClick={() => openVendreModal('flotte')}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2 shadow-lg shadow-sky-500/20"
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-medium transition-colors flex items-center gap-2  "
               >
                 <Building2 className="h-5 w-5" /> Vendre un avion de flotte
               </button>
@@ -760,7 +760,7 @@ export default function HangarMarketClient({
                         </button>
                         <button
                           onClick={() => { setSelectedAvion(item.id); openVendreModal('personnel'); }}
-                          className="px-2.5 py-1.5 text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 rounded-lg transition-colors flex items-center gap-1"
+                          className="px-2.5 py-1.5 text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-sky-500/20 rounded-lg transition-colors flex items-center gap-1"
                         >
                           <Tag className="h-3 w-3" /> Vendre
                         </button>
@@ -784,7 +784,7 @@ export default function HangarMarketClient({
               </div>
               <p className="text-slate-300 font-semibold text-lg">Aucune annonce active</p>
               <p className="text-sm text-slate-500 mt-1">Vos annonces en cours apparaîtront ici.</p>
-              <button onClick={() => setActiveTab('vendre')} className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-300 hover:text-amber-200 px-4 py-2 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 transition-colors ring-1 ring-amber-500/30">
+              <button onClick={() => setActiveTab('vendre')} className="mt-4 inline-flex items-center gap-1.5 text-sm text-amber-300 hover:text-amber-200 px-4 py-2 rounded-lg bg-amber-500/10 hover:bg-sky-500/20 transition-colors ring-1 ring-amber-500/30">
                 <Plus className="h-4 w-4" /> Créer une annonce
               </button>
             </div>
@@ -804,7 +804,7 @@ export default function HangarMarketClient({
                         {etatInfo && (
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ring-1 ${etatInfo.color} ${etatInfo.bg}`}>{etatInfo.label}</span>
                         )}
-                        <span className="text-[10px] text-slate-400">{new Date(annonce.created_at).toLocaleDateString('fr-FR')}</span>
+                        <span className="text-[10px] text-slate-400">{new Date(annonce.created_at).toLocaleDateString('fr-FR', { timeZone: 'UTC' })}</span>
                       </div>
                     </div>
                     <UsureBar etat={annonce.etat} />
@@ -834,7 +834,7 @@ export default function HangarMarketClient({
       {/* Modal Vendre */}
       {showVendreModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) { setShowVendreModal(false); resetVendreForm(); setError(''); } }}>
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Transaction d’appareil" className="bg-slate-900 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto ">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
                 <Tag className="h-5 w-5 text-amber-400" />
@@ -913,7 +913,7 @@ export default function HangarMarketClient({
 
             <div className="flex gap-3 mt-6">
               <button onClick={handleVendre} disabled={loading || !titre || !prix || (typeVente === 'personnel' ? !selectedAvion : !selectedFlotteAvionId)}
-                className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
+                className="flex-1 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2">
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Tag className="h-4 w-4" />}
                 Mettre en vente
               </button>
@@ -927,7 +927,7 @@ export default function HangarMarketClient({
       {/* Modal Revente rapide */}
       {showReventeModal && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) { setShowReventeModal(false); setError(''); } }}>
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Transaction d’appareil" className="bg-slate-900 rounded-xl border border-slate-700 p-6 max-w-lg w-full max-h-[90dvh] overflow-y-auto ">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
                 <Zap className="h-5 w-5 text-emerald-400" /> Revente d&apos;avion
@@ -998,7 +998,7 @@ export default function HangarMarketClient({
 
             <div className="flex gap-3">
               <button onClick={handleRevente} disabled={loading || !reventeAvionId}
-                className={`flex-1 px-4 py-2.5 disabled:opacity-50 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2 shadow-lg ${reventeMode === 'rapide' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-amber-600 hover:bg-amber-500 shadow-amber-500/20'}`}>
+                className={`flex-1 px-4 py-2.5 disabled:opacity-50 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2  ${reventeMode === 'rapide' ? 'bg-emerald-600 hover:bg-emerald-500 ' : 'bg-sky-600 hover:bg-sky-500 '}`}>
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
                 {reventeMode === 'rapide' ? 'Revendre maintenant' : 'Envoyer la demande'}
               </button>
@@ -1012,7 +1012,7 @@ export default function HangarMarketClient({
       {/* Modal Achat */}
       {showAchatModal && selectedAnnonce && mounted && createPortal(
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={e => { if (e.target === e.currentTarget) { setShowAchatModal(false); setSelectedAnnonce(null); setError(''); } }}>
-          <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6 max-w-md w-full max-h-[90dvh] overflow-y-auto shadow-2xl">
+          <div role="dialog" aria-modal="true" aria-label="Transaction d’appareil" className="bg-slate-900 rounded-xl border border-slate-700 p-6 max-w-md w-full max-h-[90dvh] overflow-y-auto ">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
                 <ShoppingCart className="h-5 w-5 text-amber-400" /> Confirmer l&apos;achat
@@ -1075,7 +1075,7 @@ export default function HangarMarketClient({
             <div className="flex gap-3">
               <button onClick={handleAcheter}
                 disabled={loading || (selectedAnnonce.compagnie_avion_id ? !acheterPour : !canBuyPersonal(selectedAnnonce.prix) && acheterPour === null)}
-                className="flex-1 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20">
+                className="flex-1 px-4 py-2.5 bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white rounded-xl font-semibold transition-colors flex items-center justify-center gap-2  ">
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                 Confirmer l&apos;achat
               </button>

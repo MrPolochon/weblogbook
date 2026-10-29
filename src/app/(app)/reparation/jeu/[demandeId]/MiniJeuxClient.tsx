@@ -97,6 +97,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
   const [completedGames, setCompletedGames] = useState<Map<string, number>>(new Map());
   const [error, setError] = useState('');
   const [pendingScore, setPendingScore] = useState<GameScore | null>(null);
+  const [saveAttempted, setSaveAttempted] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
 
@@ -123,6 +124,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
     savingRef.current = true;
     setSaving(true);
     setPendingScore(gameScore);
+    setSaveAttempted(true);
     setError('');
     try {
       const res = await fetch(`/api/reparation/demandes/${demandeId}/mini-jeu`, {
@@ -179,9 +181,10 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
           <div className="game-result space-y-4 text-center" role="status" aria-live="polite">
             <Trophy className="h-10 w-10 mx-auto text-amber-300" />
             <h2 className="text-xl font-bold">Épreuve terminée : {pendingScore.score}/100</h2>
-            <p className="text-slate-300">{saving ? 'Enregistrement du résultat…' : 'Le résultat est conservé ici. Réessayez son enregistrement.'}</p>
+            <p className="text-slate-300">{saving ? 'Enregistrement du résultat…' : saveAttempted ? 'Le résultat est conservé ici. Réessayez son enregistrement.' : 'Vérifiez votre résultat avant de l’enregistrer. Vous pouvez encore refaire cette épreuve.'}</p>
+            <p className="text-sm text-slate-400">{pendingScore.score >= 90 ? 'Excellent travail : intervention maîtrisée.' : pendingScore.score >= 70 ? 'Bon résultat. Une nouvelle tentative peut améliorer la précision.' : 'Reprenez les consignes et entraînez-vous à corriger les paramètres progressivement.'}</p>
             {error && <p role="alert" className="text-red-300">{error}</p>}
-            {!saving && <button className="btn-primary" onClick={() => void submitScore(pendingScore)}>Réessayer l’enregistrement</button>}
+            {!saving && <div className="flex flex-wrap justify-center gap-3"><button className="btn-primary" onClick={() => void submitScore(pendingScore)}>{saveAttempted ? 'Réessayer l’enregistrement' : 'Valider cette épreuve'}</button>{!saveAttempted && <button className="btn-secondary" onClick={() => { setPendingScore(null); setGameReady(false); }}>Refaire l’épreuve</button>}</div>}
           </div>
         ) : !gameReady ? (
           <div className="game-result space-y-4 text-center">
@@ -190,7 +193,7 @@ export default function MiniJeuxClient({ demandeId }: { demandeId: string }) {
             <p className="text-sm text-slate-400">Lisez les consignes avant de commencer. Le chronomètre ne démarre pas sur cet écran.</p>
             <button className="btn-primary" onClick={() => setGameReady(true)}>Je suis prêt</button>
           </div>
-        ) : GameComponent && <GameComponent onComplete={submitScore} />}
+        ) : GameComponent && <GameComponent onComplete={score => { setSaveAttempted(false); setPendingScore(score); return true; }} />}
       </div>
     );
   }
@@ -459,7 +462,8 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
                     type="button"
                     onClick={() => handleClick(idx)}
                     title={!finished && !wasClicked ? 'Contrôler cette case' : undefined}
-                    className={`aspect-square rounded-sm text-sm font-bold transition-all duration-150 flex items-center justify-center min-h-[2rem] ${
+                    aria-label={`${ZONE_LABELS[row]}, case ${col + 1}${isFound ? ' : anomalie trouvée' : wasClicked ? ' : contrôlée' : ''}`}
+                    className={`aspect-square rounded-sm text-sm font-bold transition-all duration-150 flex items-center justify-center min-h-[2.5rem] ${
                       isFound ? 'bg-emerald-600/80 text-white scale-95 ring-1 ring-emerald-400' :
                       showMissedAfterFinish ? 'bg-red-600/60 text-red-200 animate-pulse ring-1 ring-red-500' :
                       showFaintHint ? 'bg-slate-700/50 ring-1 ring-slate-600/40 hover:bg-slate-600/55 active:scale-90' :
@@ -473,7 +477,7 @@ function InspectionGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
                     {isFound ? sym :
                      showMissedAfterFinish ? sym :
                      showFaintHint ? (
-                       <span className={`${DEFECT_TYPES[defType!].color} opacity-[0.38] select-none`} aria-hidden>{sym}</span>
+                       <span className={`${DEFECT_TYPES[defType!].color} opacity-60 select-none`} aria-hidden>{sym}</span>
                      ) : ''}
                   </button>
                 );
@@ -786,10 +790,10 @@ function AssemblageGame({ onComplete }: { onComplete: (s: GameScore) => void }) 
               </div>
               {!submitted && (
                 <div className="flex gap-0.5 flex-shrink-0">
-                  <button onClick={() => handleSwap(idx, idx - 1)} disabled={idx === 0}
-                    className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-slate-200 hover:bg-slate-600/50 disabled:opacity-20 text-xs">▲</button>
-                  <button onClick={() => handleSwap(idx, idx + 1)} disabled={idx === shuffled.length - 1}
-                    className="w-6 h-6 flex items-center justify-center rounded text-slate-500 hover:text-slate-200 hover:bg-slate-600/50 disabled:opacity-20 text-xs">▼</button>
+                  <button aria-label={`Monter ${p.name}`} onClick={() => handleSwap(idx, idx - 1)} disabled={idx === 0}
+                    className="w-11 h-11 flex items-center justify-center rounded text-slate-300 hover:text-slate-200 hover:bg-slate-600/50 disabled:opacity-20 text-sm">▲</button>
+                  <button aria-label={`Descendre ${p.name}`} onClick={() => handleSwap(idx, idx + 1)} disabled={idx === shuffled.length - 1}
+                    className="w-11 h-11 flex items-center justify-center rounded text-slate-300 hover:text-slate-200 hover:bg-slate-600/50 disabled:opacity-20 text-sm">▼</button>
                 </div>
               )}
               {submitted && (

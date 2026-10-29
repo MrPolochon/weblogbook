@@ -29,6 +29,7 @@ export type PlanForCopiloteDispatch = {
   cargo_kg_genere: number | null;
   compagnie_avion_id: string | null;
   copilote_vol_sans_atc: boolean | null;
+  flight_submission_quote_id?: string | null;
 };
 
 export type DispatchResult =
@@ -42,6 +43,9 @@ async function consumeCommercialLoads(
   admin: SupabaseClient,
   plan: PlanForCopiloteDispatch,
 ): Promise<void> {
+  // New plans already reserved their load transactionally at submission.
+  // The status trigger also marks their aircraft in flight on confirmation.
+  if (plan.flight_submission_quote_id) return;
   const ad = plan.aeroport_depart;
   const nbPax = plan.nb_pax_genere ?? 0;
   const cargo = plan.cargo_kg_genere ?? 0;

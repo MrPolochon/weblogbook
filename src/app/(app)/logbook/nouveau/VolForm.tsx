@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { addMinutes, subMinutes } from 'date-fns';
+import RecordUtcInput from '@/components/logbook/RecordUtcInput';
+import RecordFlightSummary from '@/components/logbook/RecordFlightSummary';
 import { AEROPORTS_VOL_CIVIL } from '@/lib/aeroports-ptfs';
 import { COMPAGNIE_MEDEVAC_SIAVI } from '@/lib/vol-compagnie-libelle';
 
@@ -59,6 +61,7 @@ export default function VolForm({
   const [callsign, setCallsign] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (!planPreFill) return;
@@ -109,6 +112,7 @@ export default function VolForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     setError(null);
     const d = parseInt(duree_minutes, 10);
     if (!type_avion_id || (!pourMoiMemo && !medevacSiavi && !compagnie_id) || !aeroport_depart || !aeroport_arrivee || isNaN(d) || d < 1 || !heure_utc || !commandant_bord.trim()) {
@@ -128,7 +132,9 @@ export default function VolForm({
       setError('Heure invalide.');
       return;
     }
+    submittingRef.current = true;
     setLoading(true);
+    let registered = false;
     try {
       const res = await fetch('/api/vols', {
         method: 'POST',
@@ -154,17 +160,21 @@ export default function VolForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      router.push('/logbook');
+      router.push(data.already_registered ? '/logbook?enregistrement=existant' : '/logbook?enregistrement=transmis');
       startTransition(() => router.refresh());
+      registered = true;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Erreur');
     } finally {
-      setLoading(false);
+      if (!registered) {
+        submittingRef.current = false;
+        setLoading(false);
+      }
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-4 max-w-xl">
+    <form onSubmit={handleSubmit} aria-busy={loading} className="space-y-6 rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-6">
       {planId && onClearPlan && (
         <div className="flex justify-end -mt-1 mb-1">
           <button
@@ -176,10 +186,12 @@ export default function VolForm({
           </button>
         </div>
       )}
+      <fieldset className="min-w-0 space-y-4">
+        <legend className="mb-4 border-b border-slate-700 pb-2 text-xs font-semibold uppercase tracking-wider text-sky-300">01 · Appareil et exploitant</legend>
       <div>
         <label className="label">Type d&apos;avion *</label>
-        <select
-          className="input"
+        <select aria-label="Type d’avion"
+          className="input min-h-11 min-w-0 w-full"
           value={type_avion_id}
           onChange={(e) => setTypeAvionId(e.target.value)}
           required
@@ -223,8 +235,8 @@ export default function VolForm({
         </div>
         <p className="text-xs text-slate-500 -mt-1 mb-2">Cochez cette case si le vol ne relève pas d&apos;une compagnie de la liste (ex. mission sanitaire SIAVI).</p>
         {!pourMoiMemo && !medevacSiavi && (
-          <select
-            className="input"
+          <select aria-label="Compagnie aérienne"
+            className="input min-h-11 min-w-0 w-full"
             value={compagnie_id}
             onChange={(e) => setCompagnieId(e.target.value)}
             required
@@ -237,10 +249,13 @@ export default function VolForm({
         )}
       </div>
 
+      </fieldset>
+      <fieldset className="min-w-0 space-y-4">
+        <legend className="mb-4 border-b border-slate-700 pb-2 text-xs font-semibold uppercase tracking-wider text-sky-300">02 · Trajet et horaires UTC</legend>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Aéroport de départ *</label>
-          <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+          <select aria-label="Aéroport de départ" className="input min-h-11 min-w-0 w-full" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
             <option value="">— Choisir —</option>
             {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
@@ -249,7 +264,7 @@ export default function VolForm({
         </div>
         <div>
           <label className="label">Aéroport d&apos;arrivée *</label>
-          <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+          <select aria-label="Aéroport d’arrivée" className="input min-h-11 min-w-0 w-full" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
             <option value="">— Choisir —</option>
             {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
@@ -261,9 +276,9 @@ export default function VolForm({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Durée (minutes) *</label>
-          <input
+          <input aria-label="Durée du vol en minutes"
             type="number"
-            className="input"
+            className="input min-h-11 min-w-0 w-full"
             value={duree_minutes}
             onChange={(e) => setDureeMinutes(e.target.value)}
             min={1}
@@ -294,13 +309,7 @@ export default function VolForm({
               Arrivée
             </label>
           </div>
-          <input
-            type="datetime-local"
-            className="input"
-            value={heure_utc}
-            onChange={(e) => setHeureUtc(e.target.value)}
-            required
-          />
+          <RecordUtcInput id="record-time" value={heure_utc} onChange={setHeureUtc} required />
           {heure_utc && parseInt(duree_minutes, 10) >= 1 && (() => {
             const dur = parseInt(duree_minutes, 10);
             const pd = parseUtcLocal(heure_utc);
@@ -309,17 +318,20 @@ export default function VolForm({
             return (
               <p className="text-xs text-slate-500">
                 {heure_mode === 'depart' ? 'Arrivée calculée : ' : 'Départ calculé : '}
-                {String(other.getUTCHours()).padStart(2, '0')}:{String(other.getUTCMinutes()).padStart(2, '0')}
+                {other.toISOString().slice(0,10)} · {String(other.getUTCHours()).padStart(2, '0')}:{String(other.getUTCMinutes()).padStart(2, '0')} UTC
               </p>
             );
           })()}
         </div>
       </div>
 
+      </fieldset>
+      <fieldset className="min-w-0 space-y-4">
+        <legend className="mb-4 border-b border-slate-700 pb-2 text-xs font-semibold uppercase tracking-wider text-sky-300">03 · Activité et équipage</legend>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Type de vol *</label>
-          <select className="input" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR' | 'Instruction')}>
+          <select aria-label="Type de vol" className="input min-h-11 min-w-0 w-full" value={type_vol} onChange={(e) => setTypeVol(e.target.value as 'IFR' | 'VFR' | 'Instruction')}>
             <option value="VFR">VFR</option>
             <option value="IFR">IFR</option>
             <option value="Instruction">Instruction</option>
@@ -327,7 +339,7 @@ export default function VolForm({
         </div>
         <div>
           <label className="label">Rôle *</label>
-          <select className="input" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); if (e.target.value === 'Pilote') { setPiloteId(''); } else setCopiloteId(''); }}>
+          <select aria-label="Fonction à bord" className="input min-h-11 min-w-0 w-full" value={role_pilote} onChange={(e) => { setRolePilote(e.target.value as 'Pilote' | 'Co-pilote'); if (e.target.value === 'Pilote') { setPiloteId(''); } else setCopiloteId(''); }}>
             <option value="Pilote">Pilote</option>
             <option value="Co-pilote">Co-pilote</option>
           </select>
@@ -337,7 +349,7 @@ export default function VolForm({
       {role_pilote === 'Pilote' && type_vol !== 'Instruction' && (
         <div>
           <label className="label">Qui était votre co-pilote ? (optionnel)</label>
-          <select className="input" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
+          <select aria-label="Copilote" className="input min-h-11 min-w-0 w-full" value={copilote_id} onChange={(e) => setCopiloteId(e.target.value)}>
             <option value="">— Aucun —</option>
             {autresProfiles.map((p) => (
               <option key={p.id} value={p.id}>{p.identifiant}</option>
@@ -350,7 +362,7 @@ export default function VolForm({
       {role_pilote === 'Co-pilote' && type_vol !== 'Instruction' && (
         <div>
           <label className="label">Qui était le pilote (commandant de bord) ? *</label>
-          <select className="input" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>
+          <select aria-label="Pilote" className="input min-h-11 min-w-0 w-full" value={pilote_id} onChange={(e) => setPiloteId(e.target.value)}>
             <option value="">— Choisir —</option>
             {autresProfiles.map((p) => (
               <option key={p.id} value={p.id}>{p.identifiant}</option>
@@ -364,7 +376,7 @@ export default function VolForm({
         <div className="space-y-4 rounded-lg border border-slate-600/50 bg-slate-800/30 p-4">
           <div>
             <label className="label">Instructeur avec qui vous avez fait le vol *</label>
-            <select className="input" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)}>
+            <select aria-label="Instructeur" className="input min-h-11 min-w-0 w-full" value={instructeur_id} onChange={(e) => setInstructeurId(e.target.value)}>
               <option value="">— Choisir —</option>
               {instructeurs.map((a) => (
                 <option key={a.id} value={a.id}>{a.identifiant}</option>
@@ -373,9 +385,9 @@ export default function VolForm({
           </div>
           <div>
             <label className="label">Type de vol d&apos;instruction *</label>
-            <input
+            <input aria-label="Objet de l’instruction"
               type="text"
-              className="input"
+              className="input min-h-11 min-w-0 w-full"
               value={instruction_type}
               onChange={(e) => setInstructionType(e.target.value)}
               placeholder="ex. IFR initial, VFR de nuit, perfectionnement..."
@@ -386,9 +398,9 @@ export default function VolForm({
 
       <div>
         <label className="label">Nom / pseudo du commandant de bord *</label>
-        <input
+        <input aria-label="Commandant de bord"
           type="text"
-          className="input"
+          className="input min-h-11 min-w-0 w-full"
           value={commandant_bord}
           onChange={(e) => setCommandantBord(e.target.value)}
           required
@@ -397,18 +409,20 @@ export default function VolForm({
 
       <div>
         <label className="label">Callsign / N° de vol</label>
-        <input
+        <input aria-label="Indicatif du vol"
           type="text"
-          className="input"
+          className="input min-h-11 min-w-0 w-full"
           value={callsign}
           onChange={(e) => setCallsign(e.target.value)}
           placeholder="ex. AF123, F-GKTA… (optionnel)"
         />
       </div>
 
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={loading}>
-        {loading ? 'Envoi…' : 'Soumettre'}
+      </fieldset>
+      <div className="border-t border-slate-700 pt-5"><h2 className="mb-3 text-sm font-semibold text-slate-200">Récapitulatif avant transmission</h2><RecordFlightSummary departure={aeroport_depart} arrival={aeroport_arrivee} departureUtc={computeDepartUtc()} durationMinutes={parseInt(duree_minutes,10)} aircraft={typesAvion.find(t=>t.id===type_avion_id)?.nom ?? ''} company={compagnieLibelle} callsign={callsign} role={role_pilote}/><p className="mt-3 text-xs leading-relaxed text-slate-400">Les heures sont comptabilisées après la validation requise. Vérifiez le rôle de chaque membre d’équipage et les horaires UTC.</p></div>
+      {error && <p role="alert" className="rounded-lg border border-red-800/60 bg-red-950/20 p-3 text-sm text-red-200">{error}</p>}
+      <button type="submit" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-sky-600 px-5 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50" disabled={loading}>
+        {loading ? 'Transmission…' : 'Transmettre le vol pour validation'}
       </button>
     </form>
   );

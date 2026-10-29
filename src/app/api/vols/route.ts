@@ -50,6 +50,19 @@ export async function POST(request: Request) {
       callsign: callsignBody,
       plan_id: planIdBody,
     } = body;
+    const planIdAlias = body.plan_vol_id;
+    if ((planIdBody != null && typeof planIdBody !== 'string') || (planIdAlias != null && typeof planIdAlias !== 'string')) {
+      return NextResponse.json({ error: 'Référence du plan de vol invalide.' }, { status: 400 });
+    }
+    const suppliedPlanId = typeof planIdBody === 'string' ? planIdBody.trim() : '';
+    const aliasPlanId = typeof planIdAlias === 'string' ? planIdAlias.trim() : '';
+    if (suppliedPlanId && aliasPlanId && suppliedPlanId !== aliasPlanId) {
+      return NextResponse.json({ error: 'Les références du plan de vol ne correspondent pas.' }, { status: 400 });
+    }
+    const planIdToUse = suppliedPlanId || aliasPlanId || null;
+    if (planIdToUse && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(planIdToUse)) {
+      return NextResponse.json({ error: 'Référence du plan de vol invalide.' }, { status: 400 });
+    }
 
     const isAdmin = profile.role === 'admin';
     let targetPiloteId: string;
@@ -92,7 +105,7 @@ export async function POST(request: Request) {
       }
     }
 
-    if (!type_avion_id || !compagnie_libelle || typeof duree_minutes !== 'number' || duree_minutes < 1 ||
+    if (!type_avion_id || !compagnie_libelle || !Number.isInteger(duree_minutes) || duree_minutes < 1 ||
         !depart_utc || !['IFR', 'VFR', 'Instruction'].includes(type_vol) || !commandant_bord || !['Pilote', 'Co-pilote'].includes(role_pilote)) {
       return NextResponse.json({ error: 'Champs requis manquants ou invalides' }, { status: 400 });
     }
@@ -116,8 +129,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const depStr = /Z$/.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';
+    const depStr = /(?:Z|[+-]\d{2}:\d{2})$/i.test(String(depart_utc)) ? String(depart_utc) : String(depart_utc) + 'Z';
     const dep = parseISO(depStr);
+    if (!Number.isFinite(dep.getTime())) return NextResponse.json({ error: 'Heure de départ invalide.' }, { status: 400 });
     const arrivee = addMinutes(dep, duree_minutes);
 
     const row = {
@@ -151,34 +165,31 @@ export async function POST(request: Request) {
       created_by_user_id: isAdmin && created_by_admin ? user.id : null,
     };
 
-    const insertClient = (role_pilote === 'Co-pilote' && !isAdmin) || (isAdmin && created_by_admin)
-      ? createAdminClient()
-      : supabase;
-    const { data, error } = await insertClient.from('vols').insert(row).select('id').single();
-    if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-
-    const planIdToUse = (typeof planIdBody === 'string' && planIdBody.trim()) ? planIdBody.trim() : null;
-    if (planIdToUse) {
-      const admin = createAdminClient();
-      const { data: plan } = await admin
-        .from('plans_vol')
-        .select('id, pilote_id, statut, siavi_avion_id')
-        .eq('id', planIdToUse)
-        .single();
-      const { data: rapportLie } = await admin
-        .from('siavi_rapports_medevac')
-        .select('id')
-        .eq('plan_vol_id', planIdToUse)
-        .maybeSingle();
-      const preservePlan =
-        plan?.siavi_avion_id != null ||
-        rapportLie != null;
-      if (plan && plan.pilote_id === user.id && plan.statut === 'cloture' && !preservePlan) {
-        await admin.from('plans_vol').update({ logbook_processed_at: new Date().toISOString() }).eq('id', planIdToUse).eq('pilote_id', user.id).eq('statut', 'cloture');
-      }
+    // The plan link, duplicate guard and processed marker must commit together.
+    // Pending/refused entries are already in the logbook and are never reinserted.
+    const { data, error } = await createAdminClient().rpc('register_logbook_flight', {
+      p_actor: user.id,
+      p_row: row,
+      p_plan_id: planIdToUse,
+    });
+    if (error) {
+      console.error('Enregistrement atomique du carnet:', error.code);
+      const missingMigration = ['PGRST202', '42883', '42703', '42P01'].includes(error.code ?? '');
+      return NextResponse.json({ error: missingMigration
+        ? 'L’enregistrement des vols nécessite une mise à jour du site. Aucun nouveau vol n’a été enregistré ; réessayez après sa mise en place.'
+        : 'Le vol n’a pas pu être enregistré. Aucun nouvel enregistrement n’a été confirmé ; réessayez sans recréer le vol.' }, { status: missingMigration ? 503 : 500 });
     }
-
-    return NextResponse.json({ ok: true, id: data.id });
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return NextResponse.json({ error: 'La confirmation d’enregistrement est indisponible. Consultez votre carnet avant de réessayer.' }, { status: 500 });
+    }
+    if (data.ok !== true) {
+      const status = [400, 403, 404, 409, 422].includes(Number(data.status)) ? Number(data.status) : 400;
+      return NextResponse.json({ error: typeof data.error === 'string' ? data.error : 'Le vol ne peut pas être enregistré.' }, { status });
+    }
+    if (typeof data.id !== 'string' || !data.id) {
+      return NextResponse.json({ error: 'La confirmation d’enregistrement est incomplète. Consultez votre carnet avant de réessayer.' }, { status: 500 });
+    }
+    return NextResponse.json({ ok: true, id: data.id, already_registered: data.duplicate === true, statut: data.statut ?? null });
   } catch (e) {
     console.error('Vol create error:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });

@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ 
       annonces,
-      taxe_pourcent: config?.taxe_vente_pourcent || 5
+      taxe_pourcent: config?.taxe_vente_pourcent ?? 5
     });
   } catch (e) {
     console.error('Hangar Market GET:', e);

@@ -1564,3 +1564,76 @@ html[data-theme="halloween"] .login-card form > button { background: linear-grad
 @keyframes login-halloween-burst { 0%,12%,100% { opacity:0; transform:rotate(var(--spark-angle)) translateX(0) scale(.3); } 18% { opacity:.75; } 38% { opacity:0; transform:rotate(var(--spark-angle)) translateX(clamp(35px,5vw,85px)) scale(.5); } }
 @media(max-width:900px) { .login-halloween-greeting { left:1%; top:4%; width:98%; transform:none; opacity:.35; } .login-halloween-greeting span,.login-halloween-greeting strong { display:inline; font-size:clamp(30px,8vw,60px); } .login-halloween-greeting span { margin-right:.25em; } .login-halloween-greeting small { display:none; } .login-halloween-object { width:28px; font-size:28px; } }
 @media(prefers-reduced-motion:reduce) { .login-halloween-firework { display:none; } .login-halloween-object { animation:none!important; } }
+
+/* Pilot operations: fixed surfaces and readable controls, independent of the
+   seasonal landing-page theme. Other operational spaces retain their theme. */
+body.pilot-professional-mode,
+html[data-theme="halloween"] body.pilot-professional-mode {
+  --foreground: #dce5ef;
+  --background: #0b111b;
+  --surface-0: #0d1521;
+  --surface-1: #111b29;
+  --surface-2: #1b293b;
+  --surface-border: #334155;
+  --accent-gradient: #0284c7;
+  --card-shine: none;
+  background: #0b111b;
+  color: #dce5ef;
+}
+body.pilot-professional-mode::before,
+body.pilot-professional-mode::after { content: none; }
+body.pilot-professional-mode .space-nav-header {
+  background: #0d1420;
+  border-color: #27364a;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+body.pilot-professional-mode .pilot-workspace :is(.card, .card-glow, .modal-content) {
+  background: #101a28;
+  border-color: #334155;
+  border-radius: .65rem;
+  box-shadow: none;
+  background-image: none;
+}
+body.pilot-professional-mode .pilot-workspace :is(.card, .card-glow):hover {
+  transform: none;
+  box-shadow: none;
+}
+body.pilot-professional-mode .pilot-workspace .card-glow::before { content: none; }
+body.pilot-professional-mode .pilot-workspace :is(header, nav, aside) { border-color: #334155; }
+body.pilot-professional-mode .pilot-workspace .input {
+  color: #e2e8f0;
+  background: #0f172a;
+  border-color: #475569;
+  box-shadow: none;
+  min-height: 2.75rem;
+}
+body.pilot-professional-mode .pilot-workspace :is(input, select, textarea):focus-visible {
+  outline: 2px solid #38bdf8;
+  outline-offset: 2px;
+}
+body.pilot-professional-mode .pilot-workspace .btn-primary {
+  background: #0284c7;
+  color: white;
+  border-color: #0284c7;
+  box-shadow: none;
+  transform: none;
+}
+body.pilot-professional-mode .pilot-workspace .btn-secondary {
+  background: #172333;
+  color: #e2e8f0;
+  border-color: #475569;
+  box-shadow: none;
+}
+body.pilot-professional-mode .pilot-workspace [class*="bg-gradient-to-"] { background-image: none; }
+body.pilot-professional-mode .pilot-workspace :is(.animate-float, .animate-halo-pulse, .animate-plane-glide, .animate-reveal-blur, .animate-glow, .animate-shimmer) {
+  animation: none !important;
+}
+html[data-theme="halloween"] body.pilot-professional-mode :is(.bg-slate-950, .bg-slate-900) { background-color: #0f172a; }
+html[data-theme="halloween"] body.pilot-professional-mode :is(.bg-sky-600, .bg-blue-600) { background-color: #0284c7; }
+html[data-theme="halloween"] body.pilot-professional-mode :is(.text-sky-400, .text-cyan-400) { color: #38bdf8; }
+html[data-theme="halloween"] body.pilot-professional-mode :is(a, button, input, select, textarea):focus-visible { outline-color: #38bdf8; }
+@media print {
+  body.pilot-professional-mode .space-nav-header,
+  body.pilot-professional-mode .pilot-workspace > div:first-child { display: none; }
+}

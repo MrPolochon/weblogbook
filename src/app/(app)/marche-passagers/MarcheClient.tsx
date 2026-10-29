@@ -1,200 +1,43 @@
 'use client';
 
 import { useState } from 'react';
-import { Users, Package, Plane, MapPin, Palmtree, Radio, Factory } from 'lucide-react';
+import { Users, Package, ArrowRight, MapPin } from 'lucide-react';
+import Link from 'next/link';
 import MarchePassagersClient from './MarchePassagersClient';
 import MarcheCargoClient from './MarcheCargoClient';
 
 interface PassagerAeroport {
-  code: string;
-  nom: string;
-  taille: 'international' | 'regional' | 'small' | 'military';
-  tourisme: boolean;
-  passagersMax: number;
-  passagers_disponibles: number;
-  passagers_max: number;
-  derniere_regeneration: string | null;
-  vor?: string;
-  freq?: string;
+  code: string; nom: string; taille: 'international' | 'regional' | 'small' | 'military'; tourisme: boolean;
+  passagersMax: number; passagers_disponibles: number; passagers_max: number; derniere_regeneration: string | null; vor?: string; freq?: string;
 }
-
 interface CargoAeroport {
-  code: string;
-  nom: string;
-  taille: 'international' | 'regional' | 'small' | 'military';
-  industriel: boolean;
-  cargoMax: number;
-  cargo_disponible: number;
-  cargo_max: number;
-  derniere_regeneration: string | null;
-  vor?: string;
-  freq?: string;
+  code: string; nom: string; taille: 'international' | 'regional' | 'small' | 'military'; industriel: boolean;
+  cargoMax: number; cargo_disponible: number; cargo_max: number; derniere_regeneration: string | null; vor?: string; freq?: string;
 }
+interface Props { passagersAeroports: PassagerAeroport[]; cargoAeroports: CargoAeroport[]; alerteMarche?: string | null; initialTab?: 'passagers' | 'cargo'; }
 
-type TabId = 'passagers' | 'cargo';
-
-interface Props {
-  passagersAeroports: PassagerAeroport[];
-  cargoAeroports: CargoAeroport[];
-  alerteMarche?: string | null;
-}
-
-export default function MarcheClient({ passagersAeroports, cargoAeroports, alerteMarche }: Props) {
-  const [activeTab, setActiveTab] = useState<TabId>('passagers');
-
-  const totalPax = passagersAeroports.reduce((s, a) => s + a.passagers_disponibles, 0);
-  const totalCargo = cargoAeroports.reduce((s, a) => s + a.cargo_disponible, 0);
-  const nbHubs = passagersAeroports.filter(a => a.taille === 'international').length;
-  const nbTourisme = passagersAeroports.filter(a => a.tourisme).length;
-  const nbIndustriel = cargoAeroports.filter(a => a.industriel).length;
-
-  function formatCargo(kg: number): string {
-    if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`;
-    return `${kg}kg`;
-  }
-
-  return (
-    <div className="space-y-6 animate-page-reveal">
-      {alerteMarche && (
-        <div className="rounded-xl border border-amber-600 bg-amber-950 px-4 py-3 text-sm text-amber-100">
-          {alerteMarche}
-        </div>
-      )}
-      {/* HUD Header */}
-      <div className="relative overflow-hidden rounded-2xl border border-emerald-500/20 bg-gradient-to-br from-slate-900/95 via-slate-900/85 to-slate-950/95 shadow-[0_22px_42px_rgba(2,6,23,0.36),inset_0_1px_0_rgba(255,255,255,0.06)]">
-        <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-60" />
-        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
-        <div className="pointer-events-none absolute -left-16 -bottom-16 h-56 w-56 rounded-full bg-amber-500/10 blur-3xl" />
-        <Plane
-          className="pointer-events-none absolute top-3 -left-10 h-5 w-5 text-emerald-400/40 animate-plane-glide"
-          style={{ animationDuration: '7s' }}
-          aria-hidden
-        />
-        <div className="relative z-10 p-5 sm:p-7 space-y-4">
-          <div className="flex items-start gap-4">
-            <div className={`p-3 rounded-xl bg-gradient-to-br border ${
-              activeTab === 'passagers'
-                ? 'from-emerald-500/20 to-teal-500/20 border-emerald-500/20'
-                : 'from-amber-500/20 to-orange-500/20 border-amber-500/20'
-            }`}>
-              {activeTab === 'passagers'
-                ? <Users className="h-7 w-7 text-emerald-400" />
-                : <Package className="h-7 w-7 text-amber-400" />
-              }
-            </div>
-            <div className="flex-1">
-              <h1 className="text-2xl font-bold text-slate-50 tracking-tight">
-                {activeTab === 'passagers' ? 'Marché des passagers' : 'Marché du fret'}
-              </h1>
-              <p className="text-sm text-slate-400 mt-0.5">
-                {activeTab === 'passagers'
-                  ? 'Vue en temps réel de la disponibilité par aéroport'
-                  : 'Vue en temps réel du cargo disponible par aéroport'}
-              </p>
-            </div>
-          </div>
-
-          {/* Dynamic indicators */}
-          <div className="flex flex-wrap gap-3 text-xs">
-            {activeTab === 'passagers' ? (
-              <>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <Users className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="text-emerald-300 font-medium">{totalPax.toLocaleString('fr-FR')} pax disponibles</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                  <MapPin className="h-3.5 w-3.5 text-purple-400" />
-                  <span className="text-purple-300 font-medium">{nbHubs} hub{nbHubs > 1 ? 's' : ''}</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <Palmtree className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="text-amber-300 font-medium">{nbTourisme} touristique{nbTourisme > 1 ? 's' : ''}</span>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
-                  <Package className="h-3.5 w-3.5 text-amber-400" />
-                  <span className="text-amber-300 font-medium">{formatCargo(totalCargo)} disponible</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
-                  <MapPin className="h-3.5 w-3.5 text-purple-400" />
-                  <span className="text-purple-300 font-medium">{nbHubs} hub{nbHubs > 1 ? 's' : ''} cargo</span>
-                </div>
-                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <Factory className="h-3.5 w-3.5 text-emerald-400" />
-                  <span className="text-emerald-300 font-medium">{nbIndustriel} zone{nbIndustriel > 1 ? 's' : ''} industrielle{nbIndustriel > 1 ? 's' : ''}</span>
-                </div>
-              </>
-            )}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/10 border border-sky-500/20">
-              <Radio className="h-3.5 w-3.5 text-sky-400" />
-              <span className="text-sky-300 font-medium">{passagersAeroports.length} aéroports</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
-          <button
-            onClick={() => setActiveTab('passagers')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              activeTab === 'passagers'
-                ? 'bg-emerald-600/80 text-white shadow-lg shadow-emerald-900/30 border border-emerald-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            Passagers
-          </button>
-          <button
-            onClick={() => setActiveTab('cargo')}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-              activeTab === 'cargo'
-                ? 'bg-amber-600/80 text-white shadow-lg shadow-amber-900/30 border border-amber-500/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-            }`}
-          >
-            <Package className="h-4 w-4" />
-            Cargo
-          </button>
-        </div>
-
-        {/* Legend */}
-        <div className="flex flex-wrap gap-2">
-          {[
-            { color: 'bg-purple-500', border: 'border-purple-500/40', label: 'International' },
-            { color: 'bg-sky-500', border: 'border-sky-500/40', label: 'Régional' },
-            { color: 'bg-emerald-500', border: 'border-emerald-500/40', label: 'Small' },
-            { color: 'bg-red-500', border: 'border-red-500/40', label: 'Militaire' },
-          ].map(l => (
-            <div key={l.label} className={`flex items-center gap-2 px-2.5 py-1 rounded-lg border ${l.border} bg-slate-800/40 text-xs`}>
-              <div className={`w-2 h-2 rounded-full ${l.color}`} />
-              <span className="text-slate-300">{l.label}</span>
-            </div>
-          ))}
-          {activeTab === 'passagers' ? (
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-amber-500/40 bg-slate-800/40 text-xs">
-              <Palmtree className="h-3 w-3 text-amber-400" />
-              <span className="text-slate-300">Touristique</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg border border-amber-500/40 bg-slate-800/40 text-xs">
-              <Factory className="h-3 w-3 text-amber-400" />
-              <span className="text-slate-300">Industriel</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Content */}
-      {activeTab === 'passagers' ? (
-        <MarchePassagersClient aeroports={passagersAeroports} />
-      ) : (
-        <MarcheCargoClient aeroports={cargoAeroports} />
-      )}
+export default function MarcheClient({ passagersAeroports, cargoAeroports, alerteMarche, initialTab = 'passagers' }: Props) {
+  const [activeTab, setActiveTab] = useState<'passagers' | 'cargo'>(initialTab);
+  const totalPax = passagersAeroports.reduce((sum, a) => sum + a.passagers_disponibles, 0);
+  const totalCargo = cargoAeroports.reduce((sum, a) => sum + a.cargo_disponible, 0);
+  const lastUpdate = [...passagersAeroports, ...cargoAeroports].map(a => a.derniere_regeneration).filter((value): value is string => !!value && Number.isFinite(Date.parse(value))).sort().at(-1);
+  const lastUpdateText = lastUpdate ? new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(lastUpdate)) + ' UTC' : 'Mise à jour non datée';
+  return <div className="space-y-6">
+    <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-700/70 pb-6">
+      <div><p className="text-xs font-semibold uppercase tracking-widest text-sky-400">Préparation commerciale</p><h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">Demande passagers et fret</h1><p className="mt-2 max-w-2xl text-sm text-slate-400">Comparez les disponibilités connues au départ avant de choisir votre liaison. Le chargement définitif reste calculé lors du dépôt.</p></div>
+      <Link href="/logbook/depot-plan-vol" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-500">Préparer un vol<ArrowRight className="h-4 w-4" /></Link>
+    </header>
+    {alerteMarche && <div role="status" className="rounded-xl border border-amber-700/60 bg-amber-950/30 px-4 py-3 text-sm text-amber-100">{alerteMarche}</div>}
+    <dl className="grid gap-px overflow-hidden rounded-xl border border-slate-700/70 bg-slate-700/70 sm:grid-cols-3">
+      <div className="bg-slate-900 px-5 py-4"><dt className="flex items-center gap-2 text-xs text-slate-400"><Users className="h-4 w-4" /> Passagers disponibles</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">{passagersAeroports.length ? totalPax.toLocaleString('fr-FR') : '—'}</dd></div>
+      <div className="bg-slate-900 px-5 py-4"><dt className="flex items-center gap-2 text-xs text-slate-400"><Package className="h-4 w-4" /> Fret disponible</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">{cargoAeroports.length ? totalCargo.toLocaleString('fr-FR') : '—'} <span className="text-sm text-slate-400">kg</span></dd></div>
+      <div className="bg-slate-900 px-5 py-4"><dt className="flex items-center gap-2 text-xs text-slate-400"><MapPin className="h-4 w-4" /> Couverture connue</dt><dd className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">{new Set([...passagersAeroports, ...cargoAeroports].map(a => a.code)).size} <span className="text-sm text-slate-400">aéroports</span></dd></div>
+    </dl>
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-700/70">
+      <div role="tablist" aria-label="Activité commerciale" className="flex gap-1">
+        {([{ id: 'passagers', label: 'Passagers', icon: Users }, { id: 'cargo', label: 'Fret', icon: Package }] as const).map(tab => <button key={tab.id} id={`market-tab-${tab.id}`} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls={`market-panel-${tab.id}`} onClick={() => setActiveTab(tab.id)} className={`inline-flex min-h-12 items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400 ${activeTab === tab.id ? 'border-sky-400 text-sky-300' : 'border-transparent text-slate-400 hover:text-slate-200'}`}><tab.icon className="h-4 w-4" />{tab.label}</button>)}
+      </div><p className="pb-3 text-xs text-slate-500">Dernière régénération connue : {lastUpdateText}</p>
     </div>
-  );
+    {activeTab === 'passagers' ? <section role="tabpanel" id="market-panel-passagers" aria-labelledby="market-tab-passagers"><MarchePassagersClient aeroports={passagersAeroports} /></section> : <section role="tabpanel" id="market-panel-cargo" aria-labelledby="market-tab-cargo"><MarcheCargoClient aeroports={cargoAeroports} /></section>}
+  </div>;
 }

@@ -25,7 +25,7 @@ const SERVICE_CONFIG: Partial<Record<ServiceType, { label: string; icon: React.R
   bagages:  { label: 'Bagages',   icon: <Package className="h-4 w-4" />,       color: 'amber' },
   catering: { label: 'Catering',  icon: <Utensils className="h-4 w-4" />,      color: 'emerald' },
   fuel:     { label: 'Carburant', icon: <Fuel className="h-4 w-4" />,          color: 'sky' },
-  boarding: { label: 'Boarding',  icon: <Users className="h-4 w-4" />,         color: 'purple' },
+  boarding: { label: 'Embarquement',  icon: <Users className="h-4 w-4" />,         color: 'purple' },
   repoussage:  { label: 'Repoussage',  icon: <ArrowLeftRight className="h-4 w-4" />, color: 'orange' },
   marshalling: { label: 'Marshalling', icon: <Navigation className="h-4 w-4" />,     color: 'red' },
 };
@@ -168,38 +168,13 @@ export default function ServicesAuSolPanel({
   const repoussageActive = activeReq('repoussage');
 
   return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        title="Services au Sol"
-        aria-label="Ouvrir le panel services au sol"
-        className={`fixed top-1/2 -translate-y-1/2 z-50 flex flex-col items-center justify-center gap-1 rounded-l-xl border border-r-0 border-emerald-700/50 bg-emerald-900/30 px-2 py-6 hover:bg-emerald-900/50 active:bg-emerald-900/70 transition-all duration-300 ease-in-out shadow-xl cursor-pointer ${open ? 'right-[420px]' : 'right-0'}`}
-      >
-        <Wrench className="h-4 w-4 text-emerald-400" />
-        <span className="text-[9px] font-bold text-emerald-400" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-          Sol
-        </span>
-        <ChevronLeft className={`h-3 w-3 text-emerald-400 transition-transform duration-300 ${open ? 'rotate-180' : ''}`} />
+    <section className="overflow-hidden rounded-xl border border-slate-700/70 bg-slate-900/80" aria-labelledby="ground-services-heading">
+      <button type="button" onClick={() => setOpen(v => !v)} aria-expanded={open} aria-controls="ground-services-content" className="flex min-h-16 w-full flex-wrap items-center justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-slate-800/60 sm:px-5">
+        <span className="flex items-center gap-3"><Wrench className="h-5 w-5 text-sky-400"/><span><span id="ground-services-heading" className="block text-base font-semibold text-slate-100">Assistance au sol</span><span className="mt-1 block text-xs text-slate-400">Portes, chargement, embarquement et mouvements au sol</span></span></span>
+        <span className="flex items-center gap-2 text-xs font-medium text-sky-300">{open ? 'Réduire' : 'Ouvrir les services'}<ChevronLeft aria-hidden className={`h-4 w-4 ${open?'rotate-90':'-rotate-90'}`}/></span>
       </button>
-
-      <div
-        className={`fixed inset-0 z-40 transition-opacity duration-300 bg-black/20 backdrop-blur-[1px] ${open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-        onClick={() => setOpen(false)}
-      />
-      <div className={`fixed right-0 top-0 h-full z-50 w-[420px] max-w-[100vw] bg-[#0a0f1c] border-l border-slate-700/50 shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${open ? 'translate-x-0' : 'translate-x-full'}`}>
-            {/* Header */}
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50 bg-slate-800/30">
-              <div className="flex items-center gap-2">
-                <Wrench className="h-4 w-4 text-emerald-400" />
-                <span className="font-bold text-slate-100 text-sm">Services au Sol</span>
-              </div>
-              <button type="button" onClick={() => setOpen(false)} className="flex items-center justify-center h-8 w-8 rounded-lg border border-slate-700/50 text-slate-400 hover:text-slate-200">
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      {open && <div id="ground-services-content" className="border-t border-slate-700/70">
+            <div className="space-y-5 p-4 sm:p-5">
               {actionError && <p role="alert" className="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-200">{actionError}</p>}
 
               {/* Portes */}
@@ -392,7 +367,7 @@ export default function ServicesAuSolPanel({
               {/* Boarding */}
               {paxCount && paxCount > 0 && (
                 <section>
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Boarding ({paxCount} pax)</h3>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Embarquement ({paxCount} passagers)</h3>
                   {boarding ? (
                     <div className="rounded-xl border border-purple-800/40 bg-purple-900/10 p-3 space-y-2">
                       <div className="flex items-center justify-between text-sm">
@@ -457,8 +432,8 @@ export default function ServicesAuSolPanel({
                 </section>
               )}
             </div>
-      </div>
-    </>
+      </div>}
+    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { Package, User, Building2, Shield, Plane, Tag } from 'lucide-react';
 import MarketplaceList from './MarketplaceList';
 import HubsMapSection from './HubsMapSection';
@@ -58,7 +59,7 @@ export default async function MarketplacePage() {
     : null;
 
   // Liste des avions à vendre
-  const { data: avions } = await admin.from('types_avion')
+  const { data: avions, error: catalogueError } = await admin.from('types_avion')
     .select('*')
     .gt('prix', 0)
     .order('prix', { ascending: true });
@@ -68,20 +69,23 @@ export default async function MarketplacePage() {
   const prixMin = avions && avions.length > 0 ? Math.min(...avions.map(a => a.prix)) : 0;
   const prixMax = avions && avions.length > 0 ? Math.max(...avions.map(a => a.prix)) : 0;
 
+  if (catalogueError) return <section className="space-y-4 rounded-xl border border-slate-700 bg-slate-900/70 p-6"><h1 className="text-2xl font-semibold text-slate-100">Catalogue des appareils</h1><p role="alert" className="text-sm text-amber-200">Le catalogue n’a pas pu être chargé. Les modèles ne sont pas considérés comme retirés de la vente.</p><Link href="/marketplace" className="inline-flex min-h-11 items-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500">Réessayer</Link></section>;
+
   return (
-    <div className="space-y-6 animate-fade-in stagger-enter">
+    <div className="space-y-6">
       {/* === HERO HEADER === */}
-      <header className="card overflow-hidden p-0 border-purple-700/40 transition-shadow hover:shadow-xl hover:shadow-purple-500/10">
-        <div className="bg-gradient-to-br from-purple-500/15 via-slate-800/10 to-fuchsia-500/10 p-5 sm:p-6">
+      <header className="overflow-hidden rounded-xl border border-slate-700/70 bg-slate-900/70">
+        <div className="p-5 sm:p-6">
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div className="flex items-center gap-4 min-w-0">
-              <div className="h-14 w-14 rounded-xl bg-purple-500/20 ring-2 ring-purple-500/40 flex items-center justify-center shrink-0">
-                <Package className="h-7 w-7 text-purple-300 animate-pulse-soft" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-800">
+                <Package className="h-6 w-6 text-sky-400" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-2xl sm:text-3xl font-bold text-slate-100">Marketplace</h1>
+                <p className="text-xs font-semibold uppercase tracking-widest text-sky-400">Acquisition</p>
+                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">Catalogue des appareils</h1>
                 <p className="text-slate-400 text-sm mt-0.5">
-                  Achetez des avions pour votre flotte personnelle, votre compagnie ou l&apos;armée.
+                  Comparez les modèles, leurs capacités et les comptes autorisés avant de confirmer une acquisition.
                 </p>
               </div>
             </div>
@@ -89,7 +93,7 @@ export default async function MarketplacePage() {
               <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
                 <Plane className="h-3.5 w-3.5" /> Catalogue
               </p>
-              <p className="text-2xl font-bold text-purple-300 tabular-nums">{totalAvions}</p>
+              <p className="text-2xl font-semibold text-slate-100 tabular-nums">{totalAvions}</p>
               <p className="text-[10px] text-slate-500">avion{totalAvions > 1 ? 's' : ''} disponible{totalAvions > 1 ? 's' : ''}</p>
             </div>
           </div>

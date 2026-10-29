@@ -6,7 +6,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import Link from 'next/link';
 import { formatDuree } from '@/lib/utils';
 import { formatDateMediumUTC, formatTimeUTC } from '@/lib/date-utils';
-import { Plus, BookOpen, Plane, FileText, CheckCircle2, XCircle, Timer, ArrowRight, ChevronRight, Search, SlidersHorizontal, Layers } from 'lucide-react';
+import { Plus, BookOpen, Plane, CheckCircle2, XCircle, Timer, ArrowRight, ChevronRight, Search, SlidersHorizontal, Layers } from 'lucide-react';
 import VolDeleteButton from '@/components/VolDeleteButton';
 import ExportLogbookButton from './ExportLogbookButton';
 import { StatusBadge } from '@/components/StatusBadge';
@@ -14,9 +14,9 @@ import type { StatusBadgeConfig } from '@/components/StatusBadge';
 import { countChequesAEncaisser } from '@/lib/felitz/cheques-count';
 
 const VOL_STATUT_MAP: Record<string, StatusBadgeConfig> = {
-  'validé': { label: 'Valide', className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', icon: <CheckCircle2 className="h-3 w-3" /> },
+  'validé': { label: 'Validé', className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/25', icon: <CheckCircle2 className="h-3 w-3" /> },
   'refusé': { label: 'Refusé', className: 'bg-red-500/15 text-red-400 border border-red-500/25', icon: <XCircle className="h-3 w-3" /> },
-  'en_attente': { label: 'Attente', className: 'bg-amber-500/15 text-amber-400 border border-amber-500/25', icon: <Timer className="h-3 w-3" /> },
+  'en_attente': { label: 'À valider', className: 'bg-amber-500/15 text-amber-400 border border-amber-500/25', icon: <Timer className="h-3 w-3" /> },
 };
 
 export default async function LogbookPage({ searchParams: searchParamsPromise }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -28,6 +28,7 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
   const admin = createAdminClient();
 
   const param = (key: string) => typeof searchParams[key] === 'string' ? searchParams[key] as string : '';
+  const registrationNotice = param('enregistrement');
   const page = Math.min(10000, Math.max(1, Math.floor(Number(param('page')) || 1)));
   const status = ['validé', 'en_attente', 'refusé'].includes(param('statut')) ? param('statut') : '';
   const search = param('q').replace(/[^\p{L}\p{N}\s-]/gu, '').trim().slice(0, 60);
@@ -46,17 +47,13 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
   if (search) flightsQuery = flightsQuery.or(`callsign.ilike.%${search}%,compagnie_libelle.ilike.%${search}%,aeroport_depart.ilike.%${search}%,aeroport_arrivee.ilike.%${search}%`);
   const summaryPromise = admin.rpc('logbook_summary', { p_user_id: user.id });
   // Profile + bounded flight data in a single parallel batch
-  const [{ data: profile, error: profileError }, { data: vols, count: filteredCount, error: flightsError }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsRefuseParCopilote }, { data: volsEnAttenteInstructeur }, { data: plansVolRefuses }, { data: plansVolClotures }, { data: plansActifs }, chequesAEncaisser, summaryResult] = await Promise.all([
+  const [{ data: profile, error: profileError }, { data: vols, count: filteredCount, error: flightsError }, { data: volsEnAttentePilote }, { data: volsEnAttenteCopilote }, { data: volsEnAttenteInstructeur }, { data: plansActifs, error: activePlansError }, chequesAEncaisser, summaryResult] = await Promise.all([
     supabase.from('profiles').select('heures_initiales_minutes, blocked_until, role').eq('id', user.id).single(),
     flightsQuery.order('depart_utc', { ascending: false }).order('id', { ascending: false }).range((page - 1) * 30, page * 30 - 1),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, pilote:profiles!vols_pilote_id_fkey(identifiant)').eq('copilote_id', user.id).eq('statut', 'en_attente_confirmation_pilote').order('depart_utc', { ascending: false }),
     supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_copilote').order('depart_utc', { ascending: false }),
-    supabase.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, copilote:profiles!vols_copilote_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'refuse_par_copilote').order('depart_utc', { ascending: false }),
     admin.from('vols').select('id, depart_utc, aeroport_depart, aeroport_arrivee, instructeur:profiles!vols_instructeur_id_fkey(identifiant)').eq('pilote_id', user.id).eq('statut', 'en_attente_confirmation_instructeur').order('depart_utc', { ascending: false }),
-    admin.from('plans_vol').select('id').eq('pilote_id', user.id).eq('statut', 'refuse'),
-    // Plans civils clôturés seulement : pas les MEDEVAC SIAVI (chronologie = rapport SIAVI, pas carnet via le plan)
-    admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', user.id).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null),
-    admin.from('plans_vol').select('id, numero_vol, statut, code_transpondeur').eq('pilote_id', user.id).in('statut', ['depose', 'en_attente', 'accepte', 'en_cours', 'en_attente_cloture']).order('created_at', { ascending: false }).limit(8),
+    admin.from('plans_vol').select('id, numero_vol, statut, code_transpondeur').or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`).in('statut', ['depose', 'en_attente', 'en_attente_copilote', 'accepte', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant']).order('created_at', { ascending: false }).limit(8),
     countChequesAEncaisser(admin, user.id),
     summaryPromise,
   ]);
@@ -81,74 +78,24 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
   return (
     <div className="space-y-6">
       <MajorEventBanner />
-      {/* Header : fond décoratif dans un calque overflow-hidden pour ne pas couper le menu PDF */}
-      <div className="relative z-0 rounded-2xl shadow-xl animate-reveal-blur">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-slate-900 to-cyan-950">
-          <div className="absolute inset-0 bg-cockpit-grid opacity-30"></div>
-          <div aria-hidden className="absolute top-3 left-0 right-0 h-6 overflow-hidden opacity-30">
-            <div className="animate-plane-glide text-white/60 text-xs">✈</div>
-          </div>
+      {['transmis', 'existant'].includes(registrationNotice) && <p role="status" className="rounded-xl border border-emerald-800/60 bg-emerald-950/20 p-4 text-sm text-emerald-100">{registrationNotice === 'existant' ? 'Ce vol était déjà enregistré dans votre carnet. Aucune nouvelle ligne n’a été créée.' : 'Votre vol est enregistré dans le carnet.'} La validation du staff est une étape distincte : ne transmettez pas de nouveau un vol en attente.</p>}
+      <header className="rounded-xl border border-slate-700 bg-slate-900 p-5 sm:p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><p className="mb-2 text-[10px] font-semibold uppercase tracking-[.18em] text-sky-400">Registre personnel · Aviation civile</p><h1 className="text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">Carnet de vol</h1><p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-400">Consultez votre activité, vérifiez les validations et conservez une trace de chaque vol.</p></div>
+          <ExportLogbookButton typesVolDisponibles={typesVolUniques} />
         </div>
-        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4 p-6">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="relative">
-                <div className="absolute inset-0 rounded-xl bg-sky-300/30 blur-lg animate-halo-pulse" aria-hidden></div>
-                <div className="relative p-2.5 rounded-xl bg-white/10 backdrop-blur border border-white/20">
-                  <BookOpen className="h-6 w-6 text-white" />
-                </div>
-              </div>
-              <div><p className="mb-1 text-[10px] font-semibold uppercase tracking-[.2em] text-cyan-300">Espace pilote · Votre activité</p><h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">Mon carnet de vol</h1></div>
-            </div>
-            <p className="text-sky-100/80 text-sm">Tous vos vols, vos heures et votre progression, réunis au même endroit.</p>
-            <p className="text-sky-200/70 text-xs mt-2 flex items-center gap-1.5">
-              <span className="status-dot status-dot-success animate-hud-blink"></span>
-              {summaryUnavailable ? 'Statistiques temporairement indisponibles' : <>{totalValides} vol{totalValides > 1 ? 's' : ''} validé{totalValides > 1 ? 's' : ''} · {heures} h {minutes.toString().padStart(2, '0')} · toutes les pages</>}
-            </p>
-          </div>
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-start">
-            <ExportLogbookButton typesVolDisponibles={typesVolUniques} className="w-full justify-center sm:w-auto" />
-            {!blocked && (
-              <>
-                <Link
-                  href="/logbook/plans-vol"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <FileText className="h-4 w-4" />
-                  Plans de vol
-                  {(plansVolRefuses?.length ?? 0) > 0 && (
-                    <span className="rounded-full bg-red-500 px-2 py-0.5 text-xs font-bold animate-pulse-soft">
-                      {plansVolRefuses!.length}
-                    </span>
-                  )}
-                </Link>
-                <Link
-                  href="/logbook/depot-plan-vol"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Plane className="h-4 w-4" />
-                  Déposer un plan
-                </Link>
-                <Link
-                  href="/logbook/nouveau"
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-sky-50 text-sky-700 text-sm font-bold transition-all shadow-lg hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Plus className="h-4 w-4" />
-                  Enregistrer un vol
-                </Link>
-              </>
-            )}
-            {blocked && (
-              <div className="px-4 py-2 rounded-xl bg-amber-500/20 border border-amber-400/30 text-amber-200 text-sm">
-                Vous ne pouvez pas ajouter de vol pour le moment.
-              </div>
-            )}
-          </div>
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-4 border-t border-slate-700 pt-4">
+          <p className="text-xs text-slate-400">{summaryUnavailable ? 'Totaux temporairement indisponibles' : <>{totalValides} vols validés · {heures} h {minutes.toString().padStart(2, '0')} · carnet complet</>}<span className="ml-2 text-slate-500">Horaires UTC</span></p>
+          {!blocked ? <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Link href="/logbook/nouveau" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-600 px-4 text-sm font-medium text-slate-200 hover:bg-slate-800"><Plus aria-hidden className="h-4 w-4"/> Enregistrer un vol effectué</Link>
+            <Link href="/logbook/depot-plan-vol" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"><Plane aria-hidden className="h-4 w-4"/> Préparer un vol</Link>
+          </div> : <p className="text-sm text-amber-300">L’ajout de vols est temporairement suspendu pour votre compte.</p>}
         </div>
-      </div>
+      </header>
 
       <LogbookNextAction
         blocked={blocked}
+        unavailable={Boolean(activePlansError)}
         plansActifs={plansActifs ?? []}
         chequesAEncaisser={chequesAEncaisser}
       />
@@ -166,9 +113,9 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
       </div>
       {summaryUnavailable ? <p role="alert" className="rounded-xl border border-amber-700 bg-amber-950/30 p-4 text-amber-200">Statistiques temporairement indisponibles. Aucun total ne peut être affiché pour le moment. <Link href={pageUrl(page)} className="underline">Réessayer</Link></p> : <LogbookOverview summary={summary!} initialMinutes={profile?.heures_initiales_minutes ?? 0}/>}
 
-      {/* Actions pilotes -> voir la cloche de notifications */}
+      {/* Historique civil : les confirmations sont suivies séparément. */}
 
-      <section id="historique" aria-labelledby="historique-title" className="scroll-mt-24 rounded-2xl border border-slate-700/60 bg-slate-900/70 p-4 shadow-xl shadow-black/10 sm:p-6">
+      <section id="historique" aria-labelledby="historique-title" className="scroll-mt-24 rounded-2xl border border-slate-700/60 bg-slate-900 p-4 sm:p-6">
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <div><h2 id="historique-title" className="flex items-center gap-2 text-xl font-semibold text-slate-100"><BookOpen className="h-5 w-5 text-sky-400"/> Historique des vols</h2><p className="mt-1 text-sm text-slate-400">{activeFilters?'Résultats correspondant à vos filtres.':'Parcourez vos vols du plus récent au plus ancien.'}</p></div>
           {!flightsError&&<span className="rounded-full border border-slate-600/60 bg-slate-800 px-3 py-1.5 text-xs font-medium text-slate-200">{filteredCount ?? 0} {activeFilters?'résultats':'vols au total'}</span>}
@@ -182,15 +129,15 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
         {!flightsError&&pageCount>1&&<div className="mt-4 flex gap-3 rounded-xl border border-sky-800/60 bg-sky-950/30 p-3 text-sm text-sky-100"><Layers aria-hidden className="mt-0.5 h-4 w-4 shrink-0 text-sky-400"/><p><strong>{filteredCount} vols, {pageCount} pages.</strong> Jusqu’à 30 vols sont affichés par page. Utilisez les numéros pour consulter les vols plus anciens.</p></div>}
         {!flightsError&&<LogbookPagination page={page} total={filteredCount ?? 0} search={search} status={status} date={date} location="haut"/>}
         {flightsError || !vols ? <p role="alert" className="text-amber-300 py-8">Impossible de charger les vols pour le moment. Ce message ne signifie pas que votre carnet est vide. <Link href={pageUrl(page)} className="underline">Réessayer</Link></p> : vols.length === 0 && page > pageCount ? <p className="py-8 text-slate-300">Cette page ne contient plus de vols. <Link href={pageUrl(1)} className="underline text-sky-400">Revenir à la première page</Link></p> : vols.length === 0 ? (
-          <div className="text-center py-12 animate-fade-in">
-            <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4 animate-float">
+          <div className="text-center py-12">
+            <div className="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-slate-800/60 border border-slate-700/60 mb-4">
               <Plane className="h-8 w-8 text-slate-500" />
             </div>
             <p className="text-slate-400 text-base font-medium">Aucun vol dans cette sélection</p>
             <p className="text-slate-500 text-sm mt-1">{search || status || date ? 'Essayez de retirer les filtres pour retrouver vos vols.' : 'Les vols à confirmer apparaissent dans la rubrique Confirmations.'}</p>
             <Link
               href={search || status || date ? '/logbook' : '/logbook/nouveau'}
-              className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-[0.98]"
+              className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-white text-sm font-medium transition-colors"
             >
               <Plus className="h-4 w-4" />
               {search || status || date ? 'Afficher tous mes vols' : 'Enregistrer un vol'}
@@ -199,7 +146,7 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
         ) : (
           <>
             {/* ── Vue MOBILE : cartes (sm et moins) ── */}
-            <div className="sm:hidden -mx-5 px-3 space-y-2 pb-2">
+            <div className="mt-4 space-y-2 pb-2 sm:hidden">
               {vols.map((v) => {
                 const ta = Array.isArray(v.type_avion) ? v.type_avion[0] : v.type_avion;
                 const roleTxt = v.instructeur_id === user.id ? 'Instructeur' : (v.copilote_id === user.id || (Array.isArray(v.copilote) ? v.copilote[0] : v.copilote)?.id === user.id) ? 'Co-pilote' : v.role_pilote;
@@ -312,14 +259,16 @@ export default async function LogbookPage({ searchParams: searchParamsPromise }:
 
 function LogbookNextAction({
   blocked,
+  unavailable,
   plansActifs,
   chequesAEncaisser,
 }: {
   blocked: boolean;
+  unavailable: boolean;
   plansActifs: Array<{ id: string; numero_vol: string; statut: string; code_transpondeur: string | null }>;
   chequesAEncaisser: number;
 }) {
-  const actif = plansActifs[0];
+  const actif = plansActifs.find(p => p.statut === 'en_attente_cloture') ?? plansActifs.find(p => ['en_cours', 'automonitoring', 'accepte', 'en_pause'].includes(p.statut)) ?? plansActifs[0];
   let title = 'Prochaine action';
   let detail = 'Déposez un plan de vol pour commencer un vol.';
   let href = '/logbook/depot-plan-vol';
@@ -330,6 +279,11 @@ function LogbookNextAction({
     detail = 'Vous ne pouvez pas déposer de vol pour le moment.';
     href = '/messagerie';
     cta = 'Voir la messagerie';
+  } else if (unavailable) {
+    title = 'Suivi des plans indisponible';
+    detail = 'Le suivi ne peut pas être chargé pour le moment. Consultez vos plans avant de déposer un nouveau vol.';
+    href = '/logbook/plans-vol';
+    cta = 'Consulter mes plans';
   } else if (actif?.statut === 'en_attente_cloture') {
     title = 'Clôture en attente';
     detail = `Le plan ${actif.numero_vol} attend la confirmation ATC. Le paiement n’est pas encore versé.`;
@@ -340,9 +294,19 @@ function LogbookNextAction({
     detail = `Plan ${actif.numero_vol} déposé — saisissez le code transpondeur avant le départ.`;
     href = '/logbook/plans-vol';
     cta = 'Ouvrir le transpondeur';
-  } else if (actif && ['accepte', 'en_cours', 'depose', 'en_attente'].includes(actif.statut)) {
-    title = 'Vol en cours';
-    detail = `Plan ${actif.numero_vol} actif. À l’arrivée, demandez la clôture depuis la page du plan.`;
+  } else if (actif?.statut === 'en_pause') {
+    title = 'Vol en pause';
+    detail = `Le plan ${actif.numero_vol} est en pause. Vérifiez les conditions de reprise avant de poursuivre.`;
+    href = '/logbook/plans-vol';
+    cta = 'Voir la reprise';
+  } else if (actif?.statut === 'en_attente_copilote') {
+    title = 'Accord du copilote attendu';
+    detail = `L’équipage du plan ${actif.numero_vol} doit être confirmé avant la suite du dépôt.`;
+    href = '/logbook/plans-vol';
+    cta = 'Consulter le plan';
+  } else if (actif && ['accepte', 'en_cours', 'automonitoring', 'depose', 'en_attente', 'planifie_suivant'].includes(actif.statut)) {
+    title = ['accepte', 'en_cours', 'automonitoring'].includes(actif.statut) ? 'Plan de vol actif' : 'Plan de vol en préparation';
+    detail = `Plan ${actif.numero_vol} à suivre. À l’arrivée, demandez la clôture depuis la page du plan.`;
     href = '/logbook/plans-vol';
     cta = 'Voir le plan';
   } else if (chequesAEncaisser > 0) {

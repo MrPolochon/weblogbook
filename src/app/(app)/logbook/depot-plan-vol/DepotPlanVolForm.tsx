@@ -3,15 +3,16 @@
 import { useState, useEffect, useMemo, useTransition, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AEROPORTS_VOL_CIVIL, getAeroportInfo, estimerPassagers, estimerCargo, genererTypeCargaison, getCargaisonInfo, getBonusIsolement, TypeCargaison, type CoefficientContext } from '@/lib/aeroports-ptfs';
+import { AEROPORTS_VOL_CIVIL, getAeroportInfo, getCargaisonInfo, getBonusIsolement, TypeCargaison } from '@/lib/aeroports-ptfs';
+import { fetchJson } from '@/lib/fetch-json';
+import { applyCallsignSuggestion, suggestedPilotCallsign, readDisplayFlightQuote, type DisplayFlightQuote } from '@/lib/pilot-flight-form';
 import { ARME_MISSIONS } from '@/lib/armee-missions';
 import { isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import { joinSidStarRoute, buildRouteWithManual, stripRouteBrackets } from '@/lib/utils';
 import { Building2, Plane, Users, Weight, Shield, Radio, Phone, MapPin, Send, Navigation, Sparkles, Gauge, FileText, Route, Briefcase, CheckCircle2, Circle, ClipboardCheck, Target } from 'lucide-react';
 import PorteDepartSelect from '@/components/PorteDepartSelect';
-import BriaDialog, { getBriaCooldownRemaining } from '@/components/BriaDialog';
+import BriaDialog from '@/components/BriaDialog';
 import NotamsAirportWarning from '@/components/NotamsAirportWarning';
-import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { toast } from 'sonner';
 
 interface TypeAvion {
@@ -42,14 +43,6 @@ interface Compagnie {
   pourcentage_salaire: number;
   code_oaci: string | null;
   role: 'employe' | 'pdg';
-}
-
-interface TarifLiaison {
-  id: string;
-  aeroport_depart: string;
-  aeroport_arrivee: string;
-  prix_billet: number;
-  bidirectionnel: boolean;
 }
 
 interface AeroportPassagers {
@@ -120,6 +113,7 @@ export default function DepotPlanVolForm({
   const [aeroport_depart, setAeroportDepart] = useState('');
   const [aeroport_arrivee, setAeroportArrivee] = useState('');
   const [numero_vol, setNumeroVol] = useState('');
+  const callsignManualRef = useRef(false);
   const [porte, setPorte] = useState('');
   const [temps_prev_min, setTempsPrevMin] = useState('');
   // Heure de depart prevue (UTC) au format HH:MM. Sera enregistree dans
@@ -133,7 +127,7 @@ export default function DepotPlanVolForm({
   const [route_ifr, setRouteIfr] = useState('');
   const [niveau_croisiere, setNiveauCroisiere] = useState('');
   const [note_atc, setNoteAtc] = useState('');
-  
+
   // Commercial flight options
   const [vol_commercial, setVolCommercial] = useState(false);
   const [vol_ferry, setVolFerry] = useState(false);
@@ -148,29 +142,41 @@ export default function DepotPlanVolForm({
   const [copilote_id, setCopiloteId] = useState('');
   const [copilotes, setCopilotes] = useState<{ id: string; identifiant: string }[]>([]);
   const [copilotesLoading, setCopilotesLoading] = useState(false);
-  
-  // Calculated values - stockés séparément pour éviter la triche
-  const [generatedPax, setGeneratedPax] = useState(0);
-  const [generatedCargo, setGeneratedCargo] = useState(0);
-  const [estimatedTypeCargaison, setEstimatedTypeCargaison] = useState<TypeCargaison>('general');
-  const [lastGeneratedKey, setLastGeneratedKey] = useState('');
-  
+
+  const [flightQuote, setFlightQuote] = useState<{ key: string; value: DisplayFlightQuote } | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteAttempt, setQuoteAttempt] = useState(0);
+  const [quoteClock, setQuoteClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setQuoteClock(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Confirmation vol sans ATC (quand aucun ATC n'est disponible)
   const [showNoAtcConfirm, setShowNoAtcConfirm] = useState(false);
-  
+
   // Tarifs par liaison et saturation
-  const [tarifsLiaisons, setTarifsLiaisons] = useState<TarifLiaison[]>([]);
   const [passagersAeroport, setPassagersAeroport] = useState<AeroportPassagers | null>(null);
-  const [cargoAeroport, setCargoAeroport] = useState<{ cargo_disponible: number; cargo_max: number } | null>(null);
   // Date du dernier vol arrivé à l'aéroport d'arrivée (pour le bonus d'isolement)
   const [lastArrivalArrivee, setLastArrivalArrivee] = useState<Date | null>(null);
-  
+
   const [loading, setLoading] = useState(false);
   const submitBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showBria, setShowBria] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
+  const wizardFormRef = useRef<HTMLFormElement>(null);
+  const previousWizardStep = useRef(wizardStep);
+  useEffect(() => {
+    if (previousWizardStep.current === wizardStep) return;
+    previousWizardStep.current = wizardStep;
+    const form = wizardFormRef.current;
+    form?.scrollIntoView({ block: 'start', behavior: 'auto' });
+    const heading = form?.querySelector<HTMLElement>('h2');
+    if (heading) { heading.tabIndex = -1; heading.focus({ preventScroll: true }); }
+  }, [wizardStep]);
   /** null = en chargement, true = portes existent, false = aucune porte configurée */
   const [aHasGates, setAHasGates] = useState<boolean | null>(null);
 
@@ -190,6 +196,7 @@ export default function DepotPlanVolForm({
   }, [initialDraft]);
   useEffect(() => {
     if (!initialReservation) return;
+    callsignManualRef.current = true;
     setAeroportDepart(initialReservation.departure); setAeroportArrivee(initialReservation.arrival);
     setTempsPrevMin(String(initialReservation.duration_minutes)); setNumeroVol(initialReservation.callsign);
     setHeureDepart(new Date(initialReservation.departure_at).toISOString().slice(11,16));
@@ -203,6 +210,7 @@ export default function DepotPlanVolForm({
       const data = JSON.parse(localStorage.getItem(draftKey) || 'null');
       if (!data || typeof data!=='object') { toast.info('Aucun brouillon enregistré.'); return; }
       const text=(key:string)=>typeof data[key]==='string'?data[key].slice(0,1000):'';
+      callsignManualRef.current = true;
       setAeroportDepart(text('aeroport_depart'));setAeroportArrivee(text('aeroport_arrivee'));setTempsPrevMin(text('temps_prev_min'));setTypeVol(data.type_vol==='IFR'?'IFR':'VFR');setRouteIfr(text('route_ifr'));setNiveauCroisiere(text('niveau_croisiere'));setIntentionsVol(text('intentions_vol'));setNumeroVol(text('numero_vol'));
       toast.success('Brouillon restauré. Vérifiez la flotte et la disponibilité avant dépôt.');
     } catch { toast.error('Brouillon illisible.'); }
@@ -210,9 +218,9 @@ export default function DepotPlanVolForm({
 
   // Get selected company
   const selectedCompagnie = compagniesDisponibles.find(c => c.id === selectedCompagnieId) || null;
-  
+
   // Get individual aircraft for the selected company, filtered by departure airport
-  const avionsCompagnie = useMemo(() => 
+  const avionsCompagnie = useMemo(() =>
     selectedCompagnieId ? (avionsParCompagnie[selectedCompagnieId] || []) : [],
     [selectedCompagnieId, avionsParCompagnie]
   );
@@ -223,10 +231,16 @@ export default function DepotPlanVolForm({
     [vol_ferry, avionsCompagnie]
   );
   const departVerrouilleParAvion = Boolean((vol_commercial || vol_ferry) && compagnie_avion_id);
-  
+
   // Get selected aircraft info
   const selectedInventaire = inventairePersonnel.find(i => i.id === inventaire_avion_id);
   const selectedAvionIndiv = avionsCompagnie.find(a => a.id === compagnie_avion_id);
+  const suggestedCallsign = suggestedPilotCallsign(vol_commercial && !vol_ferry, selectedCompagnie?.code_oaci,
+    vol_ferry ? selectedAvionIndiv?.immatriculation : selectedInventaire?.immatriculation);
+  useEffect(() => {
+    if (armee_avion_id) return;
+    setNumeroVol(current => applyCallsignSuggestion(current, suggestedCallsign, callsignManualRef.current));
+  }, [suggestedCallsign, armee_avion_id]);
 
   const routeMissionId = useMemo(() => {
     if (armeeAvions.length > 0) return armee_mission_id;
@@ -234,7 +248,7 @@ export default function DepotPlanVolForm({
   }, [armeeAvions.length, armee_mission_id, initialMissionId]);
 
   const missionLocked = armeeAvions.length > 0 && Boolean(armee_mission_id && ARME_MISSIONS.some((m) => m.id === armee_mission_id));
-  
+
   // Auto-select company if only one available
   useEffect(() => {
     if (compagniesDisponibles.length === 1 && !selectedCompagnieId) {
@@ -300,17 +314,17 @@ export default function DepotPlanVolForm({
     setAeroportDepart(m.aeroport_depart);
     setAeroportArrivee(m.aeroport_arrivee);
     setTempsPrevMin(String(m.duree_minutes));
-    setNumeroVol((prev) => (prev.trim() ? prev : `${m.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`));
+    if (!callsignManualRef.current) setNumeroVol((prev) => (prev.trim() ? prev : `${m.callsign_prefix}${Math.floor(100 + Math.random() * 900)}`));
   }, [routeMissionId]);
 
   // Reset individual aircraft selection when departure airport changes
   // SAUF si l'avion sélectionné est déjà à cet aéroport
   useEffect(() => {
     if (!aeroport_depart || !compagnie_avion_id) return;
-    
+
     // Trouver l'avion actuellement sélectionné
     const avionSelectionne = avionsCompagnie.find(a => a.id === compagnie_avion_id);
-    
+
     // Ne désélectionner que si l'avion n'est PAS à l'aéroport de départ choisi
     if (avionSelectionne && avionSelectionne.aeroport_actuel !== aeroport_depart.toUpperCase()) {
       setCompagnieAvionId('');
@@ -379,26 +393,6 @@ export default function DepotPlanVolForm({
     setRouteIfr(buildRouteWithManual(selectedSidRoute, manualRoutePart, selectedStarRoute));
   }, [type_vol, selectedSidRoute, selectedStarRoute, manualRoutePart]);
 
-  // Charger les tarifs par liaison quand la compagnie change
-  useEffect(() => {
-    if (!selectedCompagnieId) {
-      setTarifsLiaisons([]);
-      return;
-    }
-    const ctrl = new AbortController();
-    fetch(`/api/tarifs-liaisons?compagnie_id=${selectedCompagnieId}`, { signal: ctrl.signal })
-      .then(res => res.json())
-      .then(data => {
-        if (ctrl.signal.aborted) return;
-        if (Array.isArray(data)) setTarifsLiaisons(data);
-      })
-      .catch((err) => {
-        if (err?.name === 'AbortError') return;
-        toast.error('Impossible de charger les tarifs de la compagnie.');
-      });
-    return () => ctrl.abort();
-  }, [selectedCompagnieId]);
-
   // Charger les passagers disponibles quand l'aéroport de départ change
   useEffect(() => {
     if (!aeroport_depart) {
@@ -417,35 +411,6 @@ export default function DepotPlanVolForm({
         toast.error('Impossible de récupérer les passagers en attente.');
       });
     return () => ctrl.abort();
-  }, [aeroport_depart]);
-
-  // Charger le cargo disponible quand l'aéroport de départ change
-  useEffect(() => {
-    if (!aeroport_depart) {
-      setCargoAeroport(null);
-      return;
-    }
-    
-    fetch(`/api/aeroport-cargo?code_oaci=${aeroport_depart}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data && data.cargo_disponible !== undefined) {
-          setCargoAeroport({ cargo_disponible: data.cargo_disponible, cargo_max: data.cargo_max || 0 });
-        } else {
-          // Fallback : utiliser les données statiques
-          const aeroportInfo = getAeroportInfo(aeroport_depart);
-          if (aeroportInfo) {
-            setCargoAeroport({ cargo_disponible: aeroportInfo.cargoMax, cargo_max: aeroportInfo.cargoMax });
-          }
-        }
-      })
-      .catch(() => {
-        // Fallback en cas d'erreur
-        const aeroportInfo = getAeroportInfo(aeroport_depart);
-        if (aeroportInfo) {
-          setCargoAeroport({ cargo_disponible: aeroportInfo.cargoMax, cargo_max: aeroportInfo.cargoMax });
-        }
-      });
   }, [aeroport_depart]);
 
   // Charger le timestamp du dernier vol arrivé à l'aéroport d'arrivée
@@ -473,129 +438,52 @@ export default function DepotPlanVolForm({
     return () => ctrl.abort();
   }, [aeroport_arrivee]);
 
-  // Trouver le prix du billet pour cette liaison
-  const prixBilletLiaison = (() => {
-    if (!selectedCompagnie) return 0;
-    
-    // Chercher un tarif spécifique pour cette liaison
-    const tarifSpecifique = tarifsLiaisons.find(
-      t => t.aeroport_depart === aeroport_depart && t.aeroport_arrivee === aeroport_arrivee
-    );
-    
-    if (tarifSpecifique) return tarifSpecifique.prix_billet;
-    
-    // Sinon utiliser le prix par défaut de la compagnie
-    return selectedCompagnie.prix_billet_pax;
-  })();
-
-  // Generate PAX and CARGO values based on all factors
-  // Les vols ferry sont à vide - pas de génération
+  // Le même devis serveur sert à l'aperçu et au dépôt. Changer l'indicatif ou
+  // l'heure ne relance jamais le tirage ; le serveur conserve le chargement UTC.
+  const quoteScope = useMemo(() => ({
+    aeroport_depart, aeroport_arrivee, compagnie_id: selectedCompagnieId,
+    compagnie_avion_id, vol_commercial: true, vol_ferry: false, nature_transport,
+  }), [aeroport_depart, aeroport_arrivee, selectedCompagnieId, compagnie_avion_id, nature_transport]);
+  const quoteRequired = vol_commercial && !vol_ferry;
+  const quoteKey = quoteRequired && selectedCompagnieId && compagnie_avion_id && aeroport_depart && aeroport_arrivee
+    ? JSON.stringify([quoteScope, new Date(quoteClock).toISOString().slice(0, 10)]) : '';
+  const currentQuote = flightQuote?.key === quoteKey && Date.parse(flightQuote.value.expires_at) > quoteClock ? flightQuote.value : null;
   useEffect(() => {
-    // Doit avoir un avion individuel sélectionné
-    // Vol ferry = vol à vide, pas de passagers/cargo
-    if (vol_ferry || !vol_commercial || !selectedCompagnie || !compagnie_avion_id || !aeroport_depart || !aeroport_arrivee) {
-      setGeneratedPax(0);
-      setGeneratedCargo(0);
-      setLastGeneratedKey('');
-      return;
-    }
+    if (!quoteKey) { setFlightQuote(null); setQuoteLoading(false); setQuoteError(null); return; }
+    const controller = new AbortController();
+    setQuoteLoading(true); setQuoteError(null); setFlightQuote(null);
+    fetchJson<unknown>('/api/plans-vol/devis', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal, body: JSON.stringify(quoteScope),
+    }).then(data => {
+      if (!controller.signal.aborted) setFlightQuote({ key: quoteKey, value: readDisplayFlightQuote(data) });
+    }).catch(err => {
+      if (!controller.signal.aborted) setQuoteError(err instanceof Error ? err.message : 'Chargement indisponible.');
+    }).finally(() => { if (!controller.signal.aborted) setQuoteLoading(false); });
+    return () => controller.abort();
+  }, [quoteKey, quoteScope, quoteAttempt]);
 
-    // Obtenir le type d'avion depuis l'avion individuel sélectionné
-    const avion = premierTypeAvionDepuisEmbed(selectedAvionIndiv?.types_avion);
-    if (!avion) {
-      setGeneratedPax(0);
-      setGeneratedCargo(0);
-      setLastGeneratedKey('');
-      return;
-    }
-
-    const capacitePax = avion.capacite_pax ?? 0;
-    const capaciteCargo = avion.capacite_cargo_kg ?? 0;
-    const prixCargo = selectedCompagnie.prix_kg_cargo || 0;
-
-    // Clé unique pour régénérer seulement quand les paramètres importants changent
-    // (inclut last_flight_arrival pour rafraîchir le bonus d'isolement)
-    const aircraftKey = compagnie_avion_id;
-    const isoKey = lastArrivalArrivee?.toISOString() ?? 'null';
-    const generationKey = `${aircraftKey}-${aeroport_depart}-${aeroport_arrivee}-${prixBilletLiaison}-${prixCargo}-${isoKey}`;
-    if (generationKey === lastGeneratedKey) {
-      return;
-    }
-
-    // Contexte commun : last_flight_arrival pour le bonus d'isolement, ratios pour
-    // la saturation, capacités pour le malus petit aéroport.
-    const ratioPaxDispo = passagersAeroport && passagersAeroport.passagers_max > 0
-      ? passagersAeroport.passagers_disponibles / passagersAeroport.passagers_max
-      : undefined;
-    const ratioCargoDispo = cargoAeroport && cargoAeroport.cargo_max > 0
-      ? cargoAeroport.cargo_disponible / cargoAeroport.cargo_max
-      : undefined;
-    const ctxBase: CoefficientContext = {
-      lastArrivalAtArrivee: lastArrivalArrivee,
-      ratioPaxDispo,
-      ratioCargoDispo,
-      capacitePax,
-      capaciteCargoKg: capaciteCargo,
-    };
-
-    let pax = 0;
-    let cargo = 0;
-
-    // PASSAGERS — estimation déterministe (la variance ±10% s'applique côté serveur)
-    if (capacitePax > 0) {
-      const paxDispo = passagersAeroport?.passagers_disponibles ?? capacitePax;
-      const estim = estimerPassagers(
-        aeroport_depart,
-        aeroport_arrivee,
-        prixBilletLiaison,
-        capacitePax,
-        paxDispo,
-        ctxBase
-      );
-      pax = estim.passagers;
-    }
-
-    // CARGO — estimation déterministe
-    if (capaciteCargo > 0 && prixCargo > 0) {
-      const cargoDisponible = cargoAeroport?.cargo_disponible ?? getAeroportInfo(aeroport_depart)?.cargoMax ?? 0;
-      const estim = estimerCargo(
-        aeroport_depart,
-        aeroport_arrivee,
-        prixCargo,
-        capaciteCargo,
-        cargoDisponible,
-        ctxBase
-      );
-      cargo = estim.cargo;
-    }
-
-    setGeneratedPax(pax);
-    setGeneratedCargo(cargo);
-    // Type de cargaison provisoire (le serveur tirera le vrai type au dépôt)
-    setEstimatedTypeCargaison(genererTypeCargaison());
-    setLastGeneratedKey(generationKey);
-  }, [vol_commercial, vol_ferry, compagnie_avion_id, selectedCompagnie, selectedAvionIndiv, lastGeneratedKey, aeroport_depart, aeroport_arrivee, prixBilletLiaison, passagersAeroport, cargoAeroport, lastArrivalArrivee]);
+  const generatedPax = currentQuote?.nb_pax_genere ?? 0;
+  const generatedCargo = currentQuote?.cargo_kg_genere ?? 0;
+  const estimatedTypeCargaison = (currentQuote?.type_cargaison ?? 'general') as TypeCargaison;
+  const prixBilletLiaison = currentQuote?.prix_billet_utilise ?? 0;
 
   // Revenus : passagers uniquement, cargo uniquement, ou passagers + cargo complémentaire
   const nbPax = nature_transport === 'passagers' ? generatedPax : 0;
   const cargoKg = nature_transport === 'cargo' ? generatedCargo : 0;
   const cargoComplementaire = nature_transport === 'passagers' ? generatedCargo : 0;
-  const revenuPax = generatedPax * prixBilletLiaison;
-  const prixCargo = selectedCompagnie?.prix_kg_cargo || 0;
-  const revenuCargo = (nature_transport === 'cargo' ? generatedCargo : cargoComplementaire) * prixCargo;
-  const revenuBrut = nature_transport === 'passagers'
-    ? revenuPax + revenuCargo
-    : revenuCargo;
-  const salairePilote = Math.floor(revenuBrut * (selectedCompagnie?.pourcentage_salaire || 0) / 100);
+  const prixCargo = currentQuote?.prix_kg_cargo_utilise ?? 0;
+  const revenuBrut = currentQuote?.revenue_brut ?? 0;
+  const salairePilote = currentQuote?.salaire_pilote ?? 0;
 
   // Calculer les capacités et taux de remplissage (avion individuel seulement)
   const avionType = premierTypeAvionDepuisEmbed(selectedAvionIndiv?.types_avion);
   const capacitePaxMax = avionType?.capacite_pax ?? 0;
   const capaciteCargoMax = avionType?.capacite_cargo_kg ?? 0;
-  
+
   const tauxRemplissagePax = capacitePaxMax > 0 ? (nbPax / capacitePaxMax) : 0;
   const tauxRemplissageCargo = capaciteCargoMax > 0 ? (cargoKg / capaciteCargoMax) : 0;
-  
+
   const remplissageMinRequis = 0.25; // 25% minimum
   const volLocalRoute = isVolLocalRoute(aeroport_depart, aeroport_arrivee);
   // Vol local : pas d’exploitation ligne régulière, le plan ne doit pas être bloqué par le seuil 25 %.
@@ -627,7 +515,9 @@ export default function DepotPlanVolForm({
       return avionOk && Boolean(aeroport_depart.trim() && aeroport_arrivee.trim());
     }
     if (n === 3) {
-      if (!numero_vol.trim() || !temps_prev_min) return false;
+      if (!wizardCanAdvance(2) || !numero_vol.trim() || !Number.isInteger(Number(temps_prev_min)) || Number(temps_prev_min) < 1) return false;
+      if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(heure_depart.trim())) return false;
+      if (aHasGates === true && !porte.trim()) return false;
       if (type_vol === 'VFR') return Boolean(intentions_vol.trim());
       if (type_vol === 'IFR') return Boolean(sid_depart.trim() && star_arrivee.trim());
       return true;
@@ -642,6 +532,7 @@ export default function DepotPlanVolForm({
       { label: 'Porte de départ', ok: !aeroport_depart || aHasGates !== true || Boolean(porte?.trim()) },
       { label: 'Numéro de vol', ok: !!numero_vol.trim() },
       { label: 'Durée de vol', ok: !!(temps_prev_min && parseInt(temps_prev_min, 10) > 0) },
+      { label: 'Départ prévu en UTC', ok: /^([01]\d|2[0-3]):[0-5]\d$/.test(heure_depart.trim()) },
     ];
     if (type_vol === 'VFR') items.push({ label: 'Intentions VFR', ok: !!intentions_vol.trim() });
     if (type_vol === 'IFR') {
@@ -653,7 +544,7 @@ export default function DepotPlanVolForm({
       items.push({ label: 'Flotte armée (mission)', ok: !!armee_avion_id });
     }
     return items;
-  }, [aeroport_depart, aeroport_arrivee, porte, aHasGates, numero_vol, temps_prev_min, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id, armee_mission_id, armee_avion_id, armeeAvions.length]);
+  }, [aeroport_depart, aeroport_arrivee, porte, aHasGates, numero_vol, temps_prev_min, heure_depart, type_vol, intentions_vol, sid_depart, star_arrivee, vol_commercial, vol_ferry, compagnie_avion_id, armee_mission_id, armee_avion_id, armeeAvions.length]);
 
   function missionArmeeValidationError(): string | null {
     if (vol_commercial || vol_ferry) return null;
@@ -687,6 +578,8 @@ export default function DepotPlanVolForm({
       aeroport_depart,
       aeroport_arrivee,
       numero_vol: numero_vol.trim(),
+      callsign_manual: true,
+      quote_id: quoteRequired ? currentQuote?.quote_id : undefined,
       porte: porte.trim() || undefined,
       temps_prev_min: t,
       heure_depart: heure_depart.trim() || undefined,
@@ -746,10 +639,17 @@ export default function DepotPlanVolForm({
     const missionErr = missionArmeeValidationError();
     if (missionErr) errs.armee_mission = missionErr;
 
-    if (vol_commercial && !vol_ferry && nature_transport === 'passagers' && !remplissageValidePax) {
+    if (quoteRequired && (!currentQuote || Date.parse(currentQuote.expires_at) <= Date.now())) {
+      errs.chargement = quoteError || 'Le chargement du vol est indisponible ou expiré. Actualisez-le avant le dépôt.';
+      if (flightQuote?.key === quoteKey && Date.parse(flightQuote.value.expires_at) <= Date.now()) {
+        setQuoteClock(Date.now());
+        setQuoteAttempt(attempt => attempt + 1);
+      }
+    }
+    if (currentQuote && vol_commercial && !vol_ferry && nature_transport === 'passagers' && !remplissageValidePax) {
       errs.remplissage = `Remplissage insuffisant : minimum 25% requis. Actuellement ${nbPax}/${capacitePaxMax} (${Math.round(tauxRemplissagePax * 100)}%)`;
     }
-    if (vol_commercial && !vol_ferry && nature_transport === 'cargo' && !remplissageValideCargo) {
+    if (currentQuote && vol_commercial && !vol_ferry && nature_transport === 'cargo' && !remplissageValideCargo) {
       errs.remplissage = `Remplissage cargo insuffisant : minimum 25% requis. Actuellement ${cargoKg.toLocaleString('fr-FR')}/${capaciteCargoMax.toLocaleString('fr-FR')} kg (${Math.round(tauxRemplissageCargo * 100)}%)`;
     }
 
@@ -762,7 +662,7 @@ export default function DepotPlanVolForm({
       }, 50);
       return;
     }
-    
+
     submitBusyRef.current = true;
     setLoading(true);
     try {
@@ -772,7 +672,7 @@ export default function DepotPlanVolForm({
         body: JSON.stringify(getFormData(false)),
       });
       const data = await res.json().catch(() => ({}));
-      
+
       // Si pas d'ATC disponible, proposer le vol sans ATC
       if (!res.ok && data.error && data.error.includes('Aucune fréquence ATC')) {
         submitBusyRef.current = false;
@@ -780,9 +680,9 @@ export default function DepotPlanVolForm({
         setLoading(false);
         return;
       }
-      
+
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      
+
       // Rafraîchir les disponibilités passagers et cargo après la création du plan
       if (aeroport_depart) {
         // Rafraîchir les passagers
@@ -792,18 +692,9 @@ export default function DepotPlanVolForm({
             if (data && data.code_oaci) setPassagersAeroport(data);
           })
           .catch(() => {});
-        
-        // Rafraîchir le cargo
-        fetch(`/api/aeroport-cargo?code_oaci=${aeroport_depart}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data && data.cargo_disponible !== undefined) {
-              setCargoAeroport({ cargo_disponible: data.cargo_disponible, cargo_max: data.cargo_max || 0 });
-            }
-          })
-          .catch(() => {});
+
       }
-      
+
       try { localStorage.removeItem(draftKey); } catch { /* appareil indisponible */ }
       if(initialReservation && data.event_registration_confirmed) toast.success('Plan de vol déposé : votre inscription à l’événement est confirmée.');
       else if(initialReservation) toast.warning('Le plan est créé. Vérifiez l’état de votre inscription dans le manifeste de l’événement.');
@@ -819,12 +710,19 @@ export default function DepotPlanVolForm({
 
   async function handleSubmitSansAtc() {
     if (submitBusyRef.current) return;
+    if (quoteRequired && (!currentQuote || Date.parse(currentQuote.expires_at) <= Date.now())) {
+      setError('Le chargement du vol a expiré. Actualisez-le avant le dépôt.');
+      setQuoteClock(Date.now());
+      setQuoteAttempt(attempt => attempt + 1);
+      setShowNoAtcConfirm(false);
+      return;
+    }
     submitBusyRef.current = true;
     setError(null);
     setFieldErrors({});
     setShowNoAtcConfirm(false);
     setLoading(true);
-    
+
     const missionErr = missionArmeeValidationError();
     if (missionErr) {
       setError(missionErr);
@@ -832,7 +730,7 @@ export default function DepotPlanVolForm({
       setLoading(false);
       return;
     }
-    
+
     try {
       const res = await fetch('/api/plans-vol', {
         method: 'POST',
@@ -841,7 +739,7 @@ export default function DepotPlanVolForm({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Erreur');
-      
+
       // Rafraîchir les disponibilités passagers et cargo après la création du plan
       if (aeroport_depart) {
         // Rafraîchir les passagers
@@ -851,18 +749,9 @@ export default function DepotPlanVolForm({
             if (data && data.code_oaci) setPassagersAeroport(data);
           })
           .catch(() => {});
-        
-        // Rafraîchir le cargo
-        fetch(`/api/aeroport-cargo?code_oaci=${aeroport_depart}`)
-          .then(res => res.json())
-          .then(data => {
-            if (data && data.cargo_disponible !== undefined) {
-              setCargoAeroport({ cargo_disponible: data.cargo_disponible, cargo_max: data.cargo_max || 0 });
-            }
-          })
-          .catch(() => {});
+
       }
-      
+
       try { localStorage.removeItem(draftKey); } catch { /* appareil indisponible */ }
       if(initialReservation && data.event_registration_confirmed) toast.success('Plan de vol déposé : votre inscription à l’événement est confirmée.');
       else if(initialReservation) toast.warning('Le plan est créé. Vérifiez l’état de votre inscription dans le manifeste de l’événement.');
@@ -886,7 +775,32 @@ export default function DepotPlanVolForm({
     <>
     {initialReservation && <p className="mb-4 rounded-lg border border-amber-500/40 p-3 text-amber-200">Dernière étape de votre inscription : déposez ce plan de vol pour la confirmer. Créneau choisi : {initialReservation.departure} → {initialReservation.arrival} · {new Date(initialReservation.departure_at).toLocaleString('fr-FR',{timeZone:'UTC'})} UTC · {initialReservation.aircraft}. Choisissez votre appareil et complétez les procédures du vol. Le callsign, la route, la durée et l’horaire seront vérifiés.</p>}
     <div className="flex flex-wrap gap-3 mb-4 text-sm"><button type="button" onClick={saveDraft} className="rounded-lg border border-sky-700 p-2">Enregistrer le brouillon</button><button type="button" onClick={restoreDraft} className="rounded-lg border border-slate-700 p-2">Restaurer mon brouillon</button><button type="button" onClick={()=>{try{localStorage.removeItem(draftKey);toast.success('Brouillon supprimé.');}catch{toast.error('Suppression impossible.');}}} className="p-2 text-slate-400">Supprimer le brouillon</button></div>
-    {showBria && <BriaDialog onClose={() => setShowBria(false)} />}
+    {showBria && <BriaDialog
+      onClose={() => setShowBria(false)}
+      draft={{
+        mode: armee_avion_id ? 'militaire' : flightMode,
+        departure: aeroport_depart,
+        arrival: aeroport_arrivee,
+        callsign: numero_vol,
+        aircraft: (vol_commercial || vol_ferry) ? avionType?.nom : armee_avion_id ? premierTypeAvionDepuisEmbed(armeeAvions.find(a => a.id === armee_avion_id)?.types_avion)?.nom : selectedInventaire?.types_avion?.nom,
+        registration: (vol_commercial || vol_ferry) ? selectedAvionIndiv?.immatriculation : selectedInventaire?.immatriculation || '',
+        company: (vol_commercial || vol_ferry) ? selectedCompagnie?.nom : undefined,
+        departureUtc: heure_depart,
+        durationMinutes: temps_prev_min,
+        flightRules: type_vol,
+        intentions: intentions_vol,
+        sid: sid_depart,
+        star: star_arrivee,
+        route: route_ifr,
+      }}
+      availableSteps={[true, wizardCanAdvance(2), wizardCanAdvance(3)]}
+      onReviewStep={step => {
+        if (wizardCanAdvance(step)) {
+          setShowBria(false);
+          setWizardStep(step);
+        }
+      }}
+    />}
 
     {(avionType?.nom || selectedInventaire?.types_avion?.nom) && aeroport_depart && (
       <div className="w-full mb-3">
@@ -900,54 +814,26 @@ export default function DepotPlanVolForm({
       </div>
     )}
 
-    {/* ===== Bouton BRIA — appel téléphone, look cockpit ===== */}
+    {/* ===== BRIA : relecture guidée du formulaire ===== */}
     <div className="w-full mb-5">
       <button
         type="button"
-        onClick={async () => {
-          unlockAudioForIOS();
-          const remaining = getBriaCooldownRemaining();
-          if (remaining > 0) {
-            const mins = Math.ceil(remaining / 60000);
-            toast.error(`Vous ne pouvez pas appeler le BRIA avant ${mins} minute${mins > 1 ? 's' : ''}.`);
-            return;
-          }
-          try {
-            const res = await fetch('/api/bria-session');
-            const d = await res.json().catch(() => ({}));
-            if (Number(d.remainingMs) > 0) {
-              const mins = Math.ceil(Number(d.remainingMs) / 60000);
-              toast.error(`Vous ne pouvez pas appeler le BRIA avant ${mins} minute${mins > 1 ? 's' : ''}.`);
-              return;
-            }
-          } catch { /* le POST vérifiera aussi */ }
-          setShowBria(true);
-        }}
-        className="group relative w-full overflow-hidden rounded-2xl border-2 border-amber-500/40 bg-gradient-to-r from-amber-950/60 via-amber-900/40 to-amber-950/60 px-5 py-4 text-amber-50 font-semibold text-lg transition-all duration-300 hover:border-amber-400/70 hover:shadow-[0_10px_38px_rgba(251,191,36,0.25)] active:scale-[0.99]"
+        onClick={() => setShowBria(true)}
+        className="min-h-14 w-full rounded-lg border border-slate-700 bg-slate-900 px-4 py-4 text-slate-200 transition-colors hover:border-sky-700 hover:bg-slate-800"
       >
-        {/* Halo radar derrière l'icône */}
-        <span className="pointer-events-none absolute -left-4 top-1/2 -translate-y-1/2 h-24 w-24 rounded-full bg-amber-400/10 blur-2xl group-hover:bg-amber-400/20 transition-colors" />
-        {/* Brillance qui balaye au hover */}
-        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-amber-300/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-
-        <span className="relative flex items-center justify-center gap-3">
-          <span className="relative inline-flex h-10 w-10 items-center justify-center rounded-full border border-amber-400/50 bg-amber-500/10 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]">
-            <Phone className="h-5 w-5 text-amber-300" />
-            <span className="absolute inset-0 rounded-full ring-2 ring-amber-400/20 animate-pulse-soft" />
-          </span>
-          <span className="text-base sm:text-lg font-bold tracking-wide">Appeler le BRIA</span>
-          <span className="hidden sm:inline text-xs font-medium text-amber-300/70 ml-1 uppercase tracking-widest">
-            · briefing assisté
-          </span>
-        </span>
+        <span className="flex flex-wrap items-center justify-between gap-3 text-left"><span className="flex items-center gap-3"><Phone aria-hidden className="h-5 w-5 text-sky-400"/><span className="text-sm font-semibold">Assistance à la préparation · BRIA</span></span><span className="text-xs font-normal text-slate-400">Ouvrir le briefing assisté</span></span>
       </button>
     </div>
 
     {/* ===== Barre de progression ===== */}
     <ProgressBar percent={progressPct} />
 
-    <form onSubmit={handleSubmit} className="space-y-5 w-full">
+    <form ref={wizardFormRef} onSubmit={handleSubmit} className="space-y-5 w-full scroll-mt-28" aria-labelledby="flight-plan-title">
       <WizardNav step={wizardStep} onStep={setWizardStep} canAdvance={wizardCanAdvance} />
+      {quoteRequired && quoteKey && !currentQuote && <div role={quoteError ? 'alert' : 'status'} className="rounded-lg border border-amber-700 bg-slate-900 p-3 text-sm text-slate-200">
+        <p>{quoteLoading ? 'Chargement en cours de confirmation…' : quoteError || 'Actualisez le chargement avant de déposer ce vol.'}</p>
+        {!quoteLoading && <button type="button" className="mt-2 text-sky-300 underline" onClick={() => { setQuoteClock(Date.now()); setQuoteAttempt(n => n + 1); }}>Actualiser le chargement du vol</button>}
+      </div>}
       {wizardStep === 1 && (<>
       {/* ===== Section : Type de mission (carte cockpit) ===== */}
       {compagniesDisponibles.length > 0 && (
@@ -999,7 +885,7 @@ export default function DepotPlanVolForm({
               </p>
             </div>
           )}
-          
+
           {/* Sélection de la compagnie si plusieurs disponibles */}
           {(vol_commercial || vol_ferry) && compagniesDisponibles.length > 1 && (
             <div className="mt-4 animate-fade-in">
@@ -1007,9 +893,9 @@ export default function DepotPlanVolForm({
                 <Building2 className="h-3.5 w-3.5 text-sky-400" />
                 Pour quelle compagnie ? *
               </label>
-              <select 
+              <select aria-label="Pour quelle compagnie ?"
                 className={`input w-full ${fieldErrors.compagnie ? 'border-red-500/60 focus:border-red-500' : ''}`}
-                value={selectedCompagnieId} 
+                value={selectedCompagnieId}
                 onChange={(e) => { setSelectedCompagnieId(e.target.value); setFieldErrors(p => ({ ...p, compagnie: '' })); }}
                 required
               >
@@ -1028,7 +914,7 @@ export default function DepotPlanVolForm({
               )}
             </div>
           )}
-          
+
           {/* Afficher le nom de la compagnie si une seule */}
           {(vol_commercial || vol_ferry) && compagniesDisponibles.length === 1 && selectedCompagnie && (
             <div className="mt-4 inline-flex items-center gap-2 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-1.5 text-sm animate-fade-in">
@@ -1064,9 +950,9 @@ export default function DepotPlanVolForm({
           <div className="mt-4 space-y-3">
           {/* Avions individuels avec immatriculation */}
           <div>
-              <select 
+              <select
                 className={`input w-full ${fieldErrors.compagnie_avion_id ? 'border-red-500/60 focus:border-red-500' : ''}`}
-                value={compagnie_avion_id} 
+                value={compagnie_avion_id}
                 onChange={(e) => {
                   setCompagnieAvionId(e.target.value);
                   setFieldErrors((p) => ({ ...p, compagnie_avion_id: '', aeroport_depart: '', porte: '' }));
@@ -1196,7 +1082,7 @@ export default function DepotPlanVolForm({
               </label>
               {withCopilote && (
                 <div className="mt-3">
-                  <select
+                  <select aria-label="Vol avec copilote Le copilote (même compagnie) doit valider le plan avant envoi à l’ATC ou confirmation sans ATC."
                     className={`input w-full ${fieldErrors.copilote_id ? 'border-red-500/60 focus:border-red-500' : ''}`}
                     value={copilote_id}
                     onChange={(e) => {
@@ -1224,7 +1110,7 @@ export default function DepotPlanVolForm({
               )}
             </div>
           )}
-          
+
           {/* Type de transport - masqué pour vols ferry — segmented control */}
           {!vol_ferry && (
             <div>
@@ -1270,16 +1156,20 @@ export default function DepotPlanVolForm({
                     <Gauge className="h-3.5 w-3.5 text-emerald-300" />
                   </span>
                   <div>
-                    <div className="text-xs font-mono uppercase tracking-widest text-emerald-400">Estimation revenus</div>
-                    <div className="text-[10px] text-slate-500">Charge utile prévue</div>
+                    <div className="text-xs font-mono uppercase tracking-widest text-emerald-400">Chargement du vol</div>
+                    <div className="text-[10px] text-slate-400">Calcul conservé par le serveur</div>
                   </div>
                 </div>
                 <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest text-emerald-300">
                   <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-hud-blink" />
-                  Live
+                  {currentQuote ? 'Confirmé' : 'En attente'}
                 </span>
               </div>
 
+              {!currentQuote ? <div role={quoteError ? 'alert' : 'status'} className="relative text-sm text-slate-200">
+                <p>{quoteLoading ? 'Calcul du chargement en cours…' : (quoteError || 'Le chargement doit être actualisé.')}</p>
+                {!quoteLoading && <button type="button" className="mt-2 text-sky-300 underline" onClick={() => { setQuoteClock(Date.now()); setQuoteAttempt(n => n + 1); }}>Actualiser le chargement</button>}
+              </div> : <>
               {/* Gauge remplissage */}
               <div className="mb-3">
                 {nature_transport === 'passagers' ? (
@@ -1319,9 +1209,7 @@ export default function DepotPlanVolForm({
                         + <span className="font-mono text-amber-300">{cargoComplementaire.toLocaleString('fr-FR')} kg</span> cargo complémentaire
                         <span className="mx-1.5 text-slate-500">@</span>
                         <span className="font-mono">{prixCargo} F$/kg</span>
-                        <span className="text-amber-300/90 text-[10px] ml-2 inline-flex items-center gap-0.5">
-                          <Sparkles className="h-2.5 w-2.5" /> 1% rare +30%
-                        </span>
+                        {estimatedTypeCargaison === 'marchandise_rare' && <span className="text-amber-300/90 text-[10px] ml-2">Cargaison rare · bonus inclus</span>}
                       </p>
                     )}
                   </>
@@ -1330,7 +1218,7 @@ export default function DepotPlanVolForm({
                     <p className="text-slate-300 col-span-2 text-xs">
                       <span className="font-mono text-amber-300">{cargoKg.toLocaleString('fr-FR')} kg</span> cargo
                       <span className="mx-1.5 text-slate-500">@</span>
-                      <span className="font-mono text-slate-200">{selectedCompagnie?.prix_kg_cargo || 0} F$/kg</span>
+                      <span className="font-mono text-slate-200">{prixCargo} F$/kg</span>
                     </p>
                     {(() => {
                       const cargaisonInfo = getCargaisonInfo(estimatedTypeCargaison);
@@ -1370,7 +1258,7 @@ export default function DepotPlanVolForm({
               </div>
 
               {/* Avertissement remplissage insuffisant */}
-              {vol_commercial && (
+              {currentQuote && vol_commercial && (
                 (nature_transport === 'passagers' && !remplissageValidePax) ||
                 (nature_transport === 'cargo' && !remplissageValideCargo)
               ) && (
@@ -1421,6 +1309,8 @@ export default function DepotPlanVolForm({
                   </div>
                 );
               })()}
+              <p className="mt-3 text-xs text-slate-400">Montants avant clôture, taxes et ajustements. Recréer un plan ou modifier l’indicatif ne change pas ce tirage.</p>
+              </>}
             </div>
           )}
           </div>
@@ -1450,7 +1340,7 @@ export default function DepotPlanVolForm({
               <p className="text-xs text-slate-500 mb-2 leading-relaxed">
                 Avec une mission, ce plan est enregistré pour la carte mission correspondante : liaison et durée imposées, et <strong className="text-slate-300">appareil de la flotte armée</strong> obligatoire.
               </p>
-              <select
+              <select aria-label="Mission armée"
                 className="input w-full"
                 value={armee_mission_id}
                 onChange={(e) => setArmeeMissionId(e.target.value)}
@@ -1465,9 +1355,9 @@ export default function DepotPlanVolForm({
             </div>
           )}
           {avionsPersonnelsDispo.length > 0 ? (
-            <select 
-              className="input w-full" 
-              value={inventaire_avion_id} 
+            <select
+              className="input w-full"
+              value={inventaire_avion_id}
               onChange={(e) => {
                 setInventaireAvionId(e.target.value);
                 if (e.target.value) {
@@ -1516,7 +1406,7 @@ export default function DepotPlanVolForm({
               <p className="text-xs text-slate-500 mb-1">
                 Même écran que pour tout pilote : le plan part vers <span className="text-slate-400">Plans de vol</span> / ATC. Choix exclusif avec l&apos;inventaire perso.
               </p>
-              <select
+              <select aria-label="Flotte armée"
                 className="input w-full"
                 value={armee_avion_id}
                 onChange={(e) => {
@@ -1580,7 +1470,7 @@ export default function DepotPlanVolForm({
               <MapPin className="h-3.5 w-3.5 text-sky-400" />
               Départ <span className="text-rose-400">*</span>
             </label>
-            <select
+            <select aria-label="Départ"
               className={`input ${fieldErrors.aeroport_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
               value={aeroport_depart}
               onChange={(e) => { setAeroportDepart(e.target.value); setFieldErrors(p => ({ ...p, aeroport_depart: '', porte: '' })); setPorte(''); setAHasGates(null); }}
@@ -1609,7 +1499,7 @@ export default function DepotPlanVolForm({
               <MapPin className="h-3.5 w-3.5 text-emerald-400" />
               Arrivée <span className="text-rose-400">*</span>
             </label>
-            <select
+            <select aria-label="Arrivée"
               className={`input ${fieldErrors.aeroport_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
               value={aeroport_arrivee}
               onChange={(e) => { setAeroportArrivee(e.target.value); setFieldErrors(p => ({ ...p, aeroport_arrivee: '' })); }}
@@ -1655,42 +1545,26 @@ export default function DepotPlanVolForm({
         <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">Numéro de vol *</label>
-            {selectedCompagnie?.code_oaci ? (
-              <div className="flex items-stretch">
-                <span className="flex items-center px-3 bg-gradient-to-br from-sky-600/40 to-indigo-600/30 text-sky-200 border border-r-0 border-sky-500/40 rounded-l-xl text-sm font-mono font-bold tracking-wider select-none">
-                  {selectedCompagnie.code_oaci}
-                </span>
-                <input
-                  type="text"
-                  className={`input rounded-l-none flex-1 font-mono ${fieldErrors.numero_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
-                  value={numero_vol}
-                  onChange={(e) => { setNumeroVol(e.target.value); setFieldErrors(p => ({ ...p, numero_vol: '' })); }}
-                  placeholder="2425"
-                  required
-                />
-              </div>
-            ) : (
-              <input
+              <input aria-label="Numéro de vol"
                 type="text"
                 className={`input font-mono ${fieldErrors.numero_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={numero_vol}
-                onChange={(e) => { setNumeroVol(e.target.value); setFieldErrors(p => ({ ...p, numero_vol: '' })); }}
-                placeholder="N° de vol"
+                onChange={(e) => { callsignManualRef.current = true; setNumeroVol(e.target.value.toUpperCase()); setFieldErrors(p => ({ ...p, numero_vol: '' })); }}
+                placeholder={suggestedCallsign ? `${suggestedCallsign}${vol_commercial && !vol_ferry ? '123' : ''}` : 'Indicatif complet'}
+                maxLength={20}
                 required
               />
-            )}
             {fieldErrors.numero_vol && (
               <p className="mt-1.5 flex items-center gap-1 text-xs text-red-400" data-field-error="true">
                 <span className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-red-500/20 text-red-300 text-[9px] font-bold">!</span>
                 {fieldErrors.numero_vol}
               </p>
             )}
-            {selectedCompagnie?.code_oaci && !fieldErrors.numero_vol && (
-              <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
-                <Sparkles className="h-3 w-3" />
-                Ex: 2425 → <span className="font-mono text-sky-400/80">{selectedCompagnie.code_oaci}2425</span> · ou callsign libre (ex: RAIDER)
-              </p>
-            )}
+            <p className="text-xs text-slate-400 mt-1.5">Indicatif complet et librement modifiable. Votre saisie sera conservée.</p>
+            {suggestedCallsign && <button type="button" className="mt-1 text-xs text-sky-300 underline underline-offset-2" onClick={() => {
+              callsignManualRef.current = false; setNumeroVol(suggestedCallsign);
+              setFieldErrors(p => ({ ...p, numero_vol: '' }));
+            }}>Reprendre {vol_commercial && !vol_ferry ? 'le code compagnie' : 'l’immatriculation'} : {suggestedCallsign}</button>}
           </div>
           <div>
             <label className="label">
@@ -1706,7 +1580,7 @@ export default function DepotPlanVolForm({
                 required={aHasGates === true}
               />
             ) : (
-              <input
+              <input aria-label="Porte de départ  (depuis le catalogue)"
                 type="text"
                 className="input font-mono opacity-50"
                 value={porte}
@@ -1728,7 +1602,7 @@ export default function DepotPlanVolForm({
           <div className="flex-1 max-w-[160px]">
             <label className="label">Temps de vol prévu *</label>
             <div className="relative">
-              <input
+              <input aria-label="Temps de vol prévu"
                 type="number"
                 className={`input w-full pr-12 font-mono ${fieldErrors.temps_prev_min ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={temps_prev_min}
@@ -1750,7 +1624,7 @@ export default function DepotPlanVolForm({
           <div className="flex-1 max-w-[160px]">
             <label className="label">Heure de départ (UTC) <span className="text-red-400">*</span></label>
             <div className="relative">
-              <input
+              <input aria-label="Heure de départ (UTC)"
                 type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
                 className={`input w-full pr-10 font-mono tabular-nums ${fieldErrors.heure_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={heure_depart}
@@ -1845,7 +1719,7 @@ export default function DepotPlanVolForm({
       {type_vol === 'VFR' && (
         <div className="mt-4 animate-fade-in">
           <label className="label">Intentions de vol *</label>
-          <textarea
+          <textarea aria-label="Intentions de vol"
             className={`input min-h-[80px] ${fieldErrors.intentions_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
             value={intentions_vol}
             onChange={(e) => { setIntentionsVol(e.target.value); setFieldErrors(p => ({ ...p, intentions_vol: '' })); }}
@@ -1870,7 +1744,7 @@ export default function DepotPlanVolForm({
               </label>
               {sidList.length > 0 ? (
                 <>
-                  <select
+                  <select aria-label="SID de départ"
                     className={`input ${fieldErrors.sid_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                     value={sidCustomMode ? '__custom__' : (sidList.some((s) => s.nom === sid_depart) ? sid_depart : '')}
                     onChange={(e) => {
@@ -1911,7 +1785,7 @@ export default function DepotPlanVolForm({
                   )}
                 </>
               ) : (
-                <input
+                <input aria-label="SID de départ"
                   type="text"
                   className={`input ${fieldErrors.sid_depart ? 'border-red-500/60 focus:border-red-500' : ''}`}
                   value={sid_depart}
@@ -1933,7 +1807,7 @@ export default function DepotPlanVolForm({
               </label>
               {starList.length > 0 ? (
                 <>
-                  <select
+                  <select aria-label="STAR d'arrivée"
                     className={`input ${fieldErrors.star_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
                     value={starCustomMode ? '__custom__' : (starList.some((s) => s.nom === star_arrivee) ? star_arrivee : '')}
                     onChange={(e) => {
@@ -1974,7 +1848,7 @@ export default function DepotPlanVolForm({
                   )}
                 </>
               ) : (
-                <input
+                <input aria-label="STAR d'arrivée"
                   type="text"
                   className={`input ${fieldErrors.star_arrivee ? 'border-red-500/60 focus:border-red-500' : ''}`}
                   value={star_arrivee}
@@ -2001,7 +1875,7 @@ export default function DepotPlanVolForm({
                 </>
               )}
               {/* Partie manuelle : seule zone éditable (points entre SID et STAR) */}
-              <input
+              <input aria-label="Route IFR (optionnel)"
                 type="text"
                 className="flex-1 min-w-[140px] px-2 py-1 rounded bg-slate-700/50 border border-slate-600/50 text-slate-200 font-mono text-sm focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500/30 placeholder-slate-500"
                 value={manualRoutePart}
@@ -2027,7 +1901,7 @@ export default function DepotPlanVolForm({
             <label className="label">Niveau de croisière (optionnel)</label>
             <div className="flex items-center gap-2">
               <span className="font-mono text-xs uppercase tracking-widest text-slate-500">FL</span>
-              <input
+              <input aria-label="Niveau de croisière (optionnel)"
                 type="text"
                 className="input w-28 font-mono"
                 value={niveau_croisiere}
@@ -2065,6 +1939,25 @@ export default function DepotPlanVolForm({
 
       </>)}
       {wizardStep === 3 && (<>
+      <section aria-labelledby="flight-review-title" className="rounded-xl border border-slate-700 bg-slate-900 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><p className="mb-1 text-xs uppercase tracking-wider text-sky-400">Dossier de vol</p><h2 id="flight-review-title" className="text-lg font-semibold text-slate-100">Vérifier avant le dépôt</h2></div>
+          <span className="rounded border border-slate-600 bg-slate-950 px-2 py-1 font-mono text-sm text-slate-200">{numero_vol || 'Indicatif à compléter'}</span>
+        </div>
+        <RouteVisual depart={aeroport_depart} arrivee={aeroport_arrivee}/>
+        <dl className="mt-5 grid gap-x-5 gap-y-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+          <div><dt className="text-xs text-slate-500">Appareil</dt><dd className="mt-1 font-medium text-slate-200">{avionType?.nom || selectedInventaire?.types_avion?.nom || premierTypeAvionDepuisEmbed(armeeAvions.find(a => a.id === armee_avion_id)?.types_avion)?.nom || 'À sélectionner'}</dd></div>
+          <div><dt className="text-xs text-slate-500">Immatriculation</dt><dd className="mt-1 font-mono text-slate-200">{selectedAvionIndiv?.immatriculation || selectedInventaire?.immatriculation || 'Non renseignée'}</dd></div>
+          <div><dt className="text-xs text-slate-500">Exploitation</dt><dd className="mt-1 text-slate-200">{armee_avion_id ? 'Flotte armée' : vol_commercial ? 'Transport commercial' : vol_ferry ? 'Convoyage' : 'Vol personnel'}{selectedCompagnie && (vol_commercial || vol_ferry) ? ` · ${selectedCompagnie.nom}` : ''}</dd></div>
+          <div><dt className="text-xs text-slate-500">Départ prévu</dt><dd className="mt-1 font-mono text-slate-200">{heure_depart || '—'} UTC</dd></div>
+          <div><dt className="text-xs text-slate-500">Durée prévue</dt><dd className="mt-1 text-slate-200">{temps_prev_min || '—'} minutes</dd></div>
+          <div><dt className="text-xs text-slate-500">Règles de vol / porte</dt><dd className="mt-1 text-slate-200">{type_vol} · {porte || 'Porte non renseignée'}</dd></div>
+        </dl>
+        <div className="mt-4 border-t border-slate-800 pt-4 text-sm"><p className="mb-1 text-xs text-slate-500">{type_vol === 'IFR' ? 'Route et procédures' : 'Intentions de vol'}</p><p className="break-words font-mono text-slate-300">{type_vol === 'IFR' ? [sid_depart, stripRouteBrackets(route_ifr), star_arrivee].filter(Boolean).join(' · ') : intentions_vol}</p></div>
+        {note_atc.trim() && <div className="mt-4 text-sm"><p className="mb-1 text-xs text-slate-500">Remarque pour l’ATC</p><p className="whitespace-pre-wrap break-words text-slate-300">{note_atc}</p></div>}
+        {quoteRequired && currentQuote && <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 p-3"><p className="text-sm text-slate-300">Chargement confirmé : {nbPax.toLocaleString('fr-FR')} passagers · {(nature_transport === 'cargo' ? cargoKg : cargoComplementaire).toLocaleString('fr-FR')} kg de fret.</p><p className="mt-1 text-xs text-slate-400">Recette brute estimée : {revenuBrut.toLocaleString('fr-FR')} F$ · salaire {withCopilote ? 'équipage' : 'pilote'} estimé : {salairePilote.toLocaleString('fr-FR')} F$. Les règles de règlement à la clôture restent applicables.</p></div>}
+        <button type="button" onClick={() => setWizardStep(2)} className="mt-4 inline-flex min-h-10 items-center text-sm font-medium text-sky-300 underline underline-offset-4 hover:text-sky-200">Revenir aux informations du vol</button>
+      </section>
       {/* Confirmation vol sans ATC */}
       {showNoAtcConfirm && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-amber-500/60 bg-gradient-to-br from-amber-950/60 via-slate-900/70 to-slate-950/70 p-5 space-y-3 animate-zoom-bounce">
@@ -2103,7 +1996,7 @@ export default function DepotPlanVolForm({
           </div>
         </div>
       )}
-      
+
       {/* Erreurs de mission armée ou de remplissage */}
       {(fieldErrors.armee_mission || fieldErrors.remplissage) && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 animate-fade-in" data-field-error="true">
@@ -2113,12 +2006,12 @@ export default function DepotPlanVolForm({
       )}
 
       {error && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3 animate-fade-in">
+        <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-500/40 bg-red-500/10 p-3">
           <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-500/30 text-red-200 text-xs font-bold">!</span>
           <p className="text-red-300 text-sm">{error}</p>
         </div>
       )}
-      
+
       {/* Résumé des erreurs de champs manquants */}
       {Object.entries(fieldErrors).filter(([k, v]) => v && !['armee_mission', 'remplissage'].includes(k)).length > 0 && (
         <div className="rounded-xl border border-red-500/40 bg-red-500/10 p-3 animate-fade-in">
@@ -2144,7 +2037,8 @@ export default function DepotPlanVolForm({
         disabled={
           loading ||
           showNoAtcConfirm ||
-          (vol_commercial && (
+          (quoteRequired && (!currentQuote || quoteLoading)) ||
+          (quoteRequired && (
             (nature_transport === 'passagers' && !remplissageValidePax) ||
             (nature_transport === 'cargo' && !remplissageValideCargo)
           ))
@@ -2186,410 +2080,51 @@ export default function DepotPlanVolForm({
  * ============================================================ */
 
 type AccentColor = 'sky' | 'amber' | 'emerald' | 'indigo' | 'slate' | 'rose';
-
 const ACCENT_CLASSES: Record<AccentColor, { ring: string; text: string; bg: string; border: string; glow: string }> = {
-  sky:     { ring: 'ring-sky-400/40',     text: 'text-sky-300',     bg: 'bg-sky-500/15',     border: 'border-sky-500/40',     glow: 'shadow-[0_0_24px_rgba(56,189,248,0.25)]' },
-  amber:   { ring: 'ring-amber-400/40',   text: 'text-amber-300',   bg: 'bg-amber-500/15',   border: 'border-amber-500/40',   glow: 'shadow-[0_0_24px_rgba(251,191,36,0.25)]' },
-  emerald: { ring: 'ring-emerald-400/40', text: 'text-emerald-300', bg: 'bg-emerald-500/15', border: 'border-emerald-500/40', glow: 'shadow-[0_0_24px_rgba(52,211,153,0.25)]' },
-  indigo:  { ring: 'ring-indigo-400/40',  text: 'text-indigo-300',  bg: 'bg-indigo-500/15',  border: 'border-indigo-500/40',  glow: 'shadow-[0_0_24px_rgba(129,140,248,0.25)]' },
-  slate:   { ring: 'ring-slate-400/40',   text: 'text-slate-200',   bg: 'bg-slate-500/15',   border: 'border-slate-500/40',   glow: 'shadow-[0_0_24px_rgba(148,163,184,0.18)]' },
-  rose:    { ring: 'ring-rose-400/40',    text: 'text-rose-300',    bg: 'bg-rose-500/15',    border: 'border-rose-500/40',    glow: 'shadow-[0_0_24px_rgba(251,113,133,0.25)]' },
+  sky: { ring: 'ring-sky-400/40', text: 'text-sky-300', bg: 'bg-sky-500/10', border: 'border-sky-500/40', glow: '' },
+  amber: { ring: 'ring-amber-400/40', text: 'text-amber-300', bg: 'bg-amber-500/10', border: 'border-amber-500/40', glow: '' },
+  emerald: { ring: 'ring-emerald-400/40', text: 'text-emerald-300', bg: 'bg-emerald-500/10', border: 'border-emerald-500/40', glow: '' },
+  indigo: { ring: 'ring-sky-400/40', text: 'text-sky-300', bg: 'bg-sky-500/10', border: 'border-sky-500/40', glow: '' },
+  slate: { ring: 'ring-slate-400/40', text: 'text-slate-200', bg: 'bg-slate-800/70', border: 'border-slate-600', glow: '' },
+  rose: { ring: 'ring-rose-400/40', text: 'text-rose-300', bg: 'bg-rose-500/10', border: 'border-rose-500/40', glow: '' },
 };
 
-function WizardNav({
-  step,
-  onStep,
-  canAdvance,
-}: {
-  step: number;
-  onStep: (n: number) => void;
-  canAdvance: (n: number) => boolean;
-}) {
-  const labels = ['Appareil & route', 'Détails', 'Soumission'];
-  return (
-    <ol className="grid grid-cols-3 gap-2">
-      {labels.map((label, i) => {
-        const n = i + 1;
-        const unlocked = n <= step || canAdvance(n);
-        return (
-          <li key={n}>
-            <button
-              type="button"
-              disabled={!unlocked}
-              onClick={() => unlocked && onStep(n)}
-              className={`w-full rounded-lg border px-2 py-2 text-left ${
-                n === step
-                  ? 'border-sky-500 bg-sky-950 text-sky-100'
-                  : unlocked
-                    ? 'border-slate-700 bg-slate-900 text-slate-200'
-                    : 'border-slate-800 bg-slate-950 text-slate-500'
-              }`}
-            >
-              <span className="block text-[10px] font-black uppercase tracking-widest opacity-70">Étape {n}</span>
-              <span className="block text-xs font-bold">{label}</span>
-            </button>
-          </li>
-        );
-      })}
-    </ol>
-  );
+function WizardNav({ step, onStep, canAdvance }: { step: number; onStep: (n: number) => void; canAdvance: (n: number) => boolean }) {
+  const labels = ['Appareil et route', 'Données opérationnelles', 'Vérification et dépôt'];
+  return <nav aria-label="Étapes du dépôt du plan de vol"><ol className="grid grid-cols-3 gap-2">{labels.map((label, index) => {
+    const n = index + 1, unlocked = n <= step || canAdvance(n);
+    return <li key={n}><button type="button" disabled={!unlocked} aria-current={n === step ? 'step' : undefined} onClick={() => unlocked && onStep(n)} className={`min-h-16 w-full rounded-lg border px-3 py-3 text-left transition-colors ${n === step ? 'border-sky-600 bg-sky-950/60 text-sky-100' : unlocked ? 'border-slate-700 bg-slate-900 text-slate-300 hover:bg-slate-800' : 'border-slate-800 bg-slate-950 text-slate-500'}`}><span className="block text-xs text-slate-400">Étape {n} / 3</span><span className="mt-1 block text-xs font-medium sm:text-sm">{label}</span></button></li>;
+  })}</ol></nav>;
 }
 
-/** Header de section : icône colorée + titre + sous-titre + numéro d'étape */
-function SectionHeader({
-  step,
-  icon,
-  label,
-  subtitle,
-  accent = 'sky',
-  badge,
-}: {
-  step?: number;
-  icon: React.ReactNode;
-  label: string;
-  subtitle?: string;
-  accent?: AccentColor;
-  badge?: React.ReactNode;
-}) {
+function SectionHeader({ icon, label, subtitle, accent = 'sky', badge }: { step?: number; icon: React.ReactNode; label: string; subtitle?: string; accent?: AccentColor; badge?: React.ReactNode }) {
   const c = ACCENT_CLASSES[accent];
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-start gap-3">
-        <div className="relative">
-          <span className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${c.border} ${c.bg} ${c.text}`}>
-            {icon}
-          </span>
-          {step != null && (
-            <span className="absolute -top-1.5 -left-1.5 inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-600/80 bg-slate-900 text-[9px] font-mono font-bold text-slate-400 shadow-sm">
-              {String(step).padStart(2, '0')}
-            </span>
-          )}
-        </div>
-        <div>
-          <h3 className="text-base font-semibold text-slate-100 leading-tight">{label}</h3>
-          {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
-        </div>
-      </div>
-      {badge}
-    </div>
-  );
+  return <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><span aria-hidden className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${c.border} ${c.bg} ${c.text}`}>{icon}</span><div><h2 className="text-base font-semibold leading-tight text-slate-100">{label}</h2>{subtitle && <p className="mt-1 text-sm leading-relaxed text-slate-400">{subtitle}</p>}</div></div>{badge}</div>;
 }
 
-/** Carte cliquable pour choisir un mode de vol (Personnel / Commercial / Ferry) */
-function ModeCard({
-  active,
-  accent,
-  icon,
-  title,
-  subtitle,
-  onClick,
-}: {
-  active: boolean;
-  accent: AccentColor;
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  onClick: () => void;
-}) {
-  const c = ACCENT_CLASSES[accent];
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`group relative overflow-hidden rounded-xl border-2 p-3 text-left transition-all duration-200 active:scale-[0.98] ${
-        active
-          ? `${c.border} ${c.bg} ${c.glow}`
-          : 'border-slate-700/60 bg-slate-800/40 hover:border-slate-500/60 hover:bg-slate-800/70'
-      }`}
-      aria-pressed={active}
-    >
-      {/* Indicateur LED actif */}
-      {active && (
-        <span className={`absolute right-2 top-2 inline-flex h-2 w-2 rounded-full ${c.text.replace('text-', 'bg-')} animate-pulse`} />
-      )}
-      <div className="flex items-center gap-2.5">
-        <span className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${active ? c.bg : 'bg-slate-700/50'} ${active ? c.text : 'text-slate-400'} transition-colors`}>
-          {icon}
-        </span>
-        <div className="min-w-0">
-          <div className={`text-sm font-semibold leading-tight ${active ? 'text-slate-50' : 'text-slate-200'}`}>{title}</div>
-          <div className="text-[11px] text-slate-400 truncate">{subtitle}</div>
-        </div>
-      </div>
-    </button>
-  );
+function ModeCard({ active, accent, icon, title, subtitle, onClick }: { active: boolean; accent: AccentColor; icon: React.ReactNode; title: string; subtitle: string; onClick: () => void }) {
+  const c=ACCENT_CLASSES[accent];
+  return <button type="button" onClick={onClick} aria-pressed={active} className={`min-h-20 rounded-lg border p-3 text-left transition-colors ${active ? c.border+' '+c.bg : 'border-slate-700 bg-slate-900 hover:border-slate-500'}`}><span className="flex items-start gap-3"><span aria-hidden className={`mt-0.5 shrink-0 ${active ? c.text : 'text-slate-500'}`}>{icon}</span><span><span className="block text-sm font-medium text-slate-100">{title}</span><span className="mt-1 block text-xs leading-relaxed text-slate-400">{subtitle}</span></span>{active && <CheckCircle2 aria-hidden className="ml-auto h-4 w-4 shrink-0 text-sky-400"/>}</span></button>;
 }
 
-/** Visuel de route : DEP — ✈ — ARR avec ligne pointillée animée */
 function RouteVisual({ depart, arrivee }: { depart: string; arrivee: string }) {
-  const dep = depart ? getAeroportInfo(depart) : null;
-  const arr = arrivee ? getAeroportInfo(arrivee) : null;
-  const d = depart.trim().toUpperCase();
-  const a = arrivee.trim().toUpperCase();
-  const sameAirport = !!(d && a && d === a);
-  const ready = !!(d && a);
-
-  return (
-    <div className="mt-4 relative overflow-hidden rounded-xl border border-slate-700/50 bg-gradient-to-br from-slate-900/80 via-slate-900/40 to-slate-900/80 p-3 sm:p-4">
-      {/* Grille radar de fond */}
-      <div className="pointer-events-none absolute inset-0 bg-cockpit-grid opacity-50" />
-      {/* Halos d'extrémité */}
-      <div className="pointer-events-none absolute -left-8 top-1/2 -translate-y-1/2 h-20 w-20 rounded-full bg-sky-500/10 blur-2xl" />
-      <div className="pointer-events-none absolute -right-8 top-1/2 -translate-y-1/2 h-20 w-20 rounded-full bg-emerald-500/10 blur-2xl" />
-
-      <div className="relative flex items-stretch gap-2 sm:gap-3">
-        {/* Aéroport départ */}
-        <div className="flex-1 min-w-0 text-left">
-          <div className="text-[10px] font-mono uppercase tracking-widest text-sky-400/80 mb-0.5">DEP</div>
-          <div className="font-mono text-xl sm:text-2xl font-bold text-sky-200 tabular-nums">
-            {depart || '----'}
-          </div>
-          <div className="text-[11px] text-slate-400 truncate">{dep?.nom || '—'}</div>
-          {dep?.taille && (
-            <span className="mt-1 inline-block text-[9px] font-mono uppercase tracking-widest text-sky-400/60">
-              {dep.taille}
-            </span>
-          )}
-        </div>
-
-        {/* Ligne de route avec avion */}
-        <div className="relative flex flex-col items-center justify-center min-w-[60px] sm:min-w-[120px]">
-          <svg
-            viewBox="0 0 200 30"
-            className="w-full h-6 sm:h-8"
-            aria-hidden
-          >
-            <defs>
-              <linearGradient id="route-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#38bdf8" />
-                <stop offset="50%" stopColor="#818cf8" />
-                <stop offset="100%" stopColor="#34d399" />
-              </linearGradient>
-            </defs>
-            {/* Ligne pointillée */}
-            <line
-              x1="0" y1="15" x2="200" y2="15"
-              stroke={ready ? 'url(#route-grad)' : 'rgba(148,163,184,0.3)'}
-              strokeWidth="2"
-              strokeDasharray="6 4"
-              className={ready ? 'animate-dash-flow' : ''}
-            />
-            {/* Petits points aux extrémités */}
-            <circle cx="0" cy="15" r="3" fill={ready ? '#38bdf8' : 'rgba(148,163,184,0.4)'} />
-            <circle cx="200" cy="15" r="3" fill={ready ? '#34d399' : 'rgba(148,163,184,0.4)'} />
-          </svg>
-          {/* Avion qui glisse */}
-          {ready ? (
-            <Plane className="absolute h-5 w-5 text-sky-300 -rotate-12 left-0 top-1/2 -translate-y-1/2 animate-plane-glide drop-shadow-[0_0_6px_rgba(56,189,248,0.6)]" />
-          ) : (
-            <Plane className="absolute h-5 w-5 text-slate-600 -rotate-12 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" />
-          )}
-          {sameAirport && (
-            <div className="mt-1 text-[10px] font-mono uppercase tracking-widest text-sky-400/90">
-              Vol local
-            </div>
-          )}
-        </div>
-
-        {/* Aéroport arrivée */}
-        <div className="flex-1 min-w-0 text-right">
-          <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400/80 mb-0.5">ARR</div>
-          <div className="font-mono text-xl sm:text-2xl font-bold text-emerald-200 tabular-nums">
-            {arrivee || '----'}
-          </div>
-          <div className="text-[11px] text-slate-400 truncate">{arr?.nom || '—'}</div>
-          {arr?.taille && (
-            <span className="mt-1 inline-block text-[9px] font-mono uppercase tracking-widest text-emerald-400/60">
-              {arr.taille}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+  const dep=depart?getAeroportInfo(depart):null,arr=arrivee?getAeroportInfo(arrivee):null;
+  return <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-4 rounded-lg border border-slate-700 bg-slate-950/60 p-4" aria-label="Route sélectionnée"><div><p className="text-xs text-slate-500">Départ</p><p className="mt-1 font-mono text-xl font-semibold text-slate-100">{depart||'—'}</p><p className="mt-1 truncate text-xs text-slate-400">{dep?.nom||'À sélectionner'}</p></div><span className="font-mono text-slate-500" aria-hidden>→</span><div className="text-right"><p className="text-xs text-slate-500">{depart&&depart===arrivee?'Retour au départ · vol local':'Arrivée'}</p><p className="mt-1 font-mono text-xl font-semibold text-slate-100">{arrivee||'—'}</p><p className="mt-1 truncate text-xs text-slate-400">{arr?.nom||'À sélectionner'}</p></div></div>;
 }
 
-/** Gauge de remplissage avec barre animée et indicateur de seuil 25% */
-function FillGauge({
-  label,
-  icon,
-  current,
-  max,
-  unit,
-  valid,
-  accent,
-}: {
-  label: string;
-  icon: React.ReactNode;
-  current: number;
-  max: number;
-  unit: string;
-  valid: boolean;
-  accent: AccentColor;
-}) {
-  const c = ACCENT_CLASSES[accent];
-  const pct = max > 0 ? Math.min(100, (current / max) * 100) : 0;
-  const barColor = !valid ? 'from-rose-500 to-rose-400' : accent === 'amber' ? 'from-amber-500 to-amber-300' : 'from-sky-500 to-cyan-300';
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5 text-xs">
-        <div className={`flex items-center gap-1.5 font-mono uppercase tracking-widest ${c.text}`}>
-          {icon}
-          {label}
-        </div>
-        <div className={`font-mono font-semibold tabular-nums ${valid ? 'text-slate-200' : 'text-rose-300'}`}>
-          {current.toLocaleString('fr-FR')}<span className="text-slate-500 mx-0.5">/</span>{max.toLocaleString('fr-FR')}
-          <span className="ml-1 text-slate-500">{unit}</span>
-          <span className={`ml-2 inline-flex items-center justify-center rounded px-1.5 py-0.5 text-[10px] font-bold ${valid ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300'}`}>
-            {Math.round(pct)}%
-          </span>
-        </div>
-      </div>
-      <div className="relative h-2 w-full overflow-hidden rounded-full bg-slate-700/60">
-        {/* Marqueur seuil 25% */}
-        <div className="absolute top-0 bottom-0 w-px bg-slate-500/60" style={{ left: '25%' }} aria-hidden />
-        <div
-          className={`h-full bg-gradient-to-r ${barColor} transition-all duration-700 ease-out`}
-          style={{ width: `${pct}%`, backgroundSize: '200% 100%', animation: 'shimmer 3s ease-in-out infinite' }}
-        />
-      </div>
-      <div className="mt-1 flex items-center justify-between text-[10px] font-mono text-slate-500">
-        <span className={valid ? 'text-emerald-400' : 'text-rose-400'}>● seuil 25%</span>
-        <span>capacité max</span>
-      </div>
-    </div>
-  );
+function FillGauge({ label, icon, current, max, unit, valid, accent }: { label: string; icon: React.ReactNode; current: number; max: number; unit: string; valid: boolean; accent: AccentColor }) {
+  const pct=max>0?Math.min(100,current/max*100):0,c=ACCENT_CLASSES[accent];
+  return <div><div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs"><span className={`flex items-center gap-2 ${c.text}`}>{icon}{label}</span><span className="font-mono tabular-nums text-slate-200">{current.toLocaleString('fr-FR')} / {max.toLocaleString('fr-FR')} {unit} · {Math.round(pct)} %</span></div><div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="relative h-2 overflow-hidden rounded bg-slate-800"><span className="absolute inset-y-0 left-1/4 w-px bg-slate-500" aria-hidden/><div className={`h-full ${valid?'bg-sky-500':'bg-amber-500'}`} style={{width:pct+'%'}}/></div><p className="mt-1.5 text-xs text-slate-500">Seuil de remplissage commercial : 25 % (hors vol local).</p></div>;
 }
 
-/** Barre de progression du plan de vol */
-function ProgressBar({ percent }: { percent: number }) {
-  const full = percent === 100;
-  return (
-    <div className="relative mb-5 animate-fade-in">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] font-mono uppercase tracking-[0.2em] text-slate-500 flex items-center gap-1.5">
-          <ClipboardCheck className="h-3 w-3" />
-          Complétion du plan
-        </span>
-        <span className={`text-xs font-mono font-bold tabular-nums transition-colors duration-500 ${full ? 'text-emerald-300' : 'text-sky-300'}`}>
-          {percent}%
-        </span>
-      </div>
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-slate-800/80 border border-slate-700/50">
-        <div
-          className={`h-full rounded-full transition-all duration-700 ease-out ${
-            full
-              ? 'bg-gradient-to-r from-emerald-500 via-cyan-400 to-emerald-400'
-              : 'bg-gradient-to-r from-sky-500 via-blue-500 to-indigo-500'
-          }`}
-          style={{ width: `${percent}%` }}
-        />
-        {!full && (
-          <div
-            className="absolute top-0 h-full w-8 rounded-full bg-white/20 blur-sm animate-shimmer"
-            style={{ left: `${Math.max(0, percent - 4)}%` }}
-          />
-        )}
-      </div>
-      {full && (
-        <p className="mt-1.5 text-[10px] font-mono uppercase tracking-widest text-emerald-400 flex items-center gap-1 animate-fade-in">
-          <CheckCircle2 className="h-3 w-3" />
-          Prêt pour le dépôt
-        </p>
-      )}
-    </div>
-  );
+function ProgressBar({percent}:{percent:number}) {
+  return <div className="mb-5 rounded-lg border border-slate-700 bg-slate-900 px-4 py-3"><div className="mb-2 flex items-center justify-between gap-3 text-xs"><span className="text-slate-400">Informations principales renseignées</span><span className="font-mono tabular-nums text-slate-200">{percent} %</span></div><div role="progressbar" aria-label="Informations principales du plan renseignées" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="h-1.5 overflow-hidden rounded bg-slate-800"><div className="h-full bg-sky-500" style={{width:percent+'%'}}/></div><p className="mt-2 text-xs text-slate-500">Le récapitulatif final reste à vérifier avant le dépôt.</p></div>;
 }
 
-/** Checklist pre-flight : vérifie que chaque champ requis est rempli */
-function PreFlightChecklist({ items }: { items: { label: string; ok: boolean }[] }) {
-  const allOk = items.every(i => i.ok);
-  return (
-    <div className={`relative overflow-hidden rounded-xl border p-4 transition-all duration-500 stagger-enter ${
-      allOk
-        ? 'border-emerald-500/30 bg-gradient-to-br from-emerald-950/30 to-slate-900/50'
-        : 'border-slate-700/50 bg-slate-900/50'
-    }`}>
-      {allOk && (
-        <div className="pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-emerald-500/10 blur-2xl" />
-      )}
-      <div className="relative flex items-center gap-2 mb-3">
-        <span className={`inline-flex h-7 w-7 items-center justify-center rounded-lg border ${
-          allOk ? 'border-emerald-500/40 bg-emerald-500/15' : 'border-slate-600/60 bg-slate-800/60'
-        }`}>
-          <ClipboardCheck className={`h-3.5 w-3.5 ${allOk ? 'text-emerald-300' : 'text-slate-400'}`} />
-        </span>
-        <div>
-          <span className={`text-xs font-mono uppercase tracking-widest ${allOk ? 'text-emerald-400' : 'text-slate-400'}`}>
-            Pre-flight check
-          </span>
-          <span className={`ml-2 text-[10px] font-mono tabular-nums ${allOk ? 'text-emerald-300' : 'text-slate-500'}`}>
-            {items.filter(i => i.ok).length}/{items.length}
-          </span>
-        </div>
-      </div>
-      <div className="relative grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {items.map((item, i) => (
-          <div
-            key={i}
-            className={`flex items-center gap-2 text-xs transition-all duration-300 ${item.ok ? 'text-emerald-300' : 'text-slate-500'}`}
-          >
-            {item.ok ? (
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-400" />
-            ) : (
-              <Circle className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-            )}
-            <span className={item.ok ? '' : 'opacity-60'}>{item.label}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function PreFlightChecklist({items}:{items:{label:string;ok:boolean}[]}) {
+  return <section className="rounded-lg border border-slate-700 bg-slate-900 p-4" aria-labelledby="flight-checklist-title"><h2 id="flight-checklist-title" className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-100"><ClipboardCheck aria-hidden className="h-4 w-4 text-sky-400"/> Vérifications avant dépôt <span className="ml-auto font-mono text-xs font-normal text-slate-400">{items.filter(i=>i.ok).length}/{items.length}</span></h2><ul className="grid gap-2 sm:grid-cols-2">{items.map(item=><li key={item.label} className="flex items-center gap-2 text-sm"><span aria-hidden>{item.ok?<CheckCircle2 className="h-4 w-4 text-emerald-400"/>:<Circle className="h-4 w-4 text-amber-400"/>}</span><span className={item.ok?'text-slate-300':'text-amber-200'}>{item.label}<span className="sr-only">{item.ok?' : renseigné':' : à compléter'}</span></span></li>)}</ul></section>;
 }
 
-/** Bouton submit avec animation de décollage en loading */
-function SubmitButton({ loading, disabled }: { loading: boolean; disabled: boolean }) {
-  return (
-    <button
-      type="submit"
-      disabled={disabled}
-      className={`group relative w-full overflow-hidden rounded-xl py-3 px-8 font-bold text-base text-white shadow-xl transition-all duration-300 ${
-        disabled
-          ? 'bg-slate-700/60 text-slate-400 cursor-not-allowed'
-          : 'bg-emerald-600 hover:bg-emerald-500 hover:shadow-[0_18px_48px_rgba(52,211,153,0.40)] active:scale-[0.99]'
-      }`}
-    >
-      {/* Brillance qui balaye au hover */}
-      {!disabled && (
-        <span className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/15 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
-      )}
-
-      <span className="relative flex items-center justify-center gap-3">
-        {loading ? (
-          <>
-            {/* Spinner SVG */}
-            <svg
-              className="h-5 w-5 animate-spin text-white"
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-            >
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-            </svg>
-            <span className="font-mono uppercase tracking-widest text-sm">Dépôt en cours…</span>
-          </>
-        ) : (
-          <>
-            <Send className="h-5 w-5 transition-transform group-hover:translate-x-1 group-hover:-translate-y-0.5" />
-            <span className="tracking-wide">Déposer le plan de vol</span>
-            <span className="hidden sm:inline-flex h-5 items-center rounded-md border border-white/20 bg-white/10 px-1.5 text-[10px] font-mono uppercase tracking-widest">
-              FILE
-            </span>
-          </>
-        )}
-      </span>
-    </button>
-  );
+function SubmitButton({loading,disabled}:{loading:boolean;disabled:boolean}) {
+  return <button type="submit" disabled={disabled} aria-busy={loading} className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-lg bg-sky-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500">{loading?<><span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" aria-hidden/> Dépôt en cours…</>:<><Send aria-hidden className="h-4 w-4"/> Déposer le plan de vol</>}</button>;
 }

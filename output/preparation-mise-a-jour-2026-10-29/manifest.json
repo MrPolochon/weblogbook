@@ -1,0 +1,38 @@
+{
+  "generatedAt": "2026-10-29T23:27:37.402Z",
+  "status": "prepared_locally_not_deployed",
+  "productionEnabled": false,
+  "novemberEconomyEnabled": false,
+  "migrations": [
+    {
+      "file": "supabase/logbook_registration_20261029.sql",
+      "sha256": "072a5d387d92c6450b4d70d3c80c905a927dee563291c62b35417f009477c920"
+    },
+    {
+      "file": "supabase/logbook_staff_validation_20261029.sql",
+      "sha256": "d375a206565c3dc9f1045b3236c807cb512494a96e0e4cbca7c0008fbb0bcde2"
+    },
+    {
+      "file": "supabase/flight_submission_integrity_20261029.sql",
+      "sha256": "6bc01bfa8a50fd7da9832ec281a881c94f0c558ad0eecf0ab8d089c2e12e7b99"
+    },
+    {
+      "file": "supabase/flight_plan_access_20261029.sql",
+      "sha256": "7348d2ea5483176a3e168bddbf75f05e8e4479d2e37505f2f5c0d7b51fdac520"
+    },
+    {
+      "file": "supabase/fix_revente_avions_personnels.sql",
+      "sha256": "a468d20f56c06c2acb0b9ac7ab2a99fe54aba81248e3983361952c56927c2588"
+    }
+  ],
+  "bundleSha256": "f3b4df6751b3abfae2fc86e0e95d0cd560dfe07f4b60996c46b019223d8d6149",
+  "requiredChecks": [
+    "application tests",
+    "TypeScript",
+    "ESLint",
+    "production compilation with fictitious database",
+    "read-only schema preflight on target",
+    "test-copy migration and connected flight/ATC/copilot/logbook smoke checks",
+    "backup before production change"
+  ]
+}

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
+import Link from 'next/link';
 import { Store } from 'lucide-react';
 import HangarMarketClient from './HangarMarketClient';
 
@@ -141,7 +142,7 @@ export default async function HangarMarketPage() {
   }
 
   // Annonces en vente
-  const { data: annoncesBrutes } = await admin.from('hangar_market')
+  const { data: annoncesBrutes, error: annoncesError } = await admin.from('hangar_market')
     .select(`
       *,
       types_avion:type_avion_id(id, nom, code_oaci, constructeur, capacite_pax, capacite_cargo_kg),
@@ -176,21 +177,24 @@ export default async function HangarMarketPage() {
     .is('admin_id', null)
     .gte('created_at', weekStart.toISOString());
 
+  if (annoncesError) return <section className="space-y-4 rounded-xl border border-slate-700 bg-slate-900/70 p-6"><h1 className="text-2xl font-semibold text-slate-100">Marché des appareils d’occasion</h1><p role="alert" className="text-sm text-amber-200">Les annonces n’ont pas pu être chargées. Rechargez le marché pour consulter les disponibilités.</p><Link href="/hangar-market" className="inline-flex min-h-11 items-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500">Réessayer</Link></section>;
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Store className="h-8 w-8 text-amber-400" />
+      <div className="flex items-center gap-3 border-b border-slate-700/70 pb-6">
+        <Store className="h-7 w-7 text-sky-400" />
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Hangar Market</h1>
-          <p className="text-sm text-slate-400">Achetez et vendez des avions d&apos;occasion</p>
+          <p className="text-xs font-semibold uppercase tracking-widest text-sky-400">Transactions entre exploitants</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">Marché des appareils d’occasion</h1>
+          <p className="mt-2 text-sm text-slate-400">Consultez les annonces, identifiez le propriétaire et vérifiez le coût total avant une transaction.</p>
         </div>
       </div>
 
       {/* Soldes */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="card bg-emerald-500/10 border-emerald-500/30">
-          <p className="text-sm text-emerald-400">Mon solde personnel</p>
-          <p className="text-2xl font-bold text-emerald-300">
+        <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-5">
+          <p className="text-xs text-slate-400">Solde du compte personnel</p>
+          <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-100">
             {(comptePerso?.solde || 0).toLocaleString('fr-FR')} F$
           </p>
         </div>
@@ -205,8 +209,8 @@ export default async function HangarMarketPage() {
       </div>
 
       {/* Info taxe */}
-      <div className="card bg-amber-500/10 border-amber-500/30">
-        <p className="text-sm text-amber-300">
+      <div className="rounded-lg border border-slate-700/70 bg-slate-900/70 px-4 py-3">
+        <p className="text-sm text-slate-300">
           Taxe de vente : <span className="font-bold">{config?.taxe_vente_pourcent || 5}%</span> prélevée sur le prix d&apos;achat (à la charge de l&apos;acheteur)
         </p>
       </div>

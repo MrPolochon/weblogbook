@@ -4,6 +4,7 @@ import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, HeartPulse, Play, ArrowRight } from 'lucide-react';
 import ReprendreSegmentForm from './ReprendreSegmentForm';
+import styles from '../../PilotOperations.module.css';
 
 export default async function ReprendreSegmentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -33,9 +34,9 @@ export default async function ReprendreSegmentPage({ params }: { params: Promise
   if (!segmentPrec) notFound();
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link href="/logbook/plans-vol" className="text-slate-400 hover:text-slate-200">
+    <div className={`${styles.operations} mx-auto w-full max-w-5xl space-y-6`}>
+      <header className="flex items-start gap-4 rounded-xl border border-slate-700/70 bg-slate-900/80 p-5">
+        <Link href="/logbook/plans-vol" aria-label="Retour à mes plans de vol" className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg border border-slate-700 text-slate-400 hover:bg-slate-800 hover:text-slate-200">
           <ArrowLeft className="h-5 w-5" />
         </Link>
         <div>
@@ -47,7 +48,7 @@ export default async function ReprendreSegmentPage({ params }: { params: Promise
             MEDEVAC {segment.numero_vol} — segment {segment.medevac_segment_index}/{segment.medevac_total_segments}
           </p>
         </div>
-      </div>
+      </header>
 
       {/* Récap trajet */}
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 p-5">

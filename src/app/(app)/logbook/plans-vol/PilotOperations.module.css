@@ -1,0 +1,17 @@
+.operations { color: #e2e8f0; }
+.operations :global(.card-glow), .operations :global(.card) {
+  border: 1px solid rgb(51 65 85 / .75);
+  border-radius: .75rem;
+  background: rgb(15 23 42 / .8);
+  box-shadow: none;
+}
+.operations :global(.card-glow)::before, .operations :global(.card-glow)::after { display: none; }
+.operations [class*="bg-gradient-"] { background-image: none !important; }
+.operations [class*="bg-clip-text"] { color: #e2e8f0; background-clip: initial; }
+.operations [class*="shadow-"] { box-shadow: none !important; }
+.operations [class*="animate-"]:not([class*="animate-spin"]) { animation: none !important; }
+.operations :global(.input) { min-height: 2.75rem; border-radius: .5rem; font-size: 1rem; }
+.operations :global(.input):focus-visible { outline: 2px solid #38bdf8; outline-offset: 2px; }
+.operations :global(.btn-primary), .operations :global(.btn-secondary), .operations :global(.btn-warning) { min-height: 2.75rem; border-radius: .5rem; }
+.operations button:focus-visible, .operations a:focus-visible { outline: 2px solid #38bdf8; outline-offset: 3px; }
+.operations :global(.bg-cockpit-grid) { background-image: none; }

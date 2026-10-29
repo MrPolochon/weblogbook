@@ -2,8 +2,8 @@ export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
-import { CODES_OACI_VALIDES, genererTypeCargaison, genererTypeCargaisonComplementaire, getCargaisonInfo, getMarchandiseRareAleatoire, calculerCoefficientRemplissage, calculerCoefficientChargementCargo } from '@/lib/aeroports-ptfs';
-import { COUT_VOL_FERRY } from '@/lib/compagnie-utils';
+import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
+import { FlightSubmissionError, getFlightQuote, submissionError, type FlightQuote } from '@/lib/plans-vol/submission';
 import { heureDepartToIso } from '@/lib/heure-depart';
 import { getMissionById, getMissionCooldownForUser } from '@/lib/armee';
 import { rateLimitShared } from '@/lib/rate-limit-shared';
@@ -54,17 +54,16 @@ export async function POST(request: Request) {
       aeroport_depart, aeroport_arrivee, numero_vol, porte, temps_prev_min, type_vol,
       heure_depart,
       intentions_vol, niveau_croisiere, sid_depart, star_arrivee, route_ifr, strip_route, note_atc,
-      vol_commercial, compagnie_id, nature_transport, inventaire_avion_id,
+      vol_commercial, compagnie_id, nature_transport: natureTransportRaw, inventaire_avion_id,
       compagnie_avion_id,
-      nb_pax_genere, cargo_kg_genere, revenue_brut, salaire_pilote, prix_billet_utilise,
       vol_sans_atc, vol_ferry, bria_conversation,
       copilote_id: copiloteIdRaw,
     } = body;
+    const nature_transport = vol_commercial && !vol_ferry ? (natureTransportRaw || 'passagers') : null;
     let heureDepartIso = heureDepartToIso(typeof heure_depart === 'string' ? heure_depart : null);
     if (!heureDepartIso) {
       return NextResponse.json({ error: 'L\'heure de départ (UTC) est obligatoire.' }, { status: 400 });
     }
-    const prixBilletUtilise = typeof prix_billet_utilise === 'number' ? prix_billet_utilise : parseInt(String(prix_billet_utilise || 0), 10) || 0;
     
     const ad = String(aeroport_depart || '').toUpperCase();
     const aa = String(aeroport_arrivee || '').toUpperCase();
@@ -161,7 +160,7 @@ export async function POST(request: Request) {
 
     // ── Normaliser le numéro de vol avec le code OACI de la compagnie ──
     let numeroVolFinal = String(numero_vol).trim().toUpperCase();
-    if (!isMilitaryPlan && compagnie_id) {
+    if (!isMilitaryPlan && compagnie_id && body.callsign_manual !== true) {
       const { data: compagnieData } = await admin.from('compagnies')
         .select('code_oaci')
         .eq('id', compagnie_id)
@@ -183,136 +182,24 @@ export async function POST(request: Request) {
       }
     }
 
-    // Variables mutables pour les revenus
-    let cargoGenereFinal = cargo_kg_genere ?? 0;
-    let nbPaxFinal = nb_pax_genere ?? 0;
-    let revenuBrutFinal = revenue_brut ?? 0;
-    let salaireFinal = salaire_pilote ?? 0;
-    let prixBilletFinal = prixBilletUtilise;
-    let typeCargaisonFinal: string | null = null;
-    let typeCargaisonLibelleFinal: string | null = null;
-
-    // ── BRIA : auto-calcul des revenus pour vols commerciaux ──
-    if (bria_conversation && vol_commercial && compagnie_id && revenuBrutFinal === 0) {
-      const { data: comp } = await admin.from('compagnies')
-        .select('prix_billet_pax, prix_kg_cargo, pourcentage_salaire')
-        .eq('id', compagnie_id)
-        .single();
-
-      let prixBillet = comp?.prix_billet_pax ?? 0;
-      const prixKgCargo = comp?.prix_kg_cargo ?? 0;
-      const pourcentageSalaire = comp?.pourcentage_salaire ?? 0;
-
-      // Vérifier s'il existe un tarif spécifique pour cette liaison
-      const { data: tarifSpec } = await admin.from('tarifs_liaisons')
-        .select('prix_billet')
-        .eq('compagnie_id', compagnie_id)
-        .eq('aeroport_depart', ad)
-        .eq('aeroport_arrivee', aa)
-        .maybeSingle();
-      if (tarifSpec?.prix_billet) prixBillet = tarifSpec.prix_billet;
-
-      let capacitePax = 0;
-      let capaciteCargo = 0;
-      if (compagnie_avion_id) {
-        const { data: avionData } = await admin.from('compagnie_avions')
-          .select('types_avion:type_avion_id(capacite_pax, capacite_cargo_kg)')
-          .eq('id', compagnie_avion_id)
-          .single();
-        const ta = Array.isArray(avionData?.types_avion) ? avionData.types_avion[0] : avionData?.types_avion;
-        capacitePax = ta?.capacite_pax ?? 0;
-        capaciteCargo = ta?.capacite_cargo_kg ?? 0;
-      }
-
-      // Récupération du contexte aéroport (last_flight_arrival + ratios dispo)
-      // pour appliquer correctement les buffs/malus côté serveur.
-      const { data: aeroportArriveeData } = await admin
-        .from('aeroports')
-        .select('last_flight_arrival, passagers_disponibles, passagers_max, cargo_disponible, cargo_max')
-        .eq('code_oaci', aa)
-        .maybeSingle();
-      const { data: aeroportDepartData } = await admin
-        .from('aeroports')
-        .select('passagers_disponibles, passagers_max, cargo_disponible, cargo_max')
-        .eq('code_oaci', ad)
-        .maybeSingle();
-
-      const lastArrivalAtArrivee = aeroportArriveeData?.last_flight_arrival
-        ? new Date(aeroportArriveeData.last_flight_arrival)
-        : null;
-      const ratioPaxDispo = aeroportDepartData && aeroportDepartData.passagers_max > 0
-        ? aeroportDepartData.passagers_disponibles / aeroportDepartData.passagers_max
-        : undefined;
-      const ratioCargoDispo = aeroportDepartData && aeroportDepartData.cargo_max > 0
-        ? aeroportDepartData.cargo_disponible / aeroportDepartData.cargo_max
-        : undefined;
-
-      const ctxBria = {
-        lastArrivalAtArrivee,
-        ratioPaxDispo,
-        ratioCargoDispo,
-        capacitePax,
-        capaciteCargoKg: capaciteCargo,
-      };
-
-      const natureT = nature_transport || 'passagers';
-
-      if (natureT === 'passagers' && capacitePax > 0) {
-        const coef = calculerCoefficientRemplissage(ad, aa, prixBillet, ctxBria);
-        nbPaxFinal = Math.min(Math.floor(capacitePax * Math.min(coef, 1.0)), capacitePax);
-        const revPax = nbPaxFinal * prixBillet;
-        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo, ctxBria);
-        const cargoComp = Math.min(Math.floor(capaciteCargo * Math.min(coefCargo, 1.0)), capaciteCargo);
-        cargoGenereFinal = cargoComp;
-        let revCargoComp = cargoComp * prixKgCargo;
-        typeCargaisonFinal = genererTypeCargaisonComplementaire();
-        if (typeCargaisonFinal === 'marchandise_rare') {
-          typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
-          const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
-          revCargoComp = Math.round(revCargoComp * (1 + bonus / 100));
-        }
-        revenuBrutFinal = revPax + revCargoComp;
-        prixBilletFinal = prixBillet;
-      } else if (natureT === 'cargo' && capaciteCargo > 0) {
-        const coefCargo = calculerCoefficientChargementCargo(ad, aa, prixKgCargo, ctxBria);
-        cargoGenereFinal = Math.min(Math.floor(capaciteCargo * Math.min(coefCargo, 1.0)), capaciteCargo);
-        let revCargo = cargoGenereFinal * prixKgCargo;
-        typeCargaisonFinal = genererTypeCargaison();
-        if (typeCargaisonFinal === 'marchandise_rare') {
-          typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
-          const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
-          revCargo = Math.round(revCargo * (1 + bonus / 100));
-        }
-        revenuBrutFinal = revCargo;
-        prixBilletFinal = prixKgCargo;
-      }
-
-      salaireFinal = Math.floor(revenuBrutFinal * (pourcentageSalaire / 100));
-    } else {
-      // Formulaire classique : valeurs déjà calculées côté client
-      // Vol cargo : type de cargaison classique
-      if (vol_commercial && nature_transport === 'cargo') {
-        typeCargaisonFinal = genererTypeCargaison();
-      }
-      // Vol passagers avec cargo complémentaire
-      if (vol_commercial && nature_transport === 'passagers' && cargoGenereFinal > 0 && compagnie_id) {
-        typeCargaisonFinal = genererTypeCargaisonComplementaire();
-        if (typeCargaisonFinal === 'marchandise_rare') {
-          typeCargaisonLibelleFinal = getMarchandiseRareAleatoire();
-        }
-        const { data: comp } = await admin.from('compagnies').select('prix_kg_cargo, pourcentage_salaire').eq('id', compagnie_id).single();
-        const prixKgCargo = comp?.prix_kg_cargo ?? 0;
-        const nbPax = Math.max(0, parseInt(String(nb_pax_genere || 0), 10) || 0);
-        const revenuPax = nbPax * prixBilletUtilise;
-        let revenuCargo = cargoGenereFinal * prixKgCargo;
-        if (typeCargaisonFinal === 'marchandise_rare') {
-          const bonus = getCargaisonInfo('marchandise_rare').bonusRevenu;
-          revenuCargo = Math.round(revenuCargo * (1 + bonus / 100));
-        }
-        revenuBrutFinal = revenuPax + revenuCargo;
-        salaireFinal = Math.floor(revenuBrutFinal * ((comp?.pourcentage_salaire ?? 0) / 100));
-      }
-    }
+    // Server snapshot of the current economy; client quantities and prices are ignored.
+    let flightQuote: FlightQuote | null = null;
+    if (!isMilitaryPlan) flightQuote = await getFlightQuote(admin, user.id, body);
+    const nbPaxFinal = flightQuote?.nb_pax_genere ?? 0;
+    const cargoGenereFinal = flightQuote?.cargo_kg_genere ?? 0;
+    const revenuBrutFinal = flightQuote?.revenue_brut ?? 0;
+    const salaireFinal = flightQuote?.salaire_pilote ?? 0;
+    const prixBilletFinal = flightQuote?.prix_billet_utilise ?? 0;
+    const typeCargaisonFinal = flightQuote?.type_cargaison ?? null;
+    const typeCargaisonLibelleFinal = flightQuote?.type_cargaison_libelle ?? null;
+    const persistPlan = async (plan: Record<string, unknown>) => {
+      if (isMilitaryPlan) return admin.from('plans_vol').insert(plan).select('id').single();
+      const { data, error } = await admin.rpc('submit_flight_plan_integrity', {
+        p_actor: user.id, p_plan: plan, p_quote: flightQuote!.quote_id,
+      });
+      if (error || !data?.id) throw submissionError(error);
+      return { data: { id: data.id as string }, error: null };
+    };
 
     // Validation vol ferry
     if (vol_ferry && isMilitaryPlan) {
@@ -324,61 +211,6 @@ export async function POST(request: Request) {
       }
       if (!compagnie_id) {
         return NextResponse.json({ error: 'Un vol ferry doit être effectué pour une compagnie.' }, { status: 400 });
-      }
-    }
-
-    // Coût vol ferry : débiter la compagnie à la création du plan
-    let ferryCoutTotal = 0;
-    if (vol_ferry && compagnie_id) {
-      // Coût de base
-      const coutBase = COUT_VOL_FERRY; // 10 000 F$
-      // Taxes aéroportuaires sur l'arrivée
-      const { data: taxesData } = await admin.from('taxes_aeroport')
-        .select('taxe_pourcent')
-        .eq('code_oaci', aa)
-        .single();
-      const tauxTaxe = taxesData?.taxe_pourcent || 2;
-      const taxesFerry = Math.round(coutBase * tauxTaxe / 100);
-      ferryCoutTotal = coutBase + taxesFerry;
-
-      // Vérifier le solde
-      const { data: compteFerry } = await admin
-        .from('felitz_comptes')
-        .select('id, solde')
-        .eq('compagnie_id', compagnie_id)
-        .eq('type', 'entreprise')
-        .single();
-
-      if (!compteFerry) {
-        return NextResponse.json({ error: 'Compte entreprise introuvable.' }, { status: 500 });
-      }
-      if (compteFerry.solde < ferryCoutTotal) {
-        return NextResponse.json({
-          error: `Solde insuffisant pour le vol ferry. Coût : ${coutBase.toLocaleString('fr-FR')} F$ + ${taxesFerry.toLocaleString('fr-FR')} F$ de taxes = ${ferryCoutTotal.toLocaleString('fr-FR')} F$.`
-        }, { status: 400 });
-      }
-
-      const { data: ferryDebitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteFerry.id, p_montant: ferryCoutTotal });
-      if (!ferryDebitOk) {
-        return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente)' }, { status: 400 });
-      }
-
-      // Transaction pour le coût de base
-      await admin.from('felitz_transactions').insert({
-        compte_id: compteFerry.id,
-        type: 'debit',
-        montant: coutBase,
-        libelle: `Vol ferry ${ad} → ${aa}`,
-      });
-
-      // Transaction pour les taxes
-      if (taxesFerry > 0) {
-        await admin.from('felitz_transactions').insert({
-          compte_id: compteFerry.id,
-          type: 'debit',
-          montant: taxesFerry,
-          libelle: `Taxes aéroportuaires ${aa} (vol ferry)`,
-        });
       }
     }
 
@@ -432,72 +264,6 @@ export async function POST(request: Request) {
         }
       }
 
-      // Si location active, débiter le loyer journalier dû
-      if (locationActive) {
-        // Vérifier si les deux compagnies sont dans la même alliance avec prêt gratuit
-        let loyerGratuit = false;
-        const { data: locataireComp } = await admin.from('compagnies')
-          .select('alliance_id').eq('id', compagnie_id).single();
-        const { data: loueurComp } = await admin.from('compagnies')
-          .select('alliance_id').eq('id', locationActive.loueur_compagnie_id).single();
-
-        if (locataireComp?.alliance_id && loueurComp?.alliance_id
-            && locataireComp.alliance_id === loueurComp.alliance_id) {
-          const { data: allianceParams } = await admin.from('alliance_parametres')
-            .select('pret_avions_actif')
-            .eq('alliance_id', locataireComp.alliance_id).single();
-          if (allianceParams?.pret_avions_actif) loyerGratuit = true;
-        }
-
-        if (!loyerGratuit) {
-          const lastBilledAt = locationActive.last_billed_at || locationActive.start_at;
-          const last = lastBilledAt ? new Date(lastBilledAt).getTime() : new Date().getTime();
-          const now = new Date().getTime();
-          const daysDue = Math.floor((now - last) / (24 * 60 * 60 * 1000));
-          if (daysDue > 0) {
-            const totalDue = daysDue * (locationActive.prix_journalier || 0);
-            if (totalDue > 0) {
-              const { data: compteLocataire } = await admin
-                .from('felitz_comptes')
-                .select('id, solde')
-                .eq('compagnie_id', compagnie_id)
-                .eq('type', 'entreprise')
-                .single();
-              if (!compteLocataire) {
-                return NextResponse.json({ error: 'Compte entreprise locataire introuvable.' }, { status: 400 });
-              }
-              if (compteLocataire.solde < totalDue) {
-                return NextResponse.json({ error: 'Solde insuffisant pour payer le loyer journalier.' }, { status: 400 });
-              }
-              const { data: loyerDebitOk } = await admin.rpc('debiter_compte_safe', { p_compte_id: compteLocataire.id, p_montant: totalDue });
-              if (!loyerDebitOk) {
-                return NextResponse.json({ error: 'Solde insuffisant pour le loyer (transaction concurrente)' }, { status: 400 });
-              }
-              await admin.from('felitz_transactions').insert({
-                compte_id: compteLocataire.id,
-                type: 'debit',
-                montant: totalDue,
-                libelle: `Loyer avion (${daysDue}j)`
-              });
-              await admin.from('compagnie_locations')
-                .update({ last_billed_at: new Date(last + daysDue * 24 * 60 * 60 * 1000).toISOString() })
-                .eq('id', locationActive.id);
-            }
-          }
-        } else {
-          // Alliance : prêt gratuit, juste mettre à jour last_billed_at
-          const lastBilledAt = locationActive.last_billed_at || locationActive.start_at;
-          const last = lastBilledAt ? new Date(lastBilledAt).getTime() : new Date().getTime();
-          const now = new Date().getTime();
-          const daysDue = Math.floor((now - last) / (24 * 60 * 60 * 1000));
-          if (daysDue > 0) {
-            await admin.from('compagnie_locations')
-              .update({ last_billed_at: new Date(last + daysDue * 24 * 60 * 60 * 1000).toISOString() })
-              .eq('id', locationActive.id);
-          }
-        }
-      }
-      
       // Vérifier que l'avion est à l'aéroport de départ
       if (avionIndiv.aeroport_actuel !== ad) {
         return NextResponse.json({ 
@@ -631,7 +397,7 @@ export async function POST(request: Request) {
       strip_fl_unit: 'FL',
       niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
       vol_commercial: Boolean(vol_commercial) && !vol_ferry,
-      compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
+      compagnie_id: compagnie_id || null,
       nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       compagnie_avion_id: compagnie_avion_id || null,
@@ -654,7 +420,7 @@ export async function POST(request: Request) {
     };
 
     if (copiloteId) {
-      const { data, error } = await admin.from('plans_vol').insert({
+      const { data, error } = await persistPlan({
         ...planBaseFields,
         note_atc: note_atc ? String(note_atc).trim() : null,
         statut: 'en_attente_copilote',
@@ -664,7 +430,7 @@ export async function POST(request: Request) {
         vol_sans_atc: false,
         automonitoring: false,
         copilote_vol_sans_atc: Boolean(vol_sans_atc),
-      }).select('id').single();
+      });
 
       if (error) {
         console.error('plans-vol POST INSERT (copilote):', JSON.stringify(error));
@@ -694,7 +460,7 @@ export async function POST(request: Request) {
             .gte('end_at', new Date().toISOString())
             .maybeSingle()
         : { data: null };
-      const { data, error } = await admin.from('plans_vol').insert({
+      const { data, error } = await persistPlan({
         pilote_id: user.id,
         aeroport_depart: ad,
         aeroport_arrivee: aa,
@@ -715,7 +481,7 @@ export async function POST(request: Request) {
         niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
         note_atc: null,
         vol_commercial: Boolean(vol_commercial) && !vol_ferry,
-        compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
+        compagnie_id: compagnie_id || null,
         nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
         inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
         compagnie_avion_id: compagnie_avion_id || null,
@@ -741,47 +507,11 @@ export async function POST(request: Request) {
         bria_conversation: bria_conversation || null,
         armee_avion_id: armeeAvionId,
         armee_mission_id: armeeMissionId,
-      }).select('id').single();
+      });
 
       if (error) {
         console.error('plans-vol POST INSERT (vol_sans_atc):', JSON.stringify(error));
         return NextResponse.json({ error: `Erreur lors de la création : ${error.message || error.code || 'erreur base de données'}` }, { status: 400 });
-      }
-
-      if (vol_commercial && nbPaxFinal > 0) {
-        try {
-          await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nbPaxFinal });
-        } catch (e) {
-          const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
-          if (current) {
-            const newValue = Math.max(0, current.passagers_disponibles - nbPaxFinal);
-            await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
-          }
-        }
-      }
-
-      if (vol_commercial && cargoGenereFinal > 0 && (nature_transport === 'cargo' || nature_transport === 'passagers')) {
-        try {
-          await admin.rpc('consommer_cargo', { p_code_oaci: ad, p_quantite: cargoGenereFinal });
-        } catch (e) {
-          const { data: currentCargo } = await admin
-            .from('aeroport_cargo')
-            .select('cargo_disponible')
-            .eq('code_oaci', ad)
-            .single();
-          if (currentCargo) {
-            const newValue = Math.max(0, currentCargo.cargo_disponible - cargoGenereFinal);
-            await admin.from('aeroport_cargo')
-              .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
-              .eq('code_oaci', ad);
-          }
-        }
-      }
-
-      if (compagnie_avion_id) {
-        await admin.from('compagnie_avions')
-          .update({ statut: 'in_flight' })
-          .eq('id', compagnie_avion_id);
       }
 
       return NextResponse.json({ ok: true, id: data.id, statut: 'accepte', vol_sans_atc: true, event_registration_confirmed:await bookingLinkedToPlan(user.id,body.event_reservation_id,data.id) });
@@ -820,7 +550,7 @@ export async function POST(request: Request) {
           .maybeSingle()
       : { data: null };
 
-    const { data, error } = await admin.from('plans_vol').insert({
+    const { data, error } = await persistPlan({
       pilote_id: user.id,
       aeroport_depart: ad,
       aeroport_arrivee: aa,
@@ -841,7 +571,7 @@ export async function POST(request: Request) {
         niveau_croisiere: type_vol === 'IFR' && niveau_croisiere ? String(niveau_croisiere).trim().replace(/^FL\s*/i, '') : null,
         note_atc: note_atc ? String(note_atc).trim() : null,
       vol_commercial: Boolean(vol_commercial) && !vol_ferry,
-      compagnie_id: (vol_commercial || vol_ferry) && compagnie_id ? compagnie_id : null,
+      compagnie_id: compagnie_id || null,
       nature_transport: vol_commercial && !vol_ferry && nature_transport ? nature_transport : null,
       inventaire_avion_id: !vol_commercial && inventaire_avion_id ? inventaire_avion_id : null,
       compagnie_avion_id: compagnie_avion_id || null,
@@ -865,7 +595,7 @@ export async function POST(request: Request) {
       bria_conversation: bria_conversation || null,
       armee_avion_id: armeeAvionId,
       armee_mission_id: armeeMissionId,
-    }).select('id').single();
+    });
 
     if (error) {
       console.error('plans-vol POST INSERT:', JSON.stringify(error));
@@ -902,38 +632,6 @@ export async function POST(request: Request) {
       console.error('Erreur enregistrement controle ATC initial:', e);
     }
 
-    // Consommer les passagers de l'aéroport de départ si vol commercial avec passagers
-    if (vol_commercial && nbPaxFinal > 0) {
-      try {
-        await admin.rpc('consommer_passagers_aeroport', { p_code_oaci: ad, p_passagers: nbPaxFinal });
-      } catch (e) {
-        const { data: current } = await admin.from('aeroport_passagers').select('passagers_disponibles').eq('code_oaci', ad).single();
-        if (current) {
-          const newValue = Math.max(0, current.passagers_disponibles - nbPaxFinal);
-          await admin.from('aeroport_passagers').update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() }).eq('code_oaci', ad);
-        }
-      }
-    }
-
-    // Consommer le cargo de l'aéroport de départ si vol commercial cargo ou passagers avec cargo complémentaire
-    if (vol_commercial && cargoGenereFinal > 0 && (nature_transport === 'cargo' || nature_transport === 'passagers')) {
-      try {
-        await admin.rpc('consommer_cargo', { p_code_oaci: ad, p_quantite: cargoGenereFinal });
-      } catch (e) {
-        const { data: currentCargo } = await admin
-          .from('aeroport_cargo')
-          .select('cargo_disponible')
-          .eq('code_oaci', ad)
-          .single();
-        if (currentCargo) {
-          const newValue = Math.max(0, currentCargo.cargo_disponible - cargoGenereFinal);
-          await admin.from('aeroport_cargo')
-            .update({ cargo_disponible: newValue, updated_at: new Date().toISOString() })
-            .eq('code_oaci', ad);
-        }
-      }
-    }
-
     // Infos pour le BRIA : nom ATC, position, fréquence (ex: "Contactez Jean-Marie ITKO Tour sur 118 décimal 750")
     const { data: holderProfile } = await admin.from('profiles').select('identifiant').eq('id', holder.user_id).single();
     const { data: vhfFreq } = await admin.from('vhf_position_frequencies')
@@ -955,6 +653,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, id: data.id, statut: 'en_attente', atc_contact: atcContact, event_registration_confirmed:await bookingLinkedToPlan(user.id,body.event_reservation_id,data.id) });
   } catch (e) {
+    if (e instanceof FlightSubmissionError) return NextResponse.json({ error: e.message }, { status: e.status });
     console.error('plans-vol POST:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
   }

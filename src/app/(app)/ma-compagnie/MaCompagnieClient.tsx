@@ -18,6 +18,7 @@ import CompagnieAutorisationsClient from './CompagnieAutorisationsClient';
 import CompagniePrioritesPortesClient from './CompagniePrioritesPortesClient';
 import { toLocaleDateStringUTC } from '@/lib/date-utils';
 import { toast } from 'sonner';
+import { financialInput } from '@/lib/financial-input';
 
 interface CompagnieOption {
   id: string;
@@ -64,14 +65,14 @@ function formatHeures(minutes: number): string {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
-export default function MaCompagnieClient({ 
-  compagniesDisponibles, 
-  selectedCompagnieId, 
-  compagnie, 
-  employes, 
+export default function MaCompagnieClient({
+  compagniesDisponibles,
+  selectedCompagnieId,
+  compagnie,
+  employes,
   isPdg,
   isLeader: isLeaderProp,
-  soldeCompagnie 
+  soldeCompagnie
 }: Props) {
   const isLeader = isLeaderProp ?? isPdg;
   const router = useRouter();
@@ -333,9 +334,9 @@ export default function MaCompagnieClient({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          pourcentage_salaire: parseInt(pourcentageSalaire) || 20,
-          prix_billet_pax: parseInt(prixBillet) || 100,
-          prix_kg_cargo: parseInt(prixCargo) || 5,
+          pourcentage_salaire: financialInput(pourcentageSalaire, 'Salaire (%)', 100, true),
+          prix_billet_pax: financialInput(prixBillet, 'Prix du billet', 10_000_000, true),
+          prix_kg_cargo: financialInput(prixCargo, 'Prix du fret', 1_000_000, true),
           code_oaci: codeOaci || null,
           callsign_telephonie: callsignTel || null,
         })
@@ -361,11 +362,12 @@ export default function MaCompagnieClient({
   // Sections de la barre d'ancrage. On les filtre dynamiquement selon le role
   // (un employe simple n'a pas acces aux sections finances PDG, etc.).
   const navSections: { id: string; label: string; icon: typeof Users; show: boolean }[] = [
-    { id: 'equipe',      label: 'Equipe',           icon: Users,       show: true },
-    { id: 'finances',    label: 'Finances',          icon: DollarSign,  show: isLeader },
-    { id: 'flotte',      label: 'Flotte',            icon: Plane,       show: true },
-    { id: 'operations',  label: 'Operations',        icon: Route,       show: true },
-    { id: 'portes',      label: 'Priorites Portes',  icon: LayoutGrid,  show: isLeader },
+    { id: 'direction', label: isLeader ? 'Direction' : 'Vue d’ensemble', icon: Building2, show: true },
+    { id: 'equipe', label: 'Équipe', icon: Users, show: true },
+    { id: 'operations', label: 'Exploitation', icon: Plane, show: true },
+    { id: 'reseau', label: 'Réseau', icon: Route, show: isLeader },
+    { id: 'finances', label: 'Finances', icon: DollarSign, show: isLeader },
+    { id: 'parametres', label: 'Paramètres', icon: Settings, show: isLeader },
   ];
 
   const totalPilotes = employes.length;
@@ -373,12 +375,10 @@ export default function MaCompagnieClient({
   const totalHeuresAffichees = formatHeures(totalHeuresMin);
 
   return (
-    <div className="space-y-6 animate-fade-in stagger-enter">
-      {isLeader && <CompanyPerformance id={compagnie.id} balance={soldeCompagnie} />}
-
-      {/* === HERO HEADER === */}
-      <header className="card overflow-hidden p-0 border-slate-700/60 transition-shadow hover:shadow-xl hover:shadow-slate-950/40">
-        <div className="bg-gradient-to-br from-sky-500/10 via-slate-800/10 to-emerald-500/10 p-5 sm:p-6">
+    <div className="space-y-6">
+      {/* === IDENTITÉ DE LA COMPAGNIE === */}
+      <header className="card overflow-hidden border-slate-700/70 p-0">
+        <div className="bg-slate-900/80 p-5 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
               <div className="relative shrink-0">
@@ -393,7 +393,7 @@ export default function MaCompagnieClient({
                   />
                 ) : (
                   <div className="h-16 w-16 rounded-xl bg-slate-800/80 ring-2 ring-sky-500/20 flex items-center justify-center">
-                    <Building2 className="h-8 w-8 text-sky-400 animate-pulse-soft" />
+                    <Building2 className="h-8 w-8 text-sky-400" />
                   </div>
                 )}
               </div>
@@ -401,7 +401,9 @@ export default function MaCompagnieClient({
                 <div className="flex items-center gap-2 flex-wrap">
                   {compagniesDisponibles.length > 1 ? (
                     <div className="relative inline-flex items-center">
+                      <h1 className="sr-only">{compagnie.nom}</h1>
                       <select
+                        aria-label="Compagnie affichée"
                         value={selectedCompagnieId}
                         onChange={handleCompagnieChange}
                         className="text-2xl sm:text-3xl font-bold text-slate-100 bg-transparent border-none cursor-pointer hover:text-sky-300 transition-colors appearance-none pr-7"
@@ -419,8 +421,8 @@ export default function MaCompagnieClient({
                     <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 truncate">{compagnie.nom}</h1>
                   )}
                   {isLeader && (
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 transition-all hover:scale-105 ${isPdg ? 'bg-amber-500/20 text-amber-300 ring-amber-400/30' : 'bg-sky-500/20 text-sky-300 ring-sky-400/30'}`}>
-                      <Crown className={`h-3.5 w-3.5 ${isPdg ? 'animate-pulse-soft' : ''}`} />
+                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${isPdg ? 'bg-amber-500/20 text-amber-300 ring-amber-400/30' : 'bg-sky-500/20 text-sky-300 ring-sky-400/30'}`}>
+                      <Crown className="h-3.5 w-3.5" />
                       {isPdg ? 'PDG' : 'Co-PDG'}
                     </span>
                   )}
@@ -450,7 +452,7 @@ export default function MaCompagnieClient({
               {isLeader && (
                 <>
                   <button
-                    onClick={() => setShowSettings(!showSettings)}
+                    onClick={() => { setShowSettings(true); document.getElementById('parametres')?.scrollIntoView({ block: 'start', behavior: 'auto' }); }}
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
                       showSettings
                         ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-md shadow-sky-500/10'
@@ -527,7 +529,7 @@ export default function MaCompagnieClient({
       </header>
 
       {/* === BARRE DE NAVIGATION ANCRES === */}
-      <nav className="sticky top-14 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/80 backdrop-blur-md border-y border-slate-800/60">
+      <nav aria-label="Rubriques de la compagnie" className="sticky top-14 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/95 border-y border-slate-800/60">
         <div className="flex gap-2 overflow-x-auto scrollbar-thin">
           {navSections.filter(s => s.show).map((s) => {
             const Icon = s.icon;
@@ -535,7 +537,8 @@ export default function MaCompagnieClient({
               <a
                 key={s.id}
                 href={`#${s.id}`}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-slate-800/60 text-slate-300 ring-1 ring-slate-700 hover:bg-sky-500/15 hover:text-sky-300 hover:ring-sky-500/40 transition-all"
+                onClick={s.id === 'parametres' ? () => setShowSettings(true) : undefined}
+                className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
               >
                 <Icon className="h-3.5 w-3.5" />
                 {s.label}
@@ -545,173 +548,8 @@ export default function MaCompagnieClient({
         </div>
       </nav>
 
-      {/* Paramètres PDG / Co-PDG */}
-      {isLeader && showSettings && (
-        <div className="card border-sky-500/30 bg-sky-500/5 animate-slide-up">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-            <Settings className="h-5 w-5 text-sky-400" />
-            Paramètres de la compagnie
-          </h2>
-          
-          {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
-          {success && <p className="text-emerald-400 text-sm mb-3">{success}</p>}
-          
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label className="label flex items-center gap-2">
-                <DollarSign className="h-4 w-4 text-emerald-400" />
-                Salaire pilotes (%)
-              </label>
-              <input
-                type="number"
-                value={pourcentageSalaire}
-                onChange={(e) => setPourcentageSalaire(e.target.value)}
-                min="0"
-                max="100"
-                className="input w-full"
-              />
-              <p className="text-xs text-slate-500 mt-1">% du revenu reversé aux pilotes</p>
-            </div>
-            <div>
-              <label className="label flex items-center gap-2">
-                <Users className="h-4 w-4 text-sky-400" />
-                Prix billet passager (F$)
-              </label>
-              <input
-                type="number"
-                value={prixBillet}
-                onChange={(e) => setPrixBillet(e.target.value)}
-                min="1"
-                className="input w-full"
-              />
-            </div>
-            <div>
-              <label className="label flex items-center gap-2">
-                <Plane className="h-4 w-4 text-amber-400" />
-                Prix cargo/kg (F$)
-              </label>
-              <input
-                type="number"
-                value={prixCargo}
-                onChange={(e) => setPrixCargo(e.target.value)}
-                min="1"
-                className="input w-full"
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 pt-4 border-t border-slate-700">
-            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-              <Radio className="h-4 w-4 text-sky-400" />
-              Identité radio (Callsign)
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              Le code OACI sert de préfixe au numéro de vol (ex: AFR4546). Le nom radio est affiché aux contrôleurs ATC (ex: AIRFRANCE).
-            </p>
-            <p className="text-sm text-amber-200 mb-3">Toute modification du code OACI ou de la radiophonie doit être vérifiée et approuvée par l’IFSA. Tant que l’autorisation n’est pas accordée, la compagnie et ses pilotes doivent utiliser les appellations actuelles, jamais les nouvelles valeurs proposées.</p>
-            <p className="text-sm text-slate-300 mb-3">Valeurs actives : {compagnie.code_oaci || 'Code non renseigné'} / {compagnie.callsign_telephonie || 'Radiophonie non renseignée'}</p>
-            <CompanyIdentityRequests compagnieId={compagnie.id} refreshKey={identityRefresh} />
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div>
-                <label className="label">Code OACI proposé (3 lettres)</label>
-                <input
-                  type="text"
-                  value={codeOaci}
-                  onChange={(e) => setCodeOaci(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
-                  maxLength={3}
-                  placeholder="AFR"
-                  className="input w-full font-mono uppercase"
-                />
-                <p className="text-xs text-slate-500 mt-1">Ex: AFR, DLH, BAW, UAE, SBU</p>
-              </div>
-              <div>
-                <label className="label">Nom radio proposé (téléphonie)</label>
-                <input
-                  type="text"
-                  value={callsignTel}
-                  onChange={(e) => setCallsignTel(e.target.value.toUpperCase())}
-                  maxLength={30}
-                  placeholder="AIRFRANCE"
-                  className="input w-full font-mono uppercase"
-                />
-                <p className="text-xs text-slate-500 mt-1">Ex: AIRFRANCE, LUFTHANSA, SPEEDBIRD</p>
-              </div>
-            </div>
-          </div>
-          
-          <button
-            onClick={handleSaveSettings}
-            disabled={saving}
-            className="btn-primary mt-4 flex items-center gap-2"
-          >
-            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-            Sauvegarder
-          </button>
-
-          {/* Section Logo */}
-          <div className="mt-6 pt-6 border-t border-slate-700">
-            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
-              <ImagePlus className="h-4 w-4 text-sky-400" />
-              Logo de la compagnie
-            </h3>
-            <p className="text-xs text-slate-400 mb-3">
-              Ce logo sera automatiquement appliqué sur les cartes d&apos;identité de tous vos employés et de vous-même.
-              Les cartes staff (noires) ne sont pas affectées.
-            </p>
-            {logoError && <p className="text-red-400 text-sm mb-2">{logoError}</p>}
-            {logoSuccess && <p className="text-emerald-400 text-sm mb-2">{logoSuccess}</p>}
-            
-            <div className="flex items-center gap-4">
-              {logoUrl ? (
-                <div className="relative group">
-                  <Image
-                    src={logoUrl}
-                    alt="Logo compagnie"
-                    width={80}
-                    height={80}
-                    className="rounded-lg border border-slate-600 object-contain bg-white p-1"
-                    unoptimized
-                  />
-                  <button
-                    onClick={handleDeleteLogo}
-                    disabled={uploadingLogo}
-                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                    title="Supprimer le logo"
-                  >
-                    <Trash2 className="h-3 w-3" />
-                  </button>
-                </div>
-              ) : (
-                <div className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500">
-                  <ImagePlus className="h-6 w-6" />
-                </div>
-              )}
-              <div>
-                <label className="btn-primary text-sm cursor-pointer flex items-center gap-2">
-                  {uploadingLogo ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ImagePlus className="h-4 w-4" />
-                  )}
-                  {logoUrl ? 'Changer le logo' : 'Uploader un logo'}
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleUploadLogo}
-                    disabled={uploadingLogo}
-                  />
-                </label>
-                <p className="text-xs text-slate-500 mt-1">PNG, JPG, max 5 MB</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* === SECTION : EQUIPE === */}
-      <section id="equipe" className="space-y-6 scroll-mt-28">
-      <div className="grid gap-6 lg:grid-cols-2">
+      <section id="direction" aria-label="Vue d’ensemble de la compagnie" className="space-y-5 scroll-mt-28">
+        {isLeader && <CompanyPerformance id={compagnie.id} balance={soldeCompagnie} />}
         {/* Infos compagnie */}
         <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
@@ -774,6 +612,11 @@ export default function MaCompagnieClient({
           </div>
         </div>
 
+      </section>
+
+      {/* === SECTION : EQUIPE === */}
+      <section id="equipe" className="space-y-6 scroll-mt-28">
+      <div className="grid gap-6">
         {/* Liste des pilotes */}
         <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
           <div className="flex items-center justify-between mb-4">
@@ -785,8 +628,8 @@ export default function MaCompagnieClient({
               <button
                 onClick={() => setShowRecrutement(!showRecrutement)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                  showRecrutement 
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50' 
+                  showRecrutement
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50'
                     : 'bg-emerald-600 text-white hover:bg-emerald-700'
                 }`}
               >
@@ -798,8 +641,8 @@ export default function MaCompagnieClient({
           {employes.length > 0 ? (
             <div className="space-y-2 max-h-64 overflow-y-auto stagger-enter">
               {employes.map((emp) => (
-                <div 
-                  key={emp.id} 
+                <div
+                  key={emp.id}
                   className="flex flex-col gap-2 bg-slate-800/30 rounded-lg p-3 border border-slate-700/30 transition-all duration-200 hover:bg-slate-800/50 hover:border-slate-600/40 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex items-center gap-2 flex-wrap">
@@ -921,7 +764,7 @@ export default function MaCompagnieClient({
                     className="input w-full pl-10"
                   />
                 </div>
-                
+
                 {/* Résultats de recherche */}
                 {pilotesRecherche.length > 0 && !selectedPilote && (
                   <div className="mt-2 bg-slate-800 rounded-lg border border-slate-700 max-h-40 overflow-y-auto">
@@ -996,11 +839,11 @@ export default function MaCompagnieClient({
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {invitationsEnvoyees.map((inv) => (
-                    <div 
-                      key={inv.id} 
+                    <div
+                      key={inv.id}
                       className={`flex items-center justify-between p-3 rounded-lg border ${
-                        inv.statut === 'en_attente' 
-                          ? 'bg-amber-500/10 border-amber-500/30' 
+                        inv.statut === 'en_attente'
+                          ? 'bg-amber-500/10 border-amber-500/30'
                           : inv.statut === 'acceptee'
                           ? 'bg-emerald-500/10 border-emerald-500/30'
                           : 'bg-red-500/10 border-red-500/30'
@@ -1014,15 +857,15 @@ export default function MaCompagnieClient({
                       </div>
                       <div className="flex items-center gap-2">
                         <span className={`text-xs font-medium px-2 py-1 rounded ${
-                          inv.statut === 'en_attente' 
-                            ? 'bg-amber-500/20 text-amber-300' 
+                          inv.statut === 'en_attente'
+                            ? 'bg-amber-500/20 text-amber-300'
                             : inv.statut === 'acceptee'
                             ? 'bg-emerald-500/20 text-emerald-300'
                             : inv.statut === 'refusee'
                             ? 'bg-red-500/20 text-red-300'
                             : 'bg-slate-500/20 text-slate-300'
                         }`}>
-                          {inv.statut === 'en_attente' ? 'En attente' : 
+                          {inv.statut === 'en_attente' ? 'En attente' :
                            inv.statut === 'acceptee' ? 'Acceptée' :
                            inv.statut === 'refusee' ? 'Refusée' : 'Annulée'}
                         </span>
@@ -1048,11 +891,17 @@ export default function MaCompagnieClient({
       </section>
       {/* === FIN SECTION EQUIPE === */}
 
-      {/* === SECTION : FINANCES === */}
-      {isLeader && (
-        <section id="finances" className="space-y-6 scroll-mt-28">
-          <CompagniePretClient compagnieId={compagnie.id} />
+      <section id="operations" aria-labelledby="company-operations-title" className="space-y-5 scroll-mt-28">
+        <div><h2 id="company-operations-title" className="text-xl font-semibold text-slate-100">Exploitation</h2><p className="mt-1 text-sm text-slate-400">Appareils, autorisations, entretien et vols de repositionnement.</p></div>
+      {/* === SECTION : FLOTTE === */}
+      <div id="flotte" className="space-y-6 scroll-mt-28">
+        {isLeader && <CompagnieLocationsClient compagnieId={compagnie.id} />}
+        <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isLeader} />
+        <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isLeader} allianceId={compagnie.alliance_id} />
+      </div>
 
+
+        {isLeader && <>
           <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-amber-500/5">
             <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Route className="h-5 w-5 text-amber-400" />
@@ -1063,6 +912,22 @@ export default function MaCompagnieClient({
               prixBilletDefaut={compagnie.prix_billet_pax}
             />
           </div>
+
+        </>}
+        <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
+        {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
+      </section>
+
+      {isLeader && <section id="reseau" aria-labelledby="company-network-title" className="space-y-5 scroll-mt-28">
+        <div><h2 id="company-network-title" className="text-xl font-semibold text-slate-100">Réseau et implantation</h2><p className="mt-1 text-sm text-slate-400">Hubs, hangars et priorités de stationnement de la compagnie.</p></div>
+        <CompagnieHubsClient compagnieId={compagnie.id} />
+        <div id="portes" className="card scroll-mt-28"><CompagniePrioritesPortesClient compagnieId={compagnie.id} isPdg={isLeader} /></div>
+      </section>}
+
+      {/* === SECTION : FINANCES === */}
+      {isLeader && (
+        <section id="finances" className="space-y-6 scroll-mt-28">
+          <CompagniePretClient compagnieId={compagnie.id} />
 
           <Link
             href="/felitz-bank"
@@ -1080,28 +945,175 @@ export default function MaCompagnieClient({
         </section>
       )}
 
-      {/* === SECTION : FLOTTE === */}
-      <section id="flotte" className="space-y-6 scroll-mt-28">
-        {isLeader && <CompagnieLocationsClient compagnieId={compagnie.id} />}
-        {isLeader && <CompagnieHubsClient compagnieId={compagnie.id} />}
-        <CompagnieAutorisationsClient compagnieId={compagnie.id} isPdg={isLeader} />
-        <CompagnieAvionsClient compagnieId={compagnie.id} soldeCompagnie={soldeCompagnie} isPdg={isLeader} allianceId={compagnie.alliance_id} />
-      </section>
+      {isLeader && <section id="parametres" aria-labelledby="company-settings-title" className="space-y-4 scroll-mt-28">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-4"><div><h2 id="company-settings-title" className="text-lg font-semibold text-slate-100">Identité et paramètres</h2><p className="mt-1 text-sm text-slate-400">Réglages par défaut, identité radio et logo de la compagnie.</p></div><button type="button" aria-expanded={showSettings} aria-controls="company-settings-content" onClick={() => setShowSettings(value => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-600 px-3 text-sm font-medium text-slate-200 hover:bg-slate-800"><Settings aria-hidden className="h-4 w-4"/>{showSettings ? 'Réduire les paramètres' : 'Ouvrir les paramètres'}</button></div>
+        <div id="company-settings-content">
+      {/* Paramètres PDG / Co-PDG */}
+      {isLeader && showSettings && (
+        <div className="card border-sky-500/30 bg-sky-500/5 animate-slide-up">
+          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
+            <Settings className="h-5 w-5 text-sky-400" />
+            Paramètres de la compagnie
+          </h2>
 
-      {/* === SECTION : OPERATIONS === */}
-      <section id="operations" className="space-y-6 scroll-mt-28">
-        <CompagnieReparationsClient compagnieId={compagnie.id} isPdg={isLeader} />
-        {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
-      </section>
+          {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+          {success && <p className="text-emerald-400 text-sm mb-3">{success}</p>}
 
-      {/* === SECTION : PRIORITES PORTES === */}
-      {isLeader && (
-        <section id="portes" className="space-y-6 scroll-mt-28">
-          <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-indigo-500/5">
-            <CompagniePrioritesPortesClient compagnieId={compagnie.id} isPdg={isLeader} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label className="label flex items-center gap-2">
+                <DollarSign className="h-4 w-4 text-emerald-400" />
+                Salaire pilotes (%)
+              </label>
+              <input
+                type="number"
+                value={pourcentageSalaire}
+                onChange={(e) => setPourcentageSalaire(e.target.value)}
+                min="0"
+                max="100"
+                className="input w-full"
+              />
+              <p className="text-xs text-slate-500 mt-1">% du revenu reversé aux pilotes</p>
+            </div>
+            <div>
+              <label className="label flex items-center gap-2">
+                <Users className="h-4 w-4 text-sky-400" />
+                Prix billet passager (F$)
+              </label>
+              <input
+                type="number"
+                value={prixBillet}
+                onChange={(e) => setPrixBillet(e.target.value)}
+                min="1"
+                className="input w-full"
+              />
+            </div>
+            <div>
+              <label className="label flex items-center gap-2">
+                <Plane className="h-4 w-4 text-amber-400" />
+                Prix cargo/kg (F$)
+              </label>
+              <input
+                type="number"
+                value={prixCargo}
+                onChange={(e) => setPrixCargo(e.target.value)}
+                min="1"
+                className="input w-full"
+              />
+            </div>
           </div>
-        </section>
+
+          <div className="mt-4 pt-4 border-t border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+              <Radio className="h-4 w-4 text-sky-400" />
+              Identité radio (Callsign)
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Le code OACI sert de préfixe au numéro de vol (ex: AFR4546). Le nom radio est affiché aux contrôleurs ATC (ex: AIRFRANCE).
+            </p>
+            <p className="text-sm text-amber-200 mb-3">Toute modification du code OACI ou de la radiophonie doit être vérifiée et approuvée par l’IFSA. Tant que l’autorisation n’est pas accordée, la compagnie et ses pilotes doivent utiliser les appellations actuelles, jamais les nouvelles valeurs proposées.</p>
+            <p className="text-sm text-slate-300 mb-3">Valeurs actives : {compagnie.code_oaci || 'Code non renseigné'} / {compagnie.callsign_telephonie || 'Radiophonie non renseignée'}</p>
+            <CompanyIdentityRequests compagnieId={compagnie.id} refreshKey={identityRefresh} />
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <label className="label">Code OACI proposé (3 lettres)</label>
+                <input
+                  type="text"
+                  value={codeOaci}
+                  onChange={(e) => setCodeOaci(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+                  maxLength={3}
+                  placeholder="AFR"
+                  className="input w-full font-mono uppercase"
+                />
+                <p className="text-xs text-slate-500 mt-1">Ex: AFR, DLH, BAW, UAE, SBU</p>
+              </div>
+              <div>
+                <label className="label">Nom radio proposé (téléphonie)</label>
+                <input
+                  type="text"
+                  value={callsignTel}
+                  onChange={(e) => setCallsignTel(e.target.value.toUpperCase())}
+                  maxLength={30}
+                  placeholder="AIRFRANCE"
+                  className="input w-full font-mono uppercase"
+                />
+                <p className="text-xs text-slate-500 mt-1">Ex: AIRFRANCE, LUFTHANSA, SPEEDBIRD</p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSaveSettings}
+            disabled={saving}
+            className="btn-primary mt-4 flex items-center gap-2"
+          >
+            {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Sauvegarder
+          </button>
+
+          {/* Section Logo */}
+          <div className="mt-6 pt-6 border-t border-slate-700">
+            <h3 className="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+              <ImagePlus className="h-4 w-4 text-sky-400" />
+              Logo de la compagnie
+            </h3>
+            <p className="text-xs text-slate-400 mb-3">
+              Ce logo sera automatiquement appliqué sur les cartes d&apos;identité de tous vos employés et de vous-même.
+              Les cartes staff (noires) ne sont pas affectées.
+            </p>
+            {logoError && <p className="text-red-400 text-sm mb-2">{logoError}</p>}
+            {logoSuccess && <p className="text-emerald-400 text-sm mb-2">{logoSuccess}</p>}
+
+            <div className="flex items-center gap-4">
+              {logoUrl ? (
+                <div className="relative group">
+                  <Image
+                    src={logoUrl}
+                    alt="Logo compagnie"
+                    width={80}
+                    height={80}
+                    className="rounded-lg border border-slate-600 object-contain bg-white p-1"
+                    unoptimized
+                  />
+                  <button
+                    onClick={handleDeleteLogo}
+                    disabled={uploadingLogo}
+                    className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                    title="Supprimer le logo"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center text-slate-500">
+                  <ImagePlus className="h-6 w-6" />
+                </div>
+              )}
+              <div>
+                <label className="btn-primary text-sm cursor-pointer flex items-center gap-2">
+                  {uploadingLogo ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ImagePlus className="h-4 w-4" />
+                  )}
+                  {logoUrl ? 'Changer le logo' : 'Uploader un logo'}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleUploadLogo}
+                    disabled={uploadingLogo}
+                  />
+                </label>
+                <p className="text-xs text-slate-500 mt-1">PNG, JPG, max 5 MB</p>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
+
+        </div>
+      </section>}
     </div>
   );
 }

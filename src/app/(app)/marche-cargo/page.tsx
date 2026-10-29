@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
 export default function MarcheCargoPage() {
-  redirect('/marche-passagers');
+  redirect('/marche-passagers?type=cargo');
 }

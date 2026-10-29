@@ -207,12 +207,13 @@ export default function PerfPtfsClient() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
-          <Gauge className="h-7 w-7 text-amber-400" />
-          Calculateur de performance PTFS
+      <div className="border-b border-slate-700/70 pb-6">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-sky-400">Préparation technique</p>
+        <h1 className="flex items-center gap-2 text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">
+          <Gauge className="h-6 w-6 text-sky-400" />
+          Performances décollage et atterrissage
         </h1>
-        <p className="text-slate-400 mt-1">
+        <p className="mt-2 max-w-3xl text-sm text-slate-400">
           Tous les avions du serveur sont listés. Les calculs utilisent les données PTFS (Roblox) quand disponibles. « Sans volets » = configuration 0, pas le premier cran du catalogue.{' '}
           <a href="https://github.com/cityuserGH/ptfsperf" target="_blank" rel="noopener noreferrer" className="text-sky-400 hover:text-sky-300">cityuser</a> (MIT).
         </p>

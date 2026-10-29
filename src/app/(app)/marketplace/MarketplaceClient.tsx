@@ -114,8 +114,8 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
 
   if (!canBuyPersonal && compagniesAffordable.length === 0 && !canBuyArmee) {
     return (
-      <button 
-        disabled 
+      <button
+        disabled
         className="px-3 py-1.5 bg-slate-700 text-slate-500 rounded-lg text-sm font-medium cursor-not-allowed"
       >
         Solde insuffisant
@@ -129,11 +129,11 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
   const canConfirm = hasSelection && (pourCompagnie || pourArmee || isPersoDefault);
 
   const modalContent = showModal && mounted ? createPortal(
-    <div 
+    <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100] p-4"
       onClick={(e) => { if (e.target === e.currentTarget) closeModal(); }}
     >
-      <div className="bg-slate-800 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto relative z-[101] animate-in fade-in zoom-in-95 duration-200 shadow-2xl">
+      <div role="dialog" aria-modal="true" aria-label={`Acquisition de ${avionNom}`} className="bg-slate-900 rounded-xl border border-slate-700 p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto relative z-[101]">
         <button
           onClick={closeModal}
           disabled={loading}
@@ -147,7 +147,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
           Acheter {avionNom}
         </h3>
         <p className="text-slate-400 mb-4">
-          Prix : <span className="text-purple-300 font-bold">{prix.toLocaleString('fr-FR')} F$</span>
+          Prix : <span className="text-sky-300 font-bold">{prix.toLocaleString('fr-FR')} F$</span>
         </p>
 
         {success && (
@@ -165,7 +165,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
                   onClick={() => { setPourCompagnie(null); setPourArmee(false); }}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
                     pourCompagnie === null && !pourArmee
-                      ? 'border-purple-500 bg-purple-500/20' 
+                      ? 'border-sky-500 bg-sky-500/20'
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
                 >
@@ -183,7 +183,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
                   onClick={() => { setPourCompagnie(c.id); setPourArmee(false); }}
                   className={`w-full flex items-center gap-3 p-3 rounded-lg border transition-colors ${
                     pourCompagnie === c.id && !pourArmee
-                      ? 'border-purple-500 bg-purple-500/20' 
+                      ? 'border-sky-500 bg-sky-500/20'
                       : 'border-slate-600 hover:border-slate-500'
                   }`}
                 >
@@ -222,7 +222,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
               <button
                 onClick={handleAchat}
                 disabled={loading || !canConfirm}
-                className="flex-1 px-4 py-2.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-colors flex items-center justify-center gap-2"
               >
                 {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <ShoppingCart className="h-4 w-4" />}
                 {loading ? 'Achat en cours…' : 'Confirmer l\'achat'}
@@ -246,7 +246,7 @@ export default function MarketplaceClient({ avionId, avionNom, prix, estMilitair
     <>
       <button
         onClick={openModal}
-        className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-sm font-semibold transition-all shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 flex items-center gap-1.5 shrink-0"
+        className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-sm font-semibold transition-all    flex items-center gap-1.5 shrink-0"
       >
         <ShoppingCart className="h-4 w-4" />
         Acheter

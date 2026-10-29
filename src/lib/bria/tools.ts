@@ -11,13 +11,12 @@ export type BriaMessage = { role: 'bria' | 'pilote'; text: string };
 interface CreateBriaClientToolsOpts {
   getConversationLog: () => BriaMessage[];
   router: AppRouterInstance;
-  // Appelé après une soumission réussie : permet au composant parent
-  // (BriaDialog) de raccrocher l'appel et rediriger le pilote vers
-  // l'interface transpondeur (page plans-vol).
+  /** Legacy options are accepted for compatibility; these tools are read-only. */
   onPlanSubmitted?: (planId: string) => void;
 }
 
-export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
+/** Read-only compatibility helpers. The guided BRIA does not expose agent tools. */
+export function createBriaClientTools(_opts?: CreateBriaClientToolsOpts) {
   return {
     get_aircraft_info: async (params: { immatriculation: string }) => {
       const res = await fetch(`/api/avions/lookup?immatriculation=${encodeURIComponent(params.immatriculation)}`);
@@ -75,17 +74,25 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
       const arr = params.code_oaci_arrivee.toUpperCase();
 
       if (params.type === 'pax') {
-        const paxRes = await fetch(`/api/aeroport-passagers?code=${encodeURIComponent(arr)}`);
-        const paxData = paxRes.ok ? await paxRes.json() : null;
+        const [departureRes, arrivalRes] = await Promise.all([
+          fetch(`/api/aeroport-passagers?code_oaci=${encodeURIComponent(dep)}`),
+          fetch(`/api/aeroport-passagers?code_oaci=${encodeURIComponent(arr)}`),
+        ]);
+        if (!departureRes.ok || !arrivalRes.ok) return JSON.stringify({ error: 'Stock passagers indisponible. Réessayez dans le formulaire.' });
+        const departureData = await departureRes.json();
+        const arrivalData = await arrivalRes.json();
+        if (Array.isArray(departureData) || Array.isArray(arrivalData) || !Number.isFinite(departureData?.passagers_disponibles) || departureData.passagers_disponibles < 0) {
+          return JSON.stringify({ error: 'Stock passagers indisponible. Réessayez dans le formulaire.' });
+        }
 
         const ctx: CoefficientContext = {
-          lastArrivalAtArrivee: paxData?.last_flight_arrival ? new Date(paxData.last_flight_arrival) : null,
-          ratioPaxDispo: paxData ? paxData.passagers_disponibles / (getAeroportInfo(arr)?.passagersMax || 1) : undefined,
+          lastArrivalAtArrivee: arrivalData?.last_flight_arrival ? new Date(arrivalData.last_flight_arrival) : null,
+          ratioPaxDispo: departureData.passagers_disponibles / (getAeroportInfo(dep)?.passagersMax || 1),
           capacitePax: aircraft.capacite_pax,
         };
 
         const prix = aircraft.prix_billet_pax ?? 100;
-        const disponibles = paxData?.passagers_disponibles ?? aircraft.capacite_pax;
+        const disponibles = departureData.passagers_disponibles;
         const result = estimerPassagers(dep, arr, prix, aircraft.capacite_pax, disponibles, ctx);
         return JSON.stringify({
           type: 'pax',
@@ -96,17 +103,25 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
           avertissement: result.avertissement,
         });
       } else {
-        const cargoRes = await fetch(`/api/aeroport-cargo?code=${encodeURIComponent(arr)}`);
-        const cargoData = cargoRes.ok ? await cargoRes.json() : null;
+        const [departureRes, arrivalRes] = await Promise.all([
+          fetch(`/api/aeroport-cargo?code_oaci=${encodeURIComponent(dep)}`),
+          fetch(`/api/aeroport-cargo?code_oaci=${encodeURIComponent(arr)}`),
+        ]);
+        if (!departureRes.ok || !arrivalRes.ok) return JSON.stringify({ error: 'Stock cargo indisponible. Réessayez dans le formulaire.' });
+        const departureData = await departureRes.json();
+        const arrivalData = await arrivalRes.json();
+        if (Array.isArray(departureData) || Array.isArray(arrivalData) || !Number.isFinite(departureData?.cargo_disponible) || departureData.cargo_disponible < 0) {
+          return JSON.stringify({ error: 'Stock cargo indisponible. Réessayez dans le formulaire.' });
+        }
 
         const ctx: CoefficientContext = {
-          lastArrivalAtArrivee: cargoData?.last_flight_arrival ? new Date(cargoData.last_flight_arrival) : null,
-          ratioCargoDispo: cargoData ? cargoData.cargo_disponible / (getAeroportInfo(arr)?.cargoMax || 1) : undefined,
+          lastArrivalAtArrivee: arrivalData?.last_flight_arrival ? new Date(arrivalData.last_flight_arrival) : null,
+          ratioCargoDispo: departureData.cargo_disponible / (getAeroportInfo(dep)?.cargoMax || 1),
           capaciteCargoKg: aircraft.capacite_cargo_kg,
         };
 
         const prix = aircraft.prix_kg_cargo ?? 1;
-        const disponible = cargoData?.cargo_disponible ?? aircraft.capacite_cargo_kg;
+        const disponible = departureData.cargo_disponible;
         const result = estimerCargo(dep, arr, prix, aircraft.capacite_cargo_kg, disponible, ctx);
         return JSON.stringify({
           type: 'cargo',
@@ -167,93 +182,6 @@ export function createBriaClientTools(opts: CreateBriaClientToolsOpts) {
       const res = await fetch(`/api/atc-online?aeroport=${encodeURIComponent(params.code_oaci_depart.toUpperCase())}`);
       if (!res.ok) return JSON.stringify({ online: false, position: null, controllers: [] });
       return JSON.stringify(await res.json());
-    },
-
-    submit_flight_plan: async (params: { payload: Record<string, unknown> }) => {
-      try {
-        const conversation = opts.getConversationLog();
-        const p = params.payload ?? {};
-
-        const dep = String(p.aeroport_depart ?? '').toUpperCase();
-
-        let atcOnline = false;
-        try {
-          const atcRes = await fetch(`/api/atc-online?aeroport=${encodeURIComponent(dep)}`);
-          if (atcRes.ok) {
-            const atcData = await atcRes.json();
-            atcOnline = Boolean(atcData.online);
-          }
-        } catch { /* ignore */ }
-
-        // Normalise l'heure de depart eventuellement fournie par l'agent BRIA :
-        // accepte "HH:MM", "HHhMM", "HHMM", "1430Z", etc. Renvoie "HH:MM" UTC ou ''.
-        const rawHeure = String(
-          p.heure_depart ?? p.heure_depart_estimee ?? p.departure_time ?? ''
-        ).trim().toUpperCase();
-        const heureMatch = rawHeure.match(/^(\d{1,2})[:H ]?(\d{2})Z?$/);
-        const heureDepart = heureMatch
-          ? `${String(Math.min(23, parseInt(heureMatch[1], 10))).padStart(2, '0')}:${String(Math.min(59, parseInt(heureMatch[2], 10))).padStart(2, '0')}`
-          : '';
-
-        // Normalise le niveau de croisiere : "FL350", "350", "FL 350", "35000FT" -> "350"
-        const rawFl = String(p.niveau_croisiere ?? p.cruise_level ?? p.altitude ?? '').trim().toUpperCase();
-        let niveauCroisiere = '';
-        const flMatch = rawFl.match(/FL\s*(\d{2,3})/);
-        if (flMatch) niveauCroisiere = flMatch[1];
-        else {
-          const ftMatch = rawFl.match(/(\d{3,5})\s*(FT|FEET)?/);
-          if (ftMatch) {
-            const n = parseInt(ftMatch[1], 10);
-            if (n >= 1000) niveauCroisiere = String(Math.round(n / 100)).padStart(3, '0');
-            else if (n >= 10 && n <= 600) niveauCroisiere = String(n).padStart(3, '0');
-          }
-        }
-
-        const sanitized: Record<string, unknown> = {
-          ...p,
-          aeroport_depart: dep,
-          aeroport_arrivee: String(p.aeroport_arrivee ?? '').toUpperCase(),
-          numero_vol: String(p.numero_vol ?? 'BRIA001').toUpperCase(),
-          temps_prev_min: Number(p.temps_prev_min) || 30,
-          heure_depart: heureDepart || undefined,
-          type_vol: ['VFR', 'IFR'].includes(String(p.type_vol ?? '').toUpperCase())
-            ? String(p.type_vol).toUpperCase() : 'VFR',
-          niveau_croisiere: niveauCroisiere || undefined,
-          vol_commercial: Boolean(p.vol_commercial),
-          vol_sans_atc: !atcOnline,
-          nb_pax_genere: Number(p.nb_pax_genere) || 0,
-          cargo_kg_genere: Number(p.cargo_kg_genere) || 0,
-          revenue_brut: 0,
-          prix_billet_utilise: Number(p.prix_billet_utilise) || 0,
-          bria_conversation: conversation,
-        };
-
-        if (sanitized.type_vol === 'VFR' && !sanitized.intentions_vol) {
-          sanitized.intentions_vol = 'Vol déposé via BRIA';
-        }
-
-        const res = await fetch('/api/plans-vol', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(sanitized),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          console.error('[BRIA] submit error:', data.error);
-          return JSON.stringify({ success: false, error: data.error ?? 'Erreur soumission' });
-        }
-        // Notifie le parent : raccrochage + redirection vers la page transpondeur.
-        // Léger délai pour laisser BRIA terminer sa phrase de confirmation vocale.
-        if (opts.onPlanSubmitted) {
-          setTimeout(() => opts.onPlanSubmitted?.(data.id), 1500);
-        } else {
-          setTimeout(() => opts.router.refresh(), 100);
-        }
-        return JSON.stringify({ success: true, id: data.id, statut: data.statut ?? 'accepte' });
-      } catch (err) {
-        console.error('[BRIA] submit_flight_plan exception:', err);
-        return JSON.stringify({ success: false, error: 'Erreur technique lors de la soumission' });
-      }
     },
   };
 }

@@ -4,6 +4,7 @@ import { getFlightInstructorProfilesForSelect } from '@/lib/instruction-permissi
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import NouveauVolClient from './NouveauVolClient';
+import { loadUnrecordedClosedPlans } from '@/lib/logbook-registration';
 
 export default async function NouveauVolPage() {
   const supabase = await createClient();
@@ -14,24 +15,29 @@ export default async function NouveauVolPage() {
   if (profile?.blocked_until && new Date(profile.blocked_until) > new Date()) redirect('/logbook');
 
   const admin = createAdminClient();
-  const [{ data: types }, { data: compagnies }, { data: allProfiles }, { data: closedPlans }, instructeurs] = await Promise.all([
+  const [{ data: types, error: typesError }, { data: compagnies, error: compagniesError }, { data: allProfiles, error: profilesError }, { data: closedPlans, error: plansError }, instructeurs] = await Promise.all([
     supabase.from('types_avion').select('id, nom, constructeur').order('ordre'),
     supabase.from('compagnies').select('id, nom').order('nom'),
     supabase.from('profiles').select('id, identifiant').order('identifiant'),
-    admin.from('plans_vol').select('id, aeroport_depart, aeroport_arrivee, type_vol, numero_vol, accepted_at, cloture_at').eq('pilote_id', user.id).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null).order('cloture_at', { ascending: false }),
+    loadUnrecordedClosedPlans(admin, user.id),
     getFlightInstructorProfilesForSelect(admin),
   ]);
 
   const autresProfiles = (allProfiles || []).filter((p) => p.id !== user.id);
+  // The shared query excludes every registered status, including pending staff
+  // review and historic records without a plan link, before its result limit.
+  const availablePlans = closedPlans ?? [];
+  const unavailable = Boolean(typesError || compagniesError || profilesError || plansError);
 
   return (
     <Suspense fallback={<div className="text-slate-400">Chargement…</div>}>
       <NouveauVolClient
-        closedPlans={closedPlans || []}
+        closedPlans={availablePlans}
         typesAvion={types || []}
         compagnies={compagnies || []}
         instructeurs={instructeurs || []}
         autresProfiles={autresProfiles}
+        loadWarning={unavailable ? 'Certaines listes n’ont pas pu être chargées. Actualisez la page avant de transmettre votre vol si une information manque.' : undefined}
       />
     </Suspense>
   );

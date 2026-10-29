@@ -14,6 +14,8 @@ import MedevacPauseBanner from './MedevacPauseBanner';
 import ServicesAuSolPanel from './ServicesAuSolPanel';
 import type { PlanVol } from '@/lib/types';
 import { ARME_MISSIONS } from '@/lib/armee-missions';
+import styles from './PilotOperations.module.css';
+import { loadUnrecordedClosedPlans } from '@/lib/logbook-registration';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   depose: { label: 'Déposé', color: 'text-slate-300', bgColor: 'bg-slate-500/20' },
@@ -37,26 +39,21 @@ export default async function MesPlansVolPage() {
   const admin = createAdminClient();
 
   // Profile and plans in parallel
-  const [{ data: profile }, { data: raw }, { data: plansClotures }] = await Promise.all([
+  const [{ data: profile }, { data: raw, error: plansError }, { data: plansClotures, error: closedPlansError }] = await Promise.all([
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     admin
       .from('plans_vol')
-      .select('id, pilote_id, copilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte, deroutement_at, deroutement_destination_initiale, copilote:profiles!plans_vol_copilote_id_fkey(identifiant)')
+      .select('id, pilote_id, copilote_id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, statut, created_at, temps_prev_min, refusal_reason, code_transpondeur, mode_transpondeur, accepted_at, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, siavi_avion_id, compagnie_avion_id, inventaire_avion_id, nb_pax_genere, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id, porte, deroutement_at, deroutement_destination_initiale, copilote:profiles!plans_vol_copilote_id_fkey(identifiant)')
       .or(`pilote_id.eq.${user.id},copilote_id.eq.${user.id}`)
+      .in('statut', ['depose', 'en_attente', 'en_attente_copilote', 'accepte', 'refuse', 'en_cours', 'automonitoring', 'en_attente_cloture', 'en_pause', 'planifie_suivant'])
       .order('created_at', { ascending: false }),
-    // Plans civils clôturés à enregistrer (pas encore transformés en vol)
-    admin.from('plans_vol')
-      .select('id, numero_vol, aeroport_depart, aeroport_arrivee, type_vol, temps_prev_min, cloture_at')
-      .eq('pilote_id', user.id)
-      .eq('statut', 'cloture')
-      .is('logbook_processed_at', null)
-      .is('siavi_avion_id', null)
-      .not('accepted_at', 'is', null)
-      .not('cloture_at', 'is', null)
-      .order('cloture_at', { ascending: false }),
+    // A pending staff review is already a logbook record, not an unrecorded plan.
+    loadUnrecordedClosedPlans(admin, user.id),
   ]);
 
   if (profile?.role === 'atc') redirect('/logbook');
+
+  if (plansError) return <div className="mx-auto max-w-5xl space-y-5"><h1 className="text-2xl font-semibold text-slate-100">Mes plans de vol</h1><section role="alert" className="rounded-xl border border-amber-700/60 bg-slate-900 p-5"><h2 className="font-semibold text-amber-200">Le suivi des plans est momentanément indisponible</h2><p className="mt-2 text-sm text-slate-300">Vos plans ne peuvent pas être chargés. Cela ne signifie pas qu’aucun vol n’est en cours.</p><Link href="/logbook/plans-vol" className="mt-4 inline-flex min-h-11 items-center rounded-lg border border-slate-600 px-4 text-sm text-slate-200 hover:bg-slate-800">Réessayer</Link></section></div>;
 
   const allPlans = (raw || []) as unknown as PlanVol[];
 
@@ -122,72 +119,19 @@ export default async function MesPlansVolPage() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-indigo-600 via-indigo-700 to-purple-800 p-6 shadow-xl">
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHZpZXdCb3g9IjAgMCA2MCA2MCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZyBmaWxsPSJub25lIiBmaWxsLXJ1bGU9ImV2ZW5vZGQiPjxnIGZpbGw9IiNmZmYiIGZpbGwtb3BhY2l0eT0iMC4wNSI+PHBhdGggZD0iTTM2IDM0djItSDI0di0yaDEyek0zNiAyNHYySDI0di0yaDEyeiIvPjwvZz48L2c+PC9zdmc+')] opacity-30"></div>
-        <div className="relative flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <Link href="/logbook" className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors">
-              <ArrowLeft className="h-5 w-5 text-white" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <div className="p-2 rounded-xl bg-white/10 backdrop-blur">
-                  <FileText className="h-6 w-6 text-white" />
-                </div>
-                <h1 className="text-2xl font-bold text-white">Mes plans de vol</h1>
-              </div>
-              <p className="text-indigo-100/80 text-sm">Gérez et suivez vos plans de vol</p>
-            </div>
-          </div>
-          {hasActivePlan ? (
-            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white/20 text-white/60 text-sm font-medium cursor-not-allowed">
-              <Radio className="h-4 w-4" />
-              Vol en cours
-            </div>
-          ) : (
-            <Link 
-              href="/logbook/depot-plan-vol" 
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-indigo-50 text-indigo-700 text-sm font-bold transition-all shadow-lg"
-            >
-              <Plus className="h-4 w-4" />
-              Nouveau plan de vol
-            </Link>
-          )}
+    <div className={`${styles.operations} mx-auto w-full max-w-6xl space-y-6`}>
+      <header className="rounded-xl border border-slate-700/70 bg-slate-900/80 p-5 sm:p-6">
+        <Link href="/logbook" className="mb-4 inline-flex min-h-10 items-center gap-2 text-sm text-slate-400 hover:text-slate-100"><ArrowLeft aria-hidden className="h-4 w-4"/> Carnet de vol</Link>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div><p className="mb-2 text-xs font-medium uppercase tracking-widest text-sky-400">Opérations de vol</p><h1 className="flex items-center gap-3 text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl"><FileText aria-hidden className="h-6 w-6 text-sky-400"/> Mes plans de vol</h1><p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-400">Préparation, suivi opérationnel et clôture. Les vols terminés sont enregistrés séparément dans votre carnet.</p></div>
+          {hasActivePlan ? <a href="#suivi-operationnel" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-sky-700 bg-sky-950/40 px-4 text-sm font-semibold text-sky-200"><Radio aria-hidden className="h-4 w-4"/> Reprendre le suivi</a> : <Link href="/logbook/depot-plan-vol" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white hover:bg-sky-500"><Plus aria-hidden className="h-4 w-4"/> Nouveau plan de vol</Link>}
         </div>
-      </div>
-
-      {/* Statistiques */}
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="rounded-xl bg-gradient-to-br from-sky-500/10 to-sky-600/5 border border-sky-500/20 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sky-400/80 text-sm">En cours</p>
-              <p className="text-2xl font-bold text-sky-400">{plansEnCours.length}</p>
-            </div>
-            <Plane className="h-8 w-8 text-sky-400/30" />
-          </div>
-        </div>
-        <div className="rounded-xl bg-gradient-to-br from-amber-500/10 to-amber-600/5 border border-amber-500/20 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-amber-400/80 text-sm">Non clôturés</p>
-              <p className="text-2xl font-bold text-amber-400">{plansNonClotures.length}</p>
-            </div>
-            <Timer className="h-8 w-8 text-amber-400/30" />
-          </div>
-        </div>
-        <div className="rounded-xl bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-red-400/80 text-sm">Refusés</p>
-              <p className="text-2xl font-bold text-red-400">{plansRefuses.length}</p>
-            </div>
-            <XCircle className="h-8 w-8 text-red-400/30" />
-          </div>
-        </div>
-      </div>
+      </header>
+      <dl className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[{label:'En exploitation',value:plansEnCours.length,detail:'Acceptés, en cours ou à clôturer'}, {label:'Plans ouverts',value:plansNonClotures.length,detail:'Dépôts et vols non clôturés'}, {label:'À corriger',value:plansRefuses.length,detail:'Plans refusés par le contrôle'}].map(item=><div key={item.label} className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-5 py-4"><dt className="text-sm text-slate-400">{item.label}</dt><dd className="mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-100">{item.value}</dd><p className="mt-1 text-xs text-slate-500">{item.detail}</p></div>)}
+      </dl>
+      <div id="suivi-operationnel" className="scroll-mt-28"/>
+      {planActif && <section className="rounded-xl border border-sky-800/70 bg-slate-900 p-4 sm:p-5" aria-labelledby="active-plan-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-wider text-sky-400">Vol suivi</p><h2 id="active-plan-heading" className="mt-1 font-mono text-xl font-semibold text-slate-100">{planActif.numero_vol} · {planActif.aeroport_depart} → {planActif.aeroport_arrivee}</h2></div><span className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm text-slate-300">{STATUT_CONFIG[planActif.statut]?.label || planActif.statut}</span></div><p className="mt-3 text-sm text-slate-400">{planActif.type_vol} · durée prévue {planActif.temps_prev_min || '—'} min · {planActif.automonitoring ? 'Autosurveillance' : controleurIdentifiant ? `Contrôle : ${controleurIdentifiant}` : 'Prise en charge à confirmer'}</p><a href="#plans-operationnels" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-sky-300 hover:text-sky-200">Accéder aux actions du plan <ArrowRight aria-hidden className="h-4 w-4"/></a></section>}
 
       {/* Pause mission MEDEVAC : segment clôturé + segment suivant à activer */}
       {medevacPause && (
@@ -284,11 +228,11 @@ export default async function MesPlansVolPage() {
       )}
 
       {/* Liste des plans */}
-      <div className="rounded-xl border border-slate-700/50 bg-slate-800/30 overflow-hidden">
+      <section id="plans-operationnels" aria-labelledby="plans-operationnels-title" className="scroll-mt-28 rounded-xl border border-slate-700/70 bg-slate-900/70 overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-700/50 bg-slate-800/50">
-          <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+          <h2 id="plans-operationnels-title" className="text-lg font-semibold text-slate-100 flex items-center gap-2">
             <FileText className="h-5 w-5 text-indigo-400" />
-            Plans de vol actifs
+            Plans en préparation et en exploitation
             <span className="text-sm font-normal text-slate-500">({plans.length})</span>
           </h2>
         </div>
@@ -349,12 +293,12 @@ export default async function MesPlansVolPage() {
                         )}
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                       <span className="text-xs text-slate-500">
                         {formatDateHourUTC(p.created_at)} UTC
                       </span>
                       {p.statut === 'refuse' ? (
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <Link
                             href={`/logbook/plans-vol/${p.id}/modifier`}
                             className="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors"
@@ -364,7 +308,7 @@ export default async function MesPlansVolPage() {
                           <PlanVolAnnulerButton planId={p.id} statut={p.statut} />
                         </div>
                       ) : (
-                        <div className="flex items-center gap-3">
+                        <div className="flex flex-wrap items-center gap-3">
                           <PlanVolCopiloteActions planId={p.id} statut={p.statut} isCopilote={p.copilote_id === user.id} />
                           {p.pilote_id === user.id && ['accepte', 'en_cours', 'automonitoring'].includes(p.statut) && !p.deroutement_at && <DerouterButton planId={p.id} destination={p.aeroport_arrivee} />}
                           {p.deroutement_at && <span className="text-orange-300 text-xs">Dérouté vers {p.aeroport_arrivee}</span>}
@@ -379,12 +323,13 @@ export default async function MesPlansVolPage() {
             })}
           </div>
         )}
-      </div>
+      </section>
 
-      <p className="text-slate-500 text-sm text-center">
-        Si aucun ATC n&apos;a accepté le plan ou s&apos;il est en autosurveillance, la clôture est immédiate. Sinon, l&apos;ATC qui détient le plan doit confirmer la clôture.
+      <p className="text-slate-400 text-sm leading-relaxed">
+        Lorsque le plan est en autosurveillance ou ne dépend d’aucun contrôleur, la clôture est immédiate. Sinon, l&apos;ATC qui détient le plan doit confirmer la clôture.
       </p>
 
+      {closedPlansError && <p role="alert" className="rounded-lg border border-amber-700/60 bg-slate-900 p-4 text-sm text-amber-200">Les plans clôturés à enregistrer n’ont pas pu être chargés. <Link href="/logbook/plans-vol" className="underline">Réessayer</Link></p>}
       {/* ── Plans clôturés à enregistrer ── */}
       {plansClotures && plansClotures.length > 0 && (
         <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 overflow-hidden">

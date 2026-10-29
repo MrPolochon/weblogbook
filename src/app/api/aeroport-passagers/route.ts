@@ -79,46 +79,10 @@ export async function GET(req: NextRequest) {
   }
 }
 
-// POST - Consommer des passagers (appelé lors d'un vol)
-export async function POST(req: NextRequest) {
-  try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
-
-    const body = await req.json();
-    const { code_oaci, passagers_consommes } = body;
-
-    if (!code_oaci || typeof passagers_consommes !== 'number') {
-      return NextResponse.json({ error: 'Données incomplètes' }, { status: 400 });
-    }
-
-    const admin = createAdminClient();
-
-    const { error: rpcError } = await admin.rpc('consommer_passagers_aeroport', {
-      p_code_oaci: code_oaci,
-      p_passagers: passagers_consommes,
-    });
-
-    if (rpcError) {
-      // Fallback : update manuel sur la table unifiée
-      const { data: current } = await admin
-        .from('aeroports')
-        .select('passagers_disponibles')
-        .eq('code_oaci', code_oaci)
-        .single();
-      if (current) {
-        const newValue = Math.max(0, current.passagers_disponibles - passagers_consommes);
-        await admin
-          .from('aeroports')
-          .update({ passagers_disponibles: newValue, updated_at: new Date().toISOString() })
-          .eq('code_oaci', code_oaci);
-      }
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (e) {
-    console.error('Aeroport passagers POST:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
-  }
+// Stock consumption belongs exclusively to atomic flight submission.
+export async function POST(_req: NextRequest) {
+  const client = await createClient();
+  const { data: { user } } = await client.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
+  return NextResponse.json({ error: 'Le stock est réservé automatiquement lors du dépôt du plan de vol.' }, { status: 410 });
 }

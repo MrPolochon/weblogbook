@@ -41,7 +41,9 @@ BEGIN
   IF inv IS NOT NULL THEN
     SELECT id,type_avion_id,prix_achat,proprietaire_id,instruction_actif,instruction_session_id,instruction_lifecycle INTO aircraft FROM inventaire_avions WHERE id=inv FOR UPDATE;
     IF NOT FOUND THEN RAISE EXCEPTION 'Avion introuvable ou déjà revendu'; END IF;
-    IF aircraft.instruction_actif OR aircraft.instruction_session_id IS NOT NULL OR aircraft.instruction_lifecycle IS NOT NULL THEN RAISE EXCEPTION 'Les avions fictifs d’instruction ne peuvent pas être revendus'; END IF;
+    -- Le lifecycle vaut aussi 'brouillon' par défaut pour les avions personnels.
+    -- Seuls le marquage instruction et le rattachement à une session les distinguent.
+    IF aircraft.instruction_actif IS TRUE OR aircraft.instruction_session_id IS NOT NULL THEN RAISE EXCEPTION 'Les avions fictifs d’instruction ne peuvent pas être revendus'; END IF;
     IF aircraft.proprietaire_id IS DISTINCT FROM seller THEN RAISE EXCEPTION 'Cet avion ne vous appartient pas' USING ERRCODE='42501'; END IF;
     SELECT id INTO account_id FROM felitz_comptes WHERE proprietaire_id=seller AND type='personnel';
   ELSE

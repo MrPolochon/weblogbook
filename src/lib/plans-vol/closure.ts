@@ -357,8 +357,8 @@ async function distribuerTaxesATC(
 
   // Taux par défaut si pas configuré
   const tauxTaxe = typeVol === 'VFR'
-    ? (taxesData?.taxe_vfr_pourcent || 5)
-    : (taxesData?.taxe_pourcent || 2);
+    ? (taxesData?.taxe_vfr_pourcent ?? 5)
+    : (taxesData?.taxe_pourcent ?? 2);
 
   const taxesTotales = Math.round(revenuBrut * tauxTaxe / 100);
   if (taxesTotales <= 0) return { taxesTotales: 0, atcPayes: 0 };
