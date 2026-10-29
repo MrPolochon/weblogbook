@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { Plus, Trash2, RefreshCw, Save } from 'lucide-react';
+import { financialInput } from '@/lib/financial-input';
 
 interface Taxe {
   id: string;
@@ -36,8 +37,8 @@ export default function AdminTaxesClient({ taxes }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code_oaci: newCode.trim().toUpperCase(),
-          taxe_pourcent: parseFloat(newTaxeIfr) || 2,
-          taxe_vfr_pourcent: parseFloat(newTaxeVfr) || 5
+          taxe_pourcent: financialInput(newTaxeIfr, 'Taxe IFR', 100),
+          taxe_vfr_pourcent: financialInput(newTaxeVfr, 'Taxe VFR', 100)
         })
       });
 
@@ -56,6 +57,7 @@ export default function AdminTaxesClient({ taxes }: Props) {
   }
 
   async function handleUpdate(id: string, code: string, taxeIfr: string, taxeVfr: string) {
+    setError('');
     setLoading(true);
     try {
       const res = await fetch('/api/taxes', {
@@ -63,8 +65,8 @@ export default function AdminTaxesClient({ taxes }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           code_oaci: code,
-          taxe_pourcent: parseFloat(taxeIfr) || 2,
-          taxe_vfr_pourcent: parseFloat(taxeVfr) || 5
+          taxe_pourcent: financialInput(taxeIfr, 'Taxe IFR', 100),
+          taxe_vfr_pourcent: financialInput(taxeVfr, 'Taxe VFR', 100)
         })
       });
 

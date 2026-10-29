@@ -79,10 +79,10 @@ type AdminEditMode = 'airports' | 'islands' | 'fir';
 
 export default function MarchePassagersClient({ aeroports }: Props) {
   const router = useRouter();
-  const [, startTransition] = useTransition();
+  const [refreshing, startTransition] = useTransition();
   const [selectedAeroport, setSelectedAeroport] = useState<AeroportData | null>(null);
-  const [viewMode, setViewMode] = useState<'carte' | 'liste'>('carte');
-  const [refreshing, setRefreshing] = useState(false);
+  const [viewMode, setViewMode] = useState<'carte' | 'liste'>('liste');
+  const [search, setSearch] = useState('');
   
   // Couches visibles
   const [showFIR, setShowFIR] = useState(true);
@@ -391,13 +391,11 @@ export default function MarchePassagersClient({ aeroports }: Props) {
   };
 
   async function handleRefresh() {
-    setRefreshing(true);
     startTransition(() => router.refresh());
-    setTimeout(() => setRefreshing(false), 1000);
   }
 
   function getPassagerRatio(aeroport: AeroportData): number {
-    return aeroport.passagers_disponibles / aeroport.passagers_max;
+    return aeroport.passagers_max > 0 ? Math.max(0, Math.min(1, aeroport.passagers_disponibles / aeroport.passagers_max)) : 0;
   }
 
   function getPassagerColor(ratio: number): string {
@@ -412,7 +410,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
     return 'bg-red-500/20';
   }
 
-  const aeroportsTries = [...aeroports].sort((a, b) => b.passagers_disponibles - a.passagers_disponibles);
+  const aeroportsTries = aeroports.filter(a => `${a.code} ${a.nom}`.toLocaleLowerCase('fr').includes(search.toLocaleLowerCase('fr'))).sort((a, b) => b.passagers_disponibles - a.passagers_disponibles);
   
   const currentSelectedIsland = islands.find(i => i.id === selectedIsland);
   const currentSelectedFir = firZones.find(f => f.id === selectedFir);
@@ -489,11 +487,12 @@ export default function MarchePassagersClient({ aeroports }: Props) {
 
       {/* Contrôles */}
       <div className="flex items-center justify-between flex-wrap gap-3">
+        <label className="text-xs font-medium text-slate-400">Rechercher un aéroport<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Code OACI ou nom…" className="mt-2 block min-h-11 w-64 max-w-full rounded-lg border border-slate-700 bg-slate-950 px-3 text-sm text-slate-100 focus:border-sky-500 focus:outline-none" /></label>
         <div className="flex p-1 rounded-xl bg-slate-800/40 border border-slate-800/60">
           <button
             onClick={() => setViewMode('carte')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              viewMode === 'carte' ? 'bg-slate-700/80 text-slate-50 shadow-lg shadow-slate-900/50 border border-slate-600/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              viewMode === 'carte' ? 'bg-slate-700/80 text-slate-50  border border-slate-600/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <MapPin className="h-4 w-4" />
@@ -502,7 +501,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
           <button
             onClick={() => setViewMode('liste')}
             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-              viewMode === 'liste' ? 'bg-slate-700/80 text-slate-50 shadow-lg shadow-slate-900/50 border border-slate-600/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+              viewMode === 'liste' ? 'bg-slate-700/80 text-slate-50  border border-slate-600/50' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
             }`}
           >
             <Users className="h-4 w-4" />
@@ -820,7 +819,7 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                   ))}
 
                   {/* Aéroports */}
-                  {aeroports.map((aeroport) => {
+                  {aeroportsTries.map((aeroport) => {
                     const pos = positions[aeroport.code];
                     if (!pos) return null;
                     const ratio = getPassagerRatio(aeroport);
@@ -1084,8 +1083,8 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                   <div className="h-2 bg-slate-700/60 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${
-                        getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' :
-                        getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-gradient-to-r from-amber-600 to-amber-400' : 'bg-gradient-to-r from-red-600 to-red-400'
+                        getPassagerRatio(selectedAeroport) >= 0.7 ? 'bg-emerald-500' :
+                        getPassagerRatio(selectedAeroport) >= 0.4 ? 'bg-amber-500' : 'bg-red-500'
                       }`}
                       style={{ width: `${getPassagerRatio(selectedAeroport) * 100}%` }}
                     />
@@ -1133,25 +1132,27 @@ export default function MarchePassagersClient({ aeroports }: Props) {
       ) : (
         <div className="card backdrop-blur-sm bg-slate-900/60 border-slate-800/50">
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[660px] text-sm">
+              <caption className="sr-only">Disponibilité des passagers au départ par aéroport</caption>
               <thead>
                 <tr className="border-b border-slate-700/60 text-left">
                   <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Aéroport</th>
                   <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Type</th>
                   <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">VOR</th>
                   <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Passagers</th>
-                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Remplissage</th>
+                  <th className="pb-3 pr-4 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Stock restant</th>
                   <th className="pb-3 text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Bonus</th>
                 </tr>
               </thead>
               <tbody>
-                {aeroportsTries.map((aeroport, i) => {
+                {aeroportsTries.map((aeroport) => {
                   const ratio = getPassagerRatio(aeroport);
                   return (
                     <tr
                       key={aeroport.code}
-                      className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 cursor-pointer transition-colors"
-                      style={{ animationDelay: `${i * 25}ms` }}
+                      className="border-b border-slate-800/40 last:border-0 hover:bg-slate-800/40 cursor-pointer transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
+                      tabIndex={0}
+                      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedAeroport(aeroport); setViewMode('carte'); } }}
                       onClick={() => { setSelectedAeroport(aeroport); setViewMode('carte'); }}
                     >
                       <td className="py-3 pr-4">
@@ -1188,14 +1189,15 @@ export default function MarchePassagersClient({ aeroports }: Props) {
                       </td>
                       <td className="py-3">
                         <div className="flex items-center gap-1">
-                          {aeroport.tourisme && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/15">🏝️ +25%</span>}
-                          {aeroport.taille === 'international' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-300 border border-purple-500/15">Hub</span>}
+                          {aeroport.tourisme && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 border border-amber-500/15">Touristique</span>}
+                          {aeroport.taille === 'international' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-slate-800 text-slate-300 border border-slate-700">International</span>}
                           {aeroport.taille === 'military' && <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-red-500/10 text-red-300 border border-red-500/15">Mil.</span>}
                         </div>
                       </td>
                     </tr>
                   );
                 })}
+                {aeroportsTries.length === 0 && <tr><td colSpan={6} className="py-10 text-center text-sm text-slate-400">{aeroports.length ? 'Aucun aéroport ne correspond à la recherche.' : 'Aucune disponibilité passagers n’a été transmise.'}</td></tr>}
               </tbody>
             </table>
           </div>
@@ -1206,16 +1208,15 @@ export default function MarchePassagersClient({ aeroports }: Props) {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label: 'Internationaux', value: aeroports.filter(a => a.taille === 'international').length, color: 'purple', icon: '✈️' },
-          { label: 'Passagers dispo.', value: aeroports.reduce((sum, a) => sum + a.passagers_disponibles, 0).toLocaleString('fr-FR'), color: 'emerald', icon: '👥' },
+          { label: 'Passagers connus', value: aeroports.reduce((sum, a) => sum + a.passagers_disponibles, 0).toLocaleString('fr-FR'), color: 'emerald', icon: '👥' },
           { label: 'Touristiques', value: aeroports.filter(a => a.tourisme).length, color: 'amber', icon: '🏝️' },
           { label: 'Avec VOR/DME', value: aeroports.filter(a => a.vor).length, color: 'cyan', icon: '📡' },
         ].map(stat => (
-          <div key={stat.label} className={`rounded-xl border border-${stat.color}-500/25 bg-${stat.color}-500/5 p-4 transition-all hover:border-${stat.color}-500/40`}>
+          <div key={stat.label} className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-4">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-sm">{stat.icon}</span>
-              <p className={`text-xs text-${stat.color}-300 font-medium uppercase tracking-wide`}>{stat.label}</p>
+              <p className="text-xs font-medium text-slate-400">{stat.label}</p>
             </div>
-            <p className={`text-2xl font-bold text-${stat.color}-400`}>{stat.value}</p>
+            <p className="text-2xl font-semibold tabular-nums text-slate-100">{stat.value}</p>
           </div>
         ))}
       </div>

@@ -50,7 +50,7 @@ export default function TranspondeurInterface({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [currentTime, setCurrentTime] = useState(new Date());
+  const [currentTime, setCurrentTime] = useState<Date | null>(null);
 
   // Si hasModeSAvion change (ex. refresh), s'assurer qu'on n'est pas en Mode S sans droit
   useEffect(() => {
@@ -59,6 +59,7 @@ export default function TranspondeurInterface({
 
   // Mise à jour de l'heure chaque seconde
   useEffect(() => {
+    setCurrentTime(new Date());
     const interval = setInterval(() => {
       setCurrentTime(new Date());
     }, 1000);
@@ -116,31 +117,22 @@ export default function TranspondeurInterface({
   const isEmergency = !!emergencyInfo;
 
   // Format de l'heure UTC
-  const formatTime = (date: Date) => {
-    return date.toISOString().slice(11, 19);
+  const formatTime = (date: Date | null) => {
+    return date ? date.toISOString().slice(11, 19) : '--:--:--';
   };
 
   return (
-    <div className={`relative overflow-hidden rounded-2xl border-2 ${isEmergency ? 'border-red-500 animate-pulse' : 'border-emerald-500/50'} bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 sm:p-6 shadow-2xl`}>
-      {/* Fond radar animé */}
-      <div className="absolute inset-0 opacity-10">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[min(600px,90vw)] aspect-square">
-          <div className="absolute inset-0 rounded-full border border-emerald-500/30 animate-ping" style={{ animationDuration: '3s' }} />
-          <div className="absolute inset-[20%] rounded-full border border-emerald-500/20" />
-          <div className="absolute inset-[40%] rounded-full border border-emerald-500/10" />
-        </div>
-      </div>
-
+    <section aria-labelledby="transponder-heading" className={`rounded-xl border ${isEmergency ? 'border-red-500' : 'border-slate-700/70'} bg-slate-900/80 p-4 sm:p-5`}>
       <div className="relative space-y-6">
         {/* En-tête avec heure */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-xl bg-emerald-500/20">
               <Radio className="h-6 w-6 text-emerald-400" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-white">Vol en cours</h2>
-              <p className="text-emerald-400/80 text-sm">Transpondeur actif</p>
+              <h2 id="transponder-heading" className="text-lg font-semibold text-slate-100">Transpondeur et suivi ATC</h2>
+              <p className="mt-1 text-sm text-slate-400">Vérifiez le code assigné et le mode avant transmission.</p>
             </div>
           </div>
           <div className="text-right">
@@ -331,7 +323,7 @@ export default function TranspondeurInterface({
 
         {/* Erreur */}
         {error && (
-          <div className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
+          <div role="alert" className="bg-red-500/20 border border-red-500/50 rounded-xl p-3 text-red-400 text-sm">
             {error}
           </div>
         )}
@@ -382,6 +374,6 @@ export default function TranspondeurInterface({
           </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

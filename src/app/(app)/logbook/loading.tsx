@@ -2,8 +2,8 @@ import { SkeletonTable } from '@/components/Skeleton';
 
 export default function LogbookLoading() {
   return (
-    <div className="space-y-6">
-      <div className="h-36 animate-pulse bg-gradient-to-br from-sky-600/20 via-sky-700/15 to-indigo-800/20 rounded-2xl" />
+    <div className="space-y-6" role="status" aria-label="Chargement du carnet de vol">
+      <div className="h-36 animate-pulse rounded-xl border border-slate-700 bg-slate-900" />
       <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
           <div key={i} className="h-36 rounded-2xl animate-pulse bg-slate-800/40" />

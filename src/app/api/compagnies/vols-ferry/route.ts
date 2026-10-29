@@ -245,7 +245,7 @@ export async function POST(request: Request) {
       .single();
     
     // Taxe forfaitaire pour vol ferry (pas de revenu, donc calcul sur le coût de base)
-    const tauxTaxe = taxesData?.taxe_pourcent || 2;
+    const tauxTaxe = taxesData?.taxe_pourcent ?? 2;
     const taxesAeroportuaires = Math.round(coutBase * tauxTaxe / 100);
     const coutTotal = coutBase + taxesAeroportuaires;
 

@@ -143,7 +143,7 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
   }
 
   return (
-    <form onSubmit={e => { e.preventDefault(); submit(false); }} className="space-y-6">
+    <form onSubmit={e => { e.preventDefault(); submit(false); }} className="space-y-6" aria-label="Activer le prochain segment de mission">
       {error && (
         <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-200">
           <AlertCircle className="h-5 w-5 mt-0.5 flex-shrink-0" />
@@ -203,12 +203,12 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
             Heure de départ (UTC) <span className="text-slate-500 font-normal">(optionnel)</span>
           </label>
           <div className="relative max-w-[180px]">
-            <input
+            <input aria-label="Heure de départ (UTC) (optionnel)"
               type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
               value={heure_depart}
               onChange={e => setHeureDepart(e.target.value)}
               placeholder="14:30"
-              className="w-full px-3 py-2 pr-10 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono tabular-nums"
+              className="w-full px-3 py-2 pr-10 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-mono tabular-nums"
             />
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-mono uppercase tracking-widest text-slate-400">UTC</span>
           </div>
@@ -220,9 +220,9 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
         {segment.type_vol === 'VFR' && (
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-1">Intentions de vol</label>
-            <textarea value={intentions_vol} onChange={e => setIntentionsVol(e.target.value)}
+            <textarea aria-label="Intentions de vol" value={intentions_vol} onChange={e => setIntentionsVol(e.target.value)}
               rows={3} placeholder="Ex: Transit direct, altitude 3500 ft..."
-              className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+              className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-sky-500" />
           </div>
         )}
 
@@ -232,7 +232,7 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">SID de départ ({segment.aeroport_depart})</label>
                 {sidList.length > 0 && !sidCustomMode ? (
-                  <select
+                  <select aria-label="SID de départ ( )"
                     value={sidList.some(s => s.nom === sid_depart) ? sid_depart : ''}
                     onChange={e => {
                       const v = e.target.value;
@@ -241,21 +241,21 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
                       const proc = sidList.find(s => s.nom === v);
                       setSelectedSidRoute(proc?.route || null);
                     }}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
                     <option value="">Choisir SID...</option>
                     {sidList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
                     <option value="__custom__">Saisie libre...</option>
                   </select>
                 ) : (
-                  <input type="text" value={sid_depart} onChange={e => setSidDepart(e.target.value)}
+                  <input aria-label="SID de départ ( )" type="text" value={sid_depart} onChange={e => setSidDepart(e.target.value)}
                     placeholder="Ex: RADAR VECTORS"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-sky-500" />
                 )}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">STAR d&apos;arrivée ({segment.aeroport_arrivee})</label>
                 {starList.length > 0 && !starCustomMode ? (
-                  <select
+                  <select aria-label="STAR d'arrivée ( )"
                     value={starList.some(s => s.nom === star_arrivee) ? star_arrivee : ''}
                     onChange={e => {
                       const v = e.target.value;
@@ -264,37 +264,37 @@ export default function ReprendreSegmentForm({ segment, redirectTo = '/logbook/p
                       const proc = starList.find(s => s.nom === v);
                       setSelectedStarRoute(proc?.route || null);
                     }}
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-red-500 focus:border-red-500">
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 focus:ring-2 focus:ring-sky-500 focus:border-sky-500">
                     <option value="">Choisir STAR...</option>
                     {starList.map(s => <option key={s.id} value={s.nom}>{s.nom}</option>)}
                     <option value="__custom__">Saisie libre...</option>
                   </select>
                 ) : (
-                  <input type="text" value={star_arrivee} onChange={e => setStarArrivee(e.target.value)}
+                  <input aria-label="STAR d'arrivée ( )" type="text" value={star_arrivee} onChange={e => setStarArrivee(e.target.value)}
                     placeholder="Ex: RADAR VECTORS"
-                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500" />
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-sky-500" />
                 )}
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Route IFR</label>
-              <input type="text" value={route_ifr}
+              <input aria-label="Route IFR" type="text" value={route_ifr}
                 onChange={e => { setRouteIfr(e.target.value); setManualRoutePart(e.target.value); }}
                 placeholder="DCT VOR1 AWY VOR2..."
-                className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono text-sm" />
+                className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-mono text-sm" />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Niveau de croisière</label>
-              <input type="text" value={niveau_croisiere} onChange={e => setNiveauCroisiere(e.target.value)}
+              <input aria-label="Niveau de croisière" type="text" value={niveau_croisiere} onChange={e => setNiveauCroisiere(e.target.value)}
                 placeholder="Ex: 350 (= FL350)"
-                className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-red-500 focus:border-red-500 font-mono" />
+                className="w-full px-3 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-100 placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-sky-500 font-mono" />
             </div>
           </div>
         )}
       </div>
 
       <button type="submit" disabled={loading || !!success}
-        className="w-full flex items-center justify-center gap-3 px-6 py-3 bg-gradient-to-r from-red-600 to-rose-700 hover:from-red-700 hover:to-rose-800 disabled:opacity-50 text-white rounded-xl font-bold text-lg shadow-lg transition-all">
+        aria-busy={loading} className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-lg bg-sky-600 px-6 py-3 text-sm font-semibold text-white hover:bg-sky-500 disabled:opacity-50">
         {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Play className="h-5 w-5" />}
         Activer le segment et envoyer à l&apos;ATC
       </button>

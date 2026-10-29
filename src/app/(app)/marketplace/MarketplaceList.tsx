@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Search, Plane, Users, Weight, Filter, X, Package, Shield, CheckCircle2,
   Sparkles, Ban, Clock, ChevronDown, ChevronUp, Star } from 'lucide-react';
 import MarketplaceClient from './MarketplaceClient';
@@ -53,7 +53,7 @@ const CATEGORIES: Record<string, { label: string; color: string; emoji: string }
   commercial: { label: 'Commercial', color: 'bg-sky-500/20 text-sky-400', emoji: '✈️' },
   cargo: { label: 'Cargo', color: 'bg-amber-500/20 text-amber-400', emoji: '📦' },
   leger: { label: 'Léger', color: 'bg-emerald-500/20 text-emerald-400', emoji: '🛩️' },
-  helicoptere: { label: 'Hélicoptère', color: 'bg-purple-500/20 text-purple-400', emoji: '🚁' },
+  helicoptere: { label: 'Hélicoptère', color: 'bg-sky-500/20 text-sky-400', emoji: '🚁' },
   amphibie: { label: 'Amphibie', color: 'bg-cyan-500/20 text-cyan-400', emoji: '🌊' },
   militaire: { label: 'Militaire', color: 'bg-red-500/20 text-red-400', emoji: '⚔️' },
   ravitailleur: { label: 'Ravitailleur', color: 'bg-orange-500/20 text-orange-400', emoji: '⛽' },
@@ -89,7 +89,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
   const [prixMax, setPrixMax] = useState(Infinity);
 
   // Initialiser les sliders avec les bornes réelles (une seule fois)
-  useMemo(() => {
+  useEffect(() => {
     if (globalPrixMax > 0 && prixMax === Infinity) {
       setPrixMax(globalPrixMax);
       setPrixMin(globalPrixMin);
@@ -154,7 +154,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
       {/* ── En-tête ── */}
       <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
         <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
-          <Plane className="h-5 w-5 text-purple-400" />
+          <Plane className="h-5 w-5 text-sky-400" />
           Avions disponibles
           <span className="text-sm font-normal text-slate-500">
             ({avionsFiltres.length} / {avions.length})
@@ -185,7 +185,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
             onClick={() => setShowFilters(v => !v)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
               showFilters || hasActiveFilters
-                ? 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
                 : 'bg-slate-800/50 text-slate-400 border-slate-700/50 hover:text-slate-200'
             }`}
           >
@@ -222,7 +222,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                   <button
                     key={cat}
                     onClick={() => setSelectedCategorie(selectedCategorie === cat ? null : cat)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all hover:-translate-y-0.5 flex items-center gap-1.5 ${
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all  flex items-center gap-1.5 ${
                       selectedCategorie === cat
                         ? config.color + ' ring-1 ring-current scale-105'
                         : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
@@ -244,14 +244,14 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
               <div className="space-y-2">
                 <div className="flex justify-between text-xs text-slate-400 tabular-nums">
                   <span className="text-emerald-300 font-semibold">{prixMin.toLocaleString('fr-FR')} F$</span>
-                  <span className="text-purple-300 font-semibold">{prixMax.toLocaleString('fr-FR')} F$</span>
+                  <span className="text-sky-300 font-semibold">{prixMax.toLocaleString('fr-FR')} F$</span>
                 </div>
                 <div className="relative h-5 flex items-center">
                   {/* Track */}
                   <div className="absolute w-full h-1.5 rounded-full bg-slate-700/60" />
                   {/* Active range */}
                   <div
-                    className="absolute h-1.5 rounded-full bg-gradient-to-r from-emerald-400 to-purple-400"
+                    className="absolute h-1.5 rounded-full bg-sky-500"
                     style={{
                       left: `${prixPercent(prixMin, globalPrixMin, globalPrixMax)}%`,
                       right: `${100 - prixPercent(prixMax, globalPrixMin, globalPrixMax)}%`,
@@ -301,7 +301,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
               <select
                 value={sortBy}
                 onChange={(e) => setSortBy(e.target.value as SortKey)}
-                className="bg-slate-800/70 border border-slate-700/50 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+                className="bg-slate-800/70 border border-slate-700/50 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:ring-1 focus:ring-sky-500/50"
               >
                 {SORT_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
@@ -332,7 +332,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
               onClick={() => setSortBy(o.value)}
               className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${
                 sortBy === o.value
-                  ? 'bg-purple-500/20 text-purple-300 ring-1 ring-purple-500/40'
+                  ? 'bg-sky-500/20 text-sky-300 ring-1 ring-sky-500/40'
                   : 'bg-slate-800/50 text-slate-400 hover:text-slate-200'
               }`}
             >
@@ -356,7 +356,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
 
       {/* ── Grille de cartes ── */}
       {avionsFiltres.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 stagger-enter">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 ">
           {avionsFiltres.map((avion) => {
             const catConfig = CATEGORIES[avion.categorie || ''] || { label: avion.categorie, color: 'bg-slate-500/20 text-slate-400', emoji: '✈️' };
             const affordable = avion.prix <= maxSolde;
@@ -366,12 +366,12 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
             return (
               <div
                 key={avion.id}
-                className={`group relative bg-slate-800/50 rounded-xl border transition-all duration-200 hover:-translate-y-1 hover:shadow-lg overflow-hidden ${
+                className={`group relative bg-slate-800/50 rounded-xl border transition-all duration-200   overflow-hidden ${
                   enRupture
-                    ? 'border-rose-500/40 hover:border-rose-400/60 hover:shadow-rose-500/10 opacity-80 grayscale-[20%]'
+                    ? 'border-rose-500/40 hover:border-rose-400/60  opacity-80 grayscale-[20%]'
                     : affordable
-                      ? 'border-emerald-500/30 hover:border-emerald-400/60 hover:shadow-emerald-500/10'
-                      : 'border-slate-700/50 hover:border-purple-500/50 hover:shadow-purple-500/10'
+                      ? 'border-emerald-500/30 hover:border-emerald-400/60 '
+                      : 'border-slate-700/50 hover:border-sky-500/50 '
                 }`}
               >
                 {/* Bande colorée en haut */}
@@ -383,7 +383,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                   {/* Badges en haut à droite */}
                   <div className="absolute top-3 right-3 flex flex-col items-end gap-1">
                     {enRupture ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-200 ring-1 ring-rose-500/40 text-[10px] font-medium animate-pulse-soft">
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-200 ring-1 ring-rose-500/40 text-[10px] font-medium ">
                         <Ban className="h-3 w-3" /> Rupture
                       </span>
                     ) : affordable ? (
@@ -408,7 +408,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                       )}
                       {avion.categorie && (
                         <span className={`text-xs px-1.5 py-0.5 rounded flex items-center gap-1 ${catConfig.color}`}>
-                          {catConfig.emoji} {catConfig.label}
+                          {catConfig.label}
                         </span>
                       )}
                     </div>
@@ -441,7 +441,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                   {/* Rupture countdown */}
                   {enRupture && avion.rupture_fin_at && (
                     <div className="mb-3 rounded-lg bg-rose-500/10 border border-rose-500/30 p-2.5 flex items-start gap-2">
-                      <Clock className="h-4 w-4 text-rose-300 shrink-0 mt-0.5 animate-pulse-soft" />
+                      <Clock className="h-4 w-4 text-rose-300 shrink-0 mt-0.5 " />
                       <div className="min-w-0 text-xs">
                         <p className="text-rose-200 font-semibold">Indisponible</p>
                         <p className="text-rose-200/70">
@@ -451,7 +451,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                           </span>
                         </p>
                         <p className="text-rose-200/40 text-[10px] mt-0.5">
-                          ({new Date(avion.rupture_fin_at).toLocaleString('fr-FR')})
+                          ({new Date(avion.rupture_fin_at).toLocaleString('fr-FR', { timeZone: 'UTC' }) + ' UTC'})
                         </p>
                       </div>
                     </div>
@@ -462,7 +462,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
                     <div className="mb-3">
                       <div className="h-1.5 rounded-full bg-slate-900/60 overflow-hidden">
                         <div
-                          className="h-full bg-gradient-to-r from-amber-400 to-amber-200 transition-all duration-500"
+                          className="h-full bg-amber-400 transition-all duration-500"
                           style={{ width: `${Math.max(2, ratio * 100)}%` }}
                         />
                       </div>
@@ -510,7 +510,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
           })}
         </div>
       ) : (
-        <div className="text-center py-16 animate-fade-in">
+        <div className="text-center py-16 ">
           <div className="inline-flex h-20 w-20 items-center justify-center rounded-full bg-slate-800/60 ring-1 ring-slate-700/60 mb-4">
             <Plane className="h-10 w-10 text-slate-600" />
           </div>
@@ -520,7 +520,7 @@ export default function MarketplaceList({ avions, soldePerso, compagnies, armeeC
           </p>
           <button
             onClick={clearFilters}
-            className="mt-5 inline-flex items-center gap-1.5 text-sm text-purple-300 hover:text-purple-200 px-5 py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 transition-colors ring-1 ring-purple-500/30"
+            className="mt-5 inline-flex items-center gap-1.5 text-sm text-sky-300 hover:text-sky-200 px-5 py-2.5 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 transition-colors ring-1 ring-sky-500/30"
           >
             <X className="h-4 w-4" />
             Réinitialiser les filtres

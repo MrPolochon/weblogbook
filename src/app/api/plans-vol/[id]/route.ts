@@ -59,7 +59,7 @@ export async function PATCH(
     const admin = createAdminClient();
 
     const { data: plan, error: planError } = await admin.from('plans_vol')
-      .select('id, pilote_id, copilote_id, copilote_vol_sans_atc, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, deroutement_at, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
+      .select('id, pilote_id, copilote_id, copilote_vol_sans_atc, flight_submission_quote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, deroutement_at, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
       .eq('id', id)
       .single();
     if (planError) {
@@ -91,6 +91,7 @@ export async function PATCH(
           cargo_kg_genere: plan.cargo_kg_genere,
           compagnie_avion_id: plan.compagnie_avion_id,
           copilote_vol_sans_atc: plan.copilote_vol_sans_atc,
+          flight_submission_quote_id: plan.flight_submission_quote_id,
         });
         await notifyCrewAfterDispatch({
           id: plan.id,
@@ -106,6 +107,7 @@ export async function PATCH(
           cargo_kg_genere: plan.cargo_kg_genere,
           compagnie_avion_id: plan.compagnie_avion_id,
           copilote_vol_sans_atc: plan.copilote_vol_sans_atc,
+          flight_submission_quote_id: plan.flight_submission_quote_id,
         }, result);
         return NextResponse.json({
           ok: true,
@@ -397,6 +399,9 @@ export async function PATCH(
 
       const aeroportDepart = plan.aeroport_depart || '';
       const rembourserPaxEtCargo = async () => {
+        // Secure submissions restore stocks in the cancellation transaction itself.
+        // Legacy plans retain the historical restitution path below.
+        if (plan.flight_submission_quote_id) return;
         if (!plan.vol_commercial || !aeroportDepart) return;
         if (plan.nb_pax_genere && plan.nb_pax_genere > 0) {
           const { data: currentPax } = await admin.from('aeroport_passagers').select('passagers_disponibles, passagers_max').eq('code_oaci', aeroportDepart).single();
@@ -417,6 +422,7 @@ export async function PATCH(
         }
       };
       const remettreAvionAuSol = async () => {
+        if (plan.flight_submission_quote_id) return; // Same transaction as the new cancellation.
         if (plan.compagnie_avion_id) {
           await admin.from('compagnie_avions').update({ statut: 'ground', aeroport_actuel: plan.aeroport_depart || undefined }).eq('id', plan.compagnie_avion_id);
         }

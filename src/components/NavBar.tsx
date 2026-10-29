@@ -54,6 +54,8 @@ export default function NavBar({
 
   // Drawer mobile
   const [mobileOpen, setMobileOpen] = useState(false);
+  const mobileTriggerRef = useRef<HTMLButtonElement>(null);
+  const mobilePanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -84,15 +86,46 @@ export default function NavBar({
   }, []);
 
   // Ferme le drawer mobile au changement de route
-  useEffect(() => { setMobileOpen(false); }, [pathname]);
+  useEffect(() => { setMobileOpen(false); setMenuOpen(false); }, [pathname]);
 
   // Bloque le scroll du body quand le drawer mobile est ouvert
   useEffect(() => {
     if (mobileOpen) {
+      const previous = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
-      return () => { document.body.style.overflow = ''; };
+      return () => { document.body.style.overflow = previous; };
     }
   }, [mobileOpen]);
+
+  useEffect(() => {
+    if (!menuOpen && !mobileOpen) return;
+    const panel = mobileOpen ? mobilePanelRef.current : dropdownRef.current;
+    const first = panel?.querySelector<HTMLElement>('button, a[href]');
+    first?.focus();
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setMenuOpen(false); setMobileOpen(false);
+        (mobileOpen ? mobileTriggerRef.current : triggerRef.current)?.focus();
+      }
+      if (event.key !== 'Tab' || !mobileOpen || !panel) return;
+      const items = Array.from(panel.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), select:not([disabled]), input:not([disabled])'));
+      if (!items.length) return;
+      if (event.shiftKey && document.activeElement === items[0]) { event.preventDefault(); items[items.length - 1].focus(); }
+      else if (!event.shiftKey && document.activeElement === items[items.length - 1]) { event.preventDefault(); items[0].focus(); }
+    }
+    function onFocusIn(event: FocusEvent) {
+      if (menuOpen && event.target instanceof Node && !dropdownRef.current?.contains(event.target) && !triggerRef.current?.contains(event.target)) setMenuOpen(false);
+    }
+    function closeOnResize() {
+      if (window.matchMedia('(min-width: 1280px)').matches) setMobileOpen(false);
+      else setMenuOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocusIn);
+    window.addEventListener('resize', closeOnResize);
+    return () => { document.removeEventListener('keydown', onKeyDown); document.removeEventListener('focusin', onFocusIn); window.removeEventListener('resize', closeOnResize); };
+  }, [menuOpen, mobileOpen]);
 
   // Recalcule la position du dropdown Pilote
   useEffect(() => {
@@ -135,10 +168,12 @@ export default function NavBar({
     {
       label: 'Vol',
       items: [
-        { href: '/logbook', label: 'Mon logbook', icon: BookOpen, badge: 0 },
+        { href: '/pilote', label: 'Salle de préparation du vol', icon: LayoutDashboard, badge: 0 },
+        { href: '/logbook', label: 'Carnet de vol', icon: BookOpen, badge: 0 },
         { href: '/logbook/depot-plan-vol', label: 'Déposer un plan', icon: Plane, badge: 0 },
         { href: '/logbook/plans-vol', label: 'Mes plans de vol', icon: FileText, badge: 0 },
         { href: '/marche-passagers', label: 'Marché passagers', icon: Map, badge: 0 },
+        { href: '/marche-cargo', label: 'Marché cargo', icon: Package, badge: 0 },
       ],
     },
     {
@@ -164,7 +199,7 @@ export default function NavBar({
       label: 'Outils',
       items: [
         ...(isReparateur || isPdg ? [{ href: '/reparation', label: 'Réparation', icon: Wrench, badge: 0 }] : []),
-        { href: '/inventaire', label: 'Mon inventaire', icon: Plane, badge: 0 },
+        { href: '/inventaire', label: 'Mes avions', icon: Plane, badge: 0 },
         { href: '/perf-ptfs', label: 'Calculateur perf', icon: Gauge, badge: 0 },
       ],
     },
@@ -188,8 +223,8 @@ export default function NavBar({
   const piloteMenuItems = piloteSections.flatMap(s => s.items);
 
   const isPiloteActive = [
-    '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
-    '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers',
+    '/pilote', '/logbook', '/militaire', '/felitz-bank', '/ma-compagnie', '/marketplace',
+    '/hangar-market', '/inventaire', '/messagerie', '/marche-passagers', '/marche-cargo',
     '/perf-ptfs', '/alliance', '/signalement', '/reparation',
     '/documents', '/notams', '/app/calendrier', '/classement', '/aeroschool', '/code-de-conduite',
     '/livret-progression', '/manuel-controleur',
@@ -207,19 +242,21 @@ export default function NavBar({
 
   return (
     <>
-      <SpaceNavHeader className="border-slate-700/50 bg-[#0b0e1a]"
-        style={{ boxShadow: '0 1px 0 rgba(255,255,255,0.04), 0 8px 32px rgba(0,0,0,0.7)' }}
-      >
+      <a href="#main-content" className="sr-only z-[100] rounded bg-slate-100 px-4 py-3 text-slate-950 focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Aller au contenu</a>
+      <SpaceNavHeader className="border-slate-700/70 bg-[#0d1420]">
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between gap-2 px-3 sm:px-4">
 
           {/* ══════════════════════════════════════════════════════════════ */}
           {/*  MOBILE : bouton hamburger                                      */}
           {/* ══════════════════════════════════════════════════════════════ */}
           <button
+            ref={mobileTriggerRef}
             type="button"
             onClick={() => setMobileOpen(true)}
             aria-label="Ouvrir le menu"
-            className="md:hidden relative flex items-center gap-2 rounded-lg border border-slate-700/50 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-sky-500/50 hover:bg-sky-500/10 transition-colors shrink-0"
+            aria-expanded={mobileOpen}
+            aria-controls="pilot-mobile-navigation"
+            className="xl:hidden relative flex items-center gap-2 rounded-lg border border-slate-700/50 px-3 py-2 text-sm font-semibold text-slate-200 hover:border-sky-500/50 hover:bg-sky-500/10 transition-colors shrink-0"
           >
             <Menu className="h-4 w-4" />
             <span>Menu</span>
@@ -233,14 +270,14 @@ export default function NavBar({
           {/* ══════════════════════════════════════════════════════════════ */}
           {/*  DESKTOP : Navigation principale (md+)                          */}
           {/* ══════════════════════════════════════════════════════════════ */}
-          <nav className="hidden md:flex items-center gap-1.5 min-w-0">
+          <nav aria-label="Navigation principale" className="hidden xl:flex items-center gap-1.5 min-w-0">
 
             {/* Espace Pilote dropdown trigger */}
             <div className="relative shrink-0">
               <button
                 ref={triggerRef}
                 type="button"
-                aria-haspopup="true"
+                aria-controls="pilot-navigation-menu"
                 aria-expanded={menuOpen}
                 onClick={toggleMenu}
                 className={cn(
@@ -285,12 +322,12 @@ export default function NavBar({
 
             <span className="mx-0.5 h-5 w-px bg-slate-700/70 shrink-0" />
 
-            <NavLink href="/instruction" active={pathname.startsWith('/instruction')}>
+            <NavLink href="/instruction" active={pathname.startsWith('/instruction')} title="Instruction">
               <Users className="h-3.5 w-3.5 shrink-0" />
               <span className="hidden lg:inline">Instruction</span>
             </NavLink>
 
-            <NavLink href="/annuaire" active={pathname.startsWith('/annuaire')}>
+            <NavLink href="/annuaire" active={pathname.startsWith('/annuaire')} title="Annuaire">
               <BookUser className="h-3.5 w-3.5 shrink-0" />
               <span className="hidden lg:inline">Annuaire</span>
             </NavLink>
@@ -328,7 +365,7 @@ export default function NavBar({
           {/* ══════════════════════════════════════════════════════════════ */}
           {/*  DESKTOP : Section droite (md+)                                 */}
           {/* ══════════════════════════════════════════════════════════════ */}
-          <div className="hidden md:flex items-center gap-1.5 shrink-0">
+          <div className="hidden xl:flex items-center gap-1.5 shrink-0">
             <span className="mr-0.5 h-5 w-px bg-slate-700/70" />
 
             {isAdmin && (
@@ -367,7 +404,7 @@ export default function NavBar({
           {/* ══════════════════════════════════════════════════════════════ */}
           {/*  MOBILE : Section droite (compte + déconnexion en icônes)       */}
           {/* ══════════════════════════════════════════════════════════════ */}
-          <div className="flex md:hidden items-center gap-1.5 shrink-0">
+          <div className="flex xl:hidden items-center gap-1.5 shrink-0">
             {utcTime && (
               <div className="flex items-center gap-1 rounded-lg border border-sky-500/20 bg-sky-500/5 px-2 py-1.5" title="UTC">
                 <span className="text-[11px] font-mono font-bold text-sky-300 tracking-wider">{utcTime}</span>
@@ -405,6 +442,7 @@ export default function NavBar({
       {mounted && menuOpen && createPortal(
         <div
           ref={dropdownRef}
+          id="pilot-navigation-menu"
           style={{ position: 'fixed', top: dropdownPos.top, left: dropdownPos.left, zIndex: 9999 }}
           className="w-[520px] max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-2xl border border-slate-600/60 bg-[#0d1120] shadow-2xl scrollbar-hide"
         >
@@ -451,21 +489,21 @@ export default function NavBar({
       {/*  Drawer MOBILE : menu plein écran                                   */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {mounted && mobileOpen && createPortal(
-        <div className="fixed inset-0 z-50 md:hidden" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-50 xl:hidden" role="dialog" aria-modal="true" aria-labelledby="pilot-mobile-title" id="pilot-mobile-navigation">
           {/* Overlay */}
           <div
             className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             onClick={() => setMobileOpen(false)}
           />
           {/* Panel */}
-          <div className="absolute inset-y-0 left-0 w-[85vw] max-w-sm bg-[#0b0e1a] border-r border-slate-700/50 shadow-2xl flex flex-col">
+          <div ref={mobilePanelRef} className="absolute inset-y-0 left-0 w-[85vw] max-w-sm bg-[#0b0e1a] border-r border-slate-700/50 shadow-2xl flex flex-col">
             {/* Header du drawer */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
-              <span className="text-sm font-semibold text-slate-200">Navigation</span>
+              <span id="pilot-mobile-title" className="text-sm font-semibold text-slate-200">Navigation pilote</span>
               <button
                 type="button"
-                onClick={() => setMobileOpen(false)}
-                aria-label="Fermer"
+                onClick={() => { setMobileOpen(false); mobileTriggerRef.current?.focus(); }}
+                aria-label="Fermer la navigation"
                 className="flex items-center justify-center h-9 w-9 rounded-lg border border-slate-700/50 text-slate-400 hover:border-slate-500/50 hover:text-slate-200"
               >
                 <X className="h-4 w-4" />
@@ -675,6 +713,8 @@ function NavLink({
   return (
     <Link
       href={href}
+      aria-current={active ? 'page' : undefined}
+      aria-label={title}
       title={title}
       className={cn(
         SPACE_NAV_BUTTON,

@@ -55,7 +55,7 @@ export async function calculerCoutTransfertReparation(
     .select('taxe_pourcent')
     .eq('code_oaci', aeroportArrivee)
     .single();
-  const tauxTaxe = taxesData?.taxe_pourcent || 2;
+  const tauxTaxe = taxesData?.taxe_pourcent ?? 2;
   const taxes = Math.round(COUT_VOL_FERRY * tauxTaxe / 100);
   return { coutBase: COUT_VOL_FERRY, taxes, total: COUT_VOL_FERRY + taxes, tauxTaxe };
 }

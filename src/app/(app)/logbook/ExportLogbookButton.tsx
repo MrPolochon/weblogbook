@@ -13,7 +13,7 @@ type Props = {
 };
 
 const STATUTS: Array<{ value: Statut; label: string; color: string }> = [
-  { value: 'valide', label: 'Vols validés', color: 'text-emerald-300' },
+  { value: 'valide', label: 'Vols validés', color: 'text-sky-300' },
   { value: 'tous', label: 'Tous les statuts', color: 'text-slate-200' },
   { value: 'en_attente', label: 'En attente', color: 'text-amber-300' },
   { value: 'refuse', label: 'Refusés', color: 'text-red-300' },
@@ -96,7 +96,7 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
       setOpen(false);
     }
     function handleEscape(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') { setOpen(false); buttonRef.current?.focus(); }
     }
     document.addEventListener('mousedown', handleClickOutside);
     document.addEventListener('keydown', handleEscape);
@@ -107,6 +107,11 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
   }, [open]);
 
   async function handleExport() {
+    if (downloading) return;
+    if (dateDebut && dateFin && dateDebut > dateFin) {
+      toast.error('La date de fin doit être postérieure ou égale à la date de début.');
+      return;
+    }
     setDownloading(true);
     try {
       const params = new URLSearchParams();
@@ -165,9 +170,10 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
   const panel = open && mounted && (
     <div
       ref={panelRef}
+      id="logbook-export-options"
       role="dialog"
       aria-label="Options d'export du logbook"
-      className="fixed z-[60] max-h-[min(70vh,calc(100dvh-2rem))] flex flex-col rounded-2xl border border-slate-700/60 bg-slate-900/98 backdrop-blur-xl shadow-2xl shadow-black/50 animate-fade-in overflow-hidden ring-1 ring-white/5"
+      className="fixed z-[60] flex max-h-[min(75vh,calc(100dvh-2rem))] flex-col overflow-hidden rounded-xl border border-slate-600 bg-slate-900 shadow-xl"
       style={{
         top: panelPos.top,
         left: panelPos.left,
@@ -175,14 +181,14 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
         transform: `translateY(${panelPos.translateY})`,
       }}
     >
-      <div className="px-4 py-3 border-b border-slate-700/60 bg-gradient-to-r from-emerald-500/10 to-sky-500/5 flex items-center justify-between shrink-0">
+      <div className="px-4 py-3 border-b border-slate-700/60 bg-slate-950/40 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="p-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 shrink-0">
-            <FileDown className="h-4 w-4 text-emerald-300" />
+          <div className="p-1.5 rounded-lg bg-slate-800 border border-slate-600 shrink-0">
+            <FileDown className="h-4 w-4 text-sky-300" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-slate-100 truncate">Export PDF du logbook</p>
-            <p className="text-[11px] text-slate-400">Personnalisez les filtres avant de générer.</p>
+            <p className="text-[11px] text-slate-400">Archive du carnet · dates en UTC.</p>
           </div>
         </div>
         <button
@@ -206,9 +212,10 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
                 key={s.value}
                 type="button"
                 onClick={() => setStatut(s.value)}
+                aria-pressed={statut === s.value}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all border ${
                   statut === s.value
-                    ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200 shadow-inner'
+                    ? 'border-sky-600 bg-sky-950/30 text-sky-200'
                     : 'bg-slate-800/40 border-slate-700/40 text-slate-300 hover:border-slate-500/60 hover:bg-slate-800/70'
                 }`}
               >
@@ -224,9 +231,10 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
               Type de vol
             </label>
             <select
+              aria-label="Type de vol à exporter"
               value={typeVol}
               onChange={(e) => setTypeVol(e.target.value)}
-              className="input w-full py-1.5 text-sm"
+              className="input min-h-11 w-full min-w-0 text-sm"
             >
               <option value="tous">Tous les types</option>
               {typesVolDisponibles.map((t) => (
@@ -244,6 +252,7 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
             </label>
             <input
               type="date"
+              aria-label="Début de la période UTC"
               value={dateDebut}
               onChange={(e) => setDateDebut(e.target.value)}
               className="input w-full py-1.5 text-sm"
@@ -256,6 +265,7 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
             </label>
             <input
               type="date"
+              aria-label="Fin de la période UTC"
               value={dateFin}
               onChange={(e) => setDateFin(e.target.value)}
               min={dateDebut || undefined}
@@ -278,6 +288,7 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
         </label>
       </div>
 
+      {dateDebut && dateFin && dateDebut > dateFin && <p role="alert" className="px-4 pb-3 text-xs text-red-300">La date de fin précède la date de début.</p>}
       <div className="px-4 py-3 border-t border-slate-700/60 bg-slate-950/50 flex items-center justify-between gap-2 shrink-0">
         <button
           type="button"
@@ -290,8 +301,8 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
         <button
           type="button"
           onClick={handleExport}
-          disabled={downloading}
-          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-semibold shadow-md shadow-emerald-900/40 transition-all disabled:opacity-50 disabled:hover:scale-100 hover:scale-[1.02] active:scale-[0.98]"
+          disabled={downloading || Boolean(dateDebut && dateFin && dateDebut > dateFin)}
+          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-sky-500 disabled:opacity-50"
         >
           {downloading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           {downloading ? 'Génération…' : 'Télécharger'}
@@ -308,12 +319,13 @@ export default function ExportLogbookButton({ typesVolDisponibles = [], classNam
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-br from-emerald-500/90 to-emerald-600/90 hover:from-emerald-400 hover:to-emerald-500 text-white text-sm font-medium transition-all shadow-lg shadow-emerald-900/40 border border-emerald-400/30 hover:scale-[1.02] active:scale-[0.98]"
+        aria-controls={open ? 'logbook-export-options' : undefined}
+        className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-600 bg-slate-900 px-4 text-sm font-medium text-slate-200 transition-colors hover:bg-slate-800"
       >
         <FileDown className="h-4 w-4" />
         Exporter en PDF
         {hasActiveFilters && (
-          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-300 shadow-[0_0_8px_rgba(252,211,77,0.8)]"></span>
+          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-amber-300"></span>
         )}
       </button>
 

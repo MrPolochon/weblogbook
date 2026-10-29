@@ -43,17 +43,20 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { code_oaci, taxe_pourcent, taxe_vfr_pourcent } = body;
 
-    if (!code_oaci) {
-      return NextResponse.json({ error: 'code_oaci requis' }, { status: 400 });
+    if (typeof code_oaci !== 'string' || !/^[A-Z0-9]{4}$/.test(code_oaci.trim().toUpperCase())) {
+      return NextResponse.json({ error: 'Code OACI à quatre caractères requis.' }, { status: 400 });
     }
+    const ifr = taxe_pourcent ?? 2;
+    const vfr = taxe_vfr_pourcent ?? 5;
+    if ([ifr, vfr].some(rate => typeof rate !== 'number' || !Number.isFinite(rate) || rate < 0 || rate > 100)) return NextResponse.json({ error: 'Les taxes doivent être des nombres compris entre 0 et 100 %.' }, { status: 400 });
 
     const admin = createAdminClient();
 
     // Upsert
     const { data, error } = await admin.from('taxes_aeroport').upsert({
-      code_oaci,
-      taxe_pourcent: taxe_pourcent ?? 2.00,
-      taxe_vfr_pourcent: taxe_vfr_pourcent ?? 5.00
+      code_oaci: code_oaci.trim().toUpperCase(),
+      taxe_pourcent: ifr,
+      taxe_vfr_pourcent: vfr
     }, { onConflict: 'code_oaci' }).select().single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });

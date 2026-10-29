@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookOpen, Plane, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
+import RecordPageHeader from '@/components/logbook/RecordPageHeader';
 import VolForm from './VolForm';
 
 type TypeAvion = { id: string; nom: string; constructeur: string };
@@ -16,7 +17,7 @@ type PlanClos = {
   aeroport_depart: string;
   aeroport_arrivee: string;
   type_vol: string;
-  numero_vol: string;
+  numero_vol: string | null;
   accepted_at: string;
   cloture_at: string;
 };
@@ -50,31 +51,35 @@ export default function NouveauVolClient({
   compagnies,
   instructeurs,
   autresProfiles,
+  loadWarning,
 }: {
   closedPlans: PlanClos[];
   typesAvion: TypeAvion[];
   compagnies: Compagnie[];
   instructeurs: Instructeur[];
   autresProfiles: Profil[];
+  loadWarning?: string;
 }) {
   const searchParams = useSearchParams();
   const planIdFromUrl = searchParams.get('plan');
 
+  const [ignoredPlanId, setIgnoredPlanId] = useState<string | null>(null);
   const [planId, setPlanId] = useState<string | null>(null);
   const [planPreFill, setPlanPreFill] = useState<PlanPreFill | null>(null);
 
   // Au chargement : si ?plan=id et le plan existe dans closedPlans, pré-remplir
   useEffect(() => {
-    if (planIdFromUrl && closedPlans.length > 0 && !planId) {
+    if (planIdFromUrl && planIdFromUrl !== ignoredPlanId && closedPlans.length > 0 && !planId) {
       const p = closedPlans.find((x) => x.id === planIdFromUrl);
       if (p) {
         setPlanId(p.id);
         setPlanPreFill(toPlanPreFill(p));
       }
     }
-  }, [planIdFromUrl, closedPlans, planId]);
+  }, [planIdFromUrl, closedPlans, planId, ignoredPlanId]);
 
   function handleClearPlan() {
+    setIgnoredPlanId(planIdFromUrl);
     setPlanId(null);
     setPlanPreFill(null);
   }
@@ -86,55 +91,9 @@ export default function NouveauVolClient({
 
   return (
     <div className="space-y-6">
-      {/* ── Hero header — même style que le logbook ── */}
-      <div className="relative overflow-hidden rounded-2xl shadow-xl animate-reveal-blur">
-        <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-emerald-700 via-emerald-800 to-indigo-900">
-          <div className="absolute inset-0 bg-cockpit-grid opacity-30" />
-          <div className="absolute -top-10 -right-10 h-48 w-48 rounded-full bg-emerald-400/10 blur-3xl" />
-        </div>
-        <div className="relative z-10 flex flex-wrap items-start justify-between gap-4 p-6">
-          <div className="flex items-start gap-4">
-            <Link href="/logbook"
-              className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white hover:bg-white/20 transition-colors shrink-0"
-              aria-label="Retour au logbook"
-            >
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-            <div>
-              <div className="flex items-center gap-3 mb-1">
-                <div className="relative">
-                  <div className="absolute inset-0 rounded-xl bg-emerald-300/30 blur-md animate-halo-pulse" aria-hidden />
-                  <div className="relative p-2.5 rounded-xl bg-white/10 backdrop-blur border border-white/20">
-                    <BookOpen className="h-5 w-5 text-white" />
-                  </div>
-                </div>
-                <h1 className="text-2xl font-bold text-white tracking-tight">Enregistrer un vol</h1>
-              </div>
-              <p className="text-emerald-100/80 text-sm">Saisissez les données du vol pour l&apos;ajouter à votre carnet.</p>
-              {planPreFill && (
-                <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-emerald-400/20 border border-emerald-400/30 px-3 py-1 text-xs text-emerald-200">
-                  <CheckCircle2 className="h-3.5 w-3.5" />
-                  Formulaire pré-rempli depuis un plan de vol clôturé
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="hidden sm:flex items-center gap-2">
-            {planPreFill ? (
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/30">
-                <ClipboardList className="h-4 w-4 text-emerald-300" />
-                <span className="text-sm text-emerald-200 font-medium">{planPreFill.callsign || 'Plan clôturé'}</span>
-                <span className="text-xs text-emerald-400/70">{planPreFill.aeroport_depart} → {planPreFill.aeroport_arrivee}</span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/10 border border-white/15">
-                <Plane className="h-4 w-4 text-white/70" />
-                <span className="text-sm text-white/70">Vol manuel</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <RecordPageHeader title="Enregistrer un vol effectué" description="Reportez les informations du vol dans votre carnet. Un plan clôturé peut servir de source pour les horaires et la route." actions={<Link href="/logbook/depot-plan-vol" className="inline-flex min-h-11 items-center rounded-lg border border-slate-600 px-4 text-sm text-slate-200 hover:bg-slate-800">Préparer un prochain vol</Link>}/>
+      {loadWarning && <p role="alert" className="rounded-lg border border-amber-700/60 bg-amber-950/20 p-4 text-sm text-amber-200">{loadWarning}</p>}
+      {planPreFill && <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-800/60 bg-emerald-950/15 px-4 py-3 text-sm text-emerald-200"><CheckCircle2 aria-hidden className="h-4 w-4"/> Source : plan clôturé <strong className="font-mono">{planPreFill.callsign || 'sans indicatif'}</strong><span className="font-mono">{planPreFill.aeroport_depart} → {planPreFill.aeroport_arrivee}</span><span className="text-xs text-slate-400">Vérifiez les informations avant transmission.</span></div>}
 
       <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
         <div className="flex-1 min-w-0">
@@ -151,12 +110,12 @@ export default function NouveauVolClient({
 
         {closedPlans.length > 0 && (
           <div className="lg:w-80 shrink-0">
-            <div className="card sticky top-4">
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 lg:sticky lg:top-24">
               <h2 className="text-sm font-medium text-slate-300 mb-3">
-                Plans de vol à enregistrer ({closedPlans.length})
+                Plans clôturés à reporter ({closedPlans.length})
               </h2>
               <p className="text-xs text-slate-500 mb-3">
-                Cliquez sur un plan pour pré-remplir le formulaire.
+                Sélectionnez un plan qui n’a pas encore été ajouté au carnet. Un vol en attente de validation du staff est déjà enregistré et ne doit pas être transmis une seconde fois.
               </p>
               <ul className="space-y-2 max-h-[calc(100dvh-16rem)] overflow-y-auto">
                 {closedPlans.map((p) => (

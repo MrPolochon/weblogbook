@@ -120,7 +120,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="card space-y-4 max-w-xl">
+    <form onSubmit={handleSubmit} className="card space-y-5" aria-label="Corriger le plan de vol refusé">
       {plan.refusal_reason && (
         <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3">
           <p className="text-sm font-medium text-red-200">Raison du refus par l&apos;ATC</p>
@@ -130,7 +130,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Aéroport de départ *</label>
-          <select className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
+          <select aria-label="Aéroport de départ" className="input" value={aeroport_depart} onChange={(e) => setAeroportDepart(e.target.value)} required>
             <option value="">— Choisir —</option>
             {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
@@ -139,7 +139,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
         </div>
         <div>
           <label className="label">Aéroport d&apos;arrivée *</label>
-          <select className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
+          <select aria-label="Aéroport d'arrivée" className="input" value={aeroport_arrivee} onChange={(e) => setAeroportArrivee(e.target.value)} required>
             <option value="">— Choisir —</option>
             {AEROPORTS_VOL_CIVIL.map((a) => (
               <option key={a.code} value={a.code}>{a.code} – {a.nom}</option>
@@ -150,7 +150,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Numéro de vol *</label>
-          <input type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} required />
+          <input aria-label="Numéro de vol" type="text" className="input" value={numero_vol} onChange={(e) => setNumeroVol(e.target.value)} required />
         </div>
         <div>
           <label className="label">Porte de départ</label>
@@ -164,12 +164,12 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label className="label">Temps de vol prévu (minutes) *</label>
-          <input type="number" className="input w-32" value={temps_prev_min} onChange={(e) => setTempsPrevMin(e.target.value)} min={1} required />
+          <input aria-label="Temps de vol prévu (minutes)" type="number" className="input w-32" value={temps_prev_min} onChange={(e) => setTempsPrevMin(e.target.value)} min={1} required />
         </div>
         <div>
           <label className="label">Heure de départ (UTC)</label>
           <div className="relative max-w-[160px]">
-            <input
+            <input aria-label="Heure de départ (UTC)"
               type="text" inputMode="text" pattern="([01][0-9]|2[0-3]):[0-5][0-9]" maxLength={5} title="Heure UTC au format HH:MM, par exemple 14:30"
               className="input w-full pr-10 font-mono tabular-nums"
               value={heure_depart}
@@ -199,7 +199,7 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
       {type_vol === 'VFR' && (
         <div>
           <label className="label">Intentions de vol *</label>
-          <textarea className="input min-h-[80px]" value={intentions_vol} onChange={(e) => setIntentionsVol(e.target.value)} required />
+          <textarea aria-label="Intentions de vol" className="input min-h-[80px]" value={intentions_vol} onChange={(e) => setIntentionsVol(e.target.value)} required />
         </div>
       )}
       {type_vol === 'IFR' && (
@@ -207,16 +207,16 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="label">SID de départ *</label>
-              <input type="text" className="input" value={sid_depart} onChange={(e) => setSidDepart(e.target.value)} required />
+              <input aria-label="SID de départ" type="text" className="input" value={sid_depart} onChange={(e) => setSidDepart(e.target.value)} required />
             </div>
             <div>
               <label className="label">STAR d&apos;arrivée *</label>
-              <input type="text" className="input" value={star_arrivee} onChange={(e) => setStarArrivee(e.target.value)} required />
+              <input aria-label="STAR d'arrivée" type="text" className="input" value={star_arrivee} onChange={(e) => setStarArrivee(e.target.value)} required />
             </div>
           </div>
           <div>
             <label className="label">Niveau de croisière (optionnel)</label>
-            <input
+            <input aria-label="Niveau de croisière (optionnel)"
               type="text"
               className="input w-32 font-mono"
               value={niveau_croisiere}
@@ -252,8 +252,8 @@ export default function ModifierPlanVolForm({ plan }: { plan: Plan }) {
           </div>
         </div>
       )}
-      {error && <p className="text-red-400 text-sm">{error}</p>}
-      <button type="submit" className="btn-primary" disabled={loading}>{loading ? 'Envoi…' : 'Modifier et renvoyer'}</button>
+      {error && <p role="alert" className="text-red-400 text-sm">{error}</p>}
+      <button type="submit" className="btn-primary" disabled={loading} aria-busy={loading}>{loading ? 'Envoi…' : 'Modifier et renvoyer'}</button>
     </form>
   );
 }
