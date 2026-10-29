@@ -3,7 +3,7 @@
 BEGIN;
 
 -- Source: supabase/logbook_registration_20261029.sql
--- SHA-256: 6a85f309f109e0ebfb751f15d3f69335582415c803a447fb25c07c4cd0fb0370
+-- SHA-256: 072a5d387d92c6450b4d70d3c80c905a927dee563291c62b35417f009477c920
 -- Enregistrement du carnet : une entrée suffit, quel que soit son statut staff.
 -- Ne supprime, ne fusionne et ne rattache automatiquement aucun historique.
 ALTER TABLE public.vols ADD COLUMN IF NOT EXISTS plan_vol_id uuid;
@@ -30,11 +30,11 @@ CREATE INDEX IF NOT EXISTS vols_registration_fingerprint_idx ON public.vols((md5
 
 -- A deleted/unlinked medical aircraft must not turn a reported mission into a
 -- civil flight. The reports module is optional in a minimal installation.
-CREATE OR REPLACE FUNCTION public.logbook_registration_is_dedicated(p_plan uuid,p_siavi_avion uuid,p_armee_mission uuid)
+CREATE OR REPLACE FUNCTION public.logbook_registration_is_dedicated(p_plan uuid,p_siavi_avion uuid,p_armee_mission text)
 RETURNS boolean LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path=public,pg_temp AS $$
 DECLARE reported boolean:=false;
 BEGIN
- IF p_siavi_avion IS NOT NULL OR p_armee_mission IS NOT NULL THEN RETURN true; END IF;
+ IF p_siavi_avion IS NOT NULL OR nullif(btrim(p_armee_mission),'') IS NOT NULL THEN RETURN true; END IF;
  IF to_regclass('public.siavi_rapports_medevac') IS NOT NULL THEN
   EXECUTE 'SELECT EXISTS(SELECT 1 FROM public.siavi_rapports_medevac WHERE plan_vol_id=$1)' INTO reported USING p_plan;
  END IF;
@@ -59,7 +59,7 @@ BEGIN
   SELECT * INTO source_plan FROM public.plans_vol WHERE id=NEW.plan_vol_id FOR UPDATE;
   IF NOT FOUND OR source_plan.pilote_id IS DISTINCT FROM NEW.pilote_id THEN RAISE EXCEPTION 'Le plan source ne correspond pas au pilote du carnet.' USING ERRCODE='P0001'; END IF;
   IF source_plan.statut IS DISTINCT FROM 'cloture' OR source_plan.accepted_at IS NULL OR source_plan.cloture_at IS NULL THEN RAISE EXCEPTION 'Le plan source doit être clôturé.' USING ERRCODE='P0001'; END IF;
-  IF logbook_registration_is_dedicated(source_plan.id,source_plan.siavi_avion_id,source_plan.armee_mission_id) THEN RAISE EXCEPTION 'Cette mission se traite dans son espace dédié.' USING ERRCODE='P0001'; END IF;
+  IF logbook_registration_is_dedicated(source_plan.id,source_plan.siavi_avion_id,source_plan.armee_mission_id::text) THEN RAISE EXCEPTION 'Cette mission se traite dans son espace dédié.' USING ERRCODE='P0001'; END IF;
   IF source_plan.logbook_processed_at IS NOT NULL THEN
    IF TG_OP='INSERT' THEN RAISE EXCEPTION 'Ce plan a déjà été enregistré ou écarté.' USING ERRCODE='23505'; END IF;
    IF OLD.plan_vol_id IS DISTINCT FROM NEW.plan_vol_id THEN RAISE EXCEPTION 'Ce plan a déjà été enregistré ou écarté.' USING ERRCODE='23505'; END IF;
@@ -113,7 +113,7 @@ BEGIN
   IF source_plan.pilote_id IS DISTINCT FROM candidate.pilote_id THEN RETURN jsonb_build_object('ok',false,'status',403,'code','SOURCE_NOT_OWNED','error','Le plan source ne correspond pas au pilote du carnet.'); END IF;
   IF actor.role IS DISTINCT FROM 'admin' AND p_actor IS DISTINCT FROM source_plan.pilote_id AND p_actor IS DISTINCT FROM source_plan.copilote_id THEN RETURN jsonb_build_object('ok',false,'status',403,'code','SOURCE_NOT_CREW','error','Vous ne faites pas partie de l’équipage de ce plan.'); END IF;
   IF source_plan.statut IS DISTINCT FROM 'cloture' OR source_plan.accepted_at IS NULL OR source_plan.cloture_at IS NULL THEN RETURN jsonb_build_object('ok',false,'status',409,'code','SOURCE_NOT_CLOSED','error','Le plan source doit être clôturé avant l’enregistrement.'); END IF;
-  IF logbook_registration_is_dedicated(source_plan.id,source_plan.siavi_avion_id,source_plan.armee_mission_id) THEN RETURN jsonb_build_object('ok',false,'status',400,'code','DEDICATED_MISSION','error','Cette mission se traite dans son espace dédié.'); END IF;
+  IF logbook_registration_is_dedicated(source_plan.id,source_plan.siavi_avion_id,source_plan.armee_mission_id::text) THEN RETURN jsonb_build_object('ok',false,'status',400,'code','DEDICATED_MISSION','error','Cette mission se traite dans son espace dédié.'); END IF;
   source_signature:=logbook_registration_fingerprint(source_plan.pilote_id,source_plan.aeroport_depart,source_plan.aeroport_arrivee,source_plan.type_vol,source_plan.numero_vol,source_plan.accepted_at);
  END IF;
  SELECT * INTO existing FROM public.vols v WHERE
@@ -151,7 +151,7 @@ BEGIN
  IF p_pilot IS NULL OR p_limit IS NULL OR p_limit<1 OR p_limit>200 THEN RAISE EXCEPTION 'Sélection des plans invalide.' USING ERRCODE='P0001'; END IF;
  RETURN QUERY WITH available AS (
   SELECT p.* FROM public.plans_vol p WHERE p.pilote_id=p_pilot AND p.statut='cloture' AND p.logbook_processed_at IS NULL
-   AND NOT logbook_registration_is_dedicated(p.id,p.siavi_avion_id,p.armee_mission_id) AND p.accepted_at IS NOT NULL AND p.cloture_at IS NOT NULL
+   AND NOT logbook_registration_is_dedicated(p.id,p.siavi_avion_id,p.armee_mission_id::text) AND p.accepted_at IS NOT NULL AND p.cloture_at IS NOT NULL
    AND NOT EXISTS(SELECT 1 FROM public.vols v WHERE v.plan_vol_id=p.id OR
     (md5(logbook_registration_fingerprint(v.pilote_id,v.aeroport_depart,v.aeroport_arrivee,v.type_vol,v.callsign,v.depart_utc))=md5(logbook_registration_fingerprint(p.pilote_id,p.aeroport_depart,p.aeroport_arrivee,p.type_vol,p.numero_vol,p.accepted_at)) AND
      logbook_registration_fingerprint(v.pilote_id,v.aeroport_depart,v.aeroport_arrivee,v.type_vol,v.callsign,v.depart_utc)=
@@ -160,7 +160,7 @@ BEGIN
  FROM available a ORDER BY a.cloture_at DESC,a.id LIMIT p_limit;
 END $$;
 
-REVOKE ALL ON FUNCTION public.logbook_registration_fingerprint(uuid,text,text,text,text,timestamptz),public.logbook_registration_is_dedicated(uuid,uuid,uuid),public.guard_logbook_registration(),public.mark_logbook_registration(),public.register_logbook_flight(uuid,jsonb,uuid),public.get_unrecorded_closed_plans(uuid,integer) FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON FUNCTION public.logbook_registration_fingerprint(uuid,text,text,text,text,timestamptz),public.logbook_registration_is_dedicated(uuid,uuid,text),public.guard_logbook_registration(),public.mark_logbook_registration(),public.register_logbook_flight(uuid,jsonb,uuid),public.get_unrecorded_closed_plans(uuid,integer) FROM PUBLIC,anon,authenticated;
 -- Fonction pure, sans lecture de données : nécessaire à la maintenance de l'index
 -- lors des écritures ordinaires autorisées par les politiques RLS existantes.
 GRANT EXECUTE ON FUNCTION public.logbook_registration_fingerprint(uuid,text,text,text,text,timestamptz) TO authenticated,service_role;

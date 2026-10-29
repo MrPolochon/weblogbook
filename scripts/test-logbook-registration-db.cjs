@@ -10,7 +10,7 @@ async function fixture(){
  await db.exec(`CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role;
  CREATE TABLE profiles(id uuid PRIMARY KEY,role text NOT NULL);
  INSERT INTO profiles VALUES('${pilot}','pilote'),('${other}','pilote'),('${admin}','admin'),('${copilot}','pilote'),('${listPilot}','pilote');
- CREATE TABLE plans_vol(id uuid PRIMARY KEY,pilote_id uuid NOT NULL REFERENCES profiles(id),copilote_id uuid,statut text NOT NULL,siavi_avion_id uuid,armee_mission_id uuid,aeroport_depart text,aeroport_arrivee text,type_vol text,numero_vol text,temps_prev_min integer,accepted_at timestamptz,cloture_at timestamptz);
+ CREATE TABLE plans_vol(id uuid PRIMARY KEY,pilote_id uuid NOT NULL REFERENCES profiles(id),copilote_id uuid,statut text NOT NULL,siavi_avion_id uuid,armee_mission_id text,aeroport_depart text,aeroport_arrivee text,type_vol text,numero_vol text,temps_prev_min integer,accepted_at timestamptz,cloture_at timestamptz);
  CREATE TABLE vols(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),pilote_id uuid NOT NULL REFERENCES profiles(id),copilote_id uuid,copilote_confirme_par_pilote boolean DEFAULT false,type_avion_id uuid NOT NULL,compagnie_id uuid,compagnie_libelle text NOT NULL,aeroport_depart text NOT NULL,aeroport_arrivee text NOT NULL,duree_minutes integer NOT NULL,depart_utc timestamptz NOT NULL,arrivee_utc timestamptz NOT NULL,type_vol text NOT NULL,instructeur_id uuid,instruction_type text,commandant_bord text NOT NULL,role_pilote text NOT NULL,callsign text,statut text NOT NULL DEFAULT 'en_attente',created_by_admin boolean NOT NULL DEFAULT false,created_by_user_id uuid,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),future_default text NOT NULL DEFAULT 'preserved');`);
  return db;
 }
@@ -38,6 +38,12 @@ test('logbook registration is atomic and idempotent before any staff validation'
   assert.equal(responses.filter(x=>!x.duplicate).length,1);assert.equal(responses[0].statut,'en_attente');
   const saved=(await db.query('SELECT * FROM vols WHERE id=$1',[responses[0].id])).rows[0];
   assert.equal(saved.plan_vol_id,p);assert(saved.created_at&&saved.updated_at);assert.equal(saved.future_default,'preserved');assert(await processed(db,p));
+  assert(!(await list(db)).some(x=>x.id===p));
+ });
+
+ await t.test('real military mission slugs are TEXT and stay excluded from the civil logbook',async()=>{
+  const r=row(3),p=await plan(db,3,r,{armee_mission_id:'mission-ravitaillement'});
+  assert.equal((await save(db,r,p)).code,'DEDICATED_MISSION');
   assert(!(await list(db)).some(x=>x.id===p));
  });
 

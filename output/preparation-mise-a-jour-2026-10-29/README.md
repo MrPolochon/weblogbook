@@ -1,6 +1,6 @@
 # Préparation de la mise à jour — 29 octobre 2026
 
-Les corrections ci-dessous sont présentes dans le code local. Aucun commit, push, déploiement ni changement de la base réelle n’a été effectué pour cette préparation. Ce document remplace le verdict technique des audits antérieurs pour les points corrigés ici ; ces audits restent des traces historiques.
+Les corrections ci-dessous constituent la version de livraison préparée. Ce document remplace le verdict technique des audits antérieurs pour les points corrigés ici ; ces audits restent des traces historiques. La validation complémentaire sur une copie du schéma réel est consignée dans `validation-copie.md`. L’installation et la publication suivent l’ordre décrit ci-dessous.
 
 ## Corrections préparées
 
@@ -18,7 +18,7 @@ Les corrections ci-dessous sont présentes dans le code local. Aucun commit, pus
 
 ## Vérifications locales
 
-- Suite applicative : **318 tests réussis**, aucun échec ou test ignoré.
+- Suite applicative : **319 tests réussis**, aucun échec ou test ignoré, après ajout du cas de mission texte trouvé sur la copie réelle.
 - TypeScript : réussi.
 - ESLint : **960 fichiers, aucune erreur, sept avertissements préexistants**.
 - Tests supplémentaires après la suite : les 13 vérifications de dépôt SQL repassent avec le verrou des anciennes fonctions de stock.

@@ -10,7 +10,7 @@ const files=[
   'supabase/fix_revente_avions_personnels.sql',
 ];
 const migrations=files.map(file=>{
-  const source=fs.readFileSync(path.join(root,file),'utf8');
+  const source=fs.readFileSync(path.join(root,file),'utf8').replace(/\r\n/g,'\n');
   if((source.match(/^BEGIN;\s*$/gm)||[]).length!==1||(source.match(/^COMMIT;\s*$/gm)||[]).length!==1)throw Error('Unexpected transaction framing: '+file);
   return {file,source,sha256:crypto.createHash('sha256').update(source).digest('hex')};
 });

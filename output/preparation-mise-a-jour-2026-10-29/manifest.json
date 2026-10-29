@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-10-29T22:48:09.971Z",
+  "generatedAt": "2026-10-29T23:27:37.402Z",
   "status": "prepared_locally_not_deployed",
   "productionEnabled": false,
   "novemberEconomyEnabled": false,
   "migrations": [
     {
       "file": "supabase/logbook_registration_20261029.sql",
-      "sha256": "6a85f309f109e0ebfb751f15d3f69335582415c803a447fb25c07c4cd0fb0370"
+      "sha256": "072a5d387d92c6450b4d70d3c80c905a927dee563291c62b35417f009477c920"
     },
     {
       "file": "supabase/logbook_staff_validation_20261029.sql",
@@ -25,7 +25,7 @@
       "sha256": "a468d20f56c06c2acb0b9ac7ab2a99fe54aba81248e3983361952c56927c2588"
     }
   ],
-  "bundleSha256": "42caa133169d11b123079d8c9611c926c80515ade0a85a7fb50888e933a14082",
+  "bundleSha256": "f3b4df6751b3abfae2fc86e0e95d0cd560dfe07f4b60996c46b019223d8d6149",
   "requiredChecks": [
     "application tests",
     "TypeScript",
