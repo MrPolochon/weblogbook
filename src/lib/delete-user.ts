@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { stopAtisIfController } from '@/lib/atis-bot-api';
+import { prepareItineraryAccountDeletion, releaseItineraryAccountDeletion } from '@/lib/company-itineraries/lifecycle';
 
 /**
  * Supprime tout le contenu d'un dossier utilisateur dans un bucket Storage.
@@ -62,6 +63,8 @@ export async function detachIncidentsSignalesPar(
 
 export async function deleteUserAccount(userId: string) {
   const admin = createAdminClient();
+  const itineraryDeletionToken = await prepareItineraryAccountDeletion(admin, userId);
+  try {
 
   await stopAtisIfController(userId).catch(() => {});
 
@@ -166,4 +169,7 @@ export async function deleteUserAccount(userId: string) {
 
   await admin.from('profiles').delete().eq('id', userId);
   await admin.auth.admin.deleteUser(userId);
+  } finally {
+    await releaseItineraryAccountDeletion(admin, userId, itineraryDeletionToken);
+  }
 }

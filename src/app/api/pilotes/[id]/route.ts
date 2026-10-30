@@ -4,6 +4,8 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { identifiantToEmail } from '@/lib/constants';
 import { detachIncidentsSignalesPar } from '@/lib/delete-user';
+import { prepareItineraryAccountDeletion, releaseItineraryAccountDeletion } from '@/lib/company-itineraries/lifecycle';
+import { FlightSubmissionError } from '@/lib/plans-vol/submission';
 
 export async function PATCH(
   request: Request,
@@ -156,6 +158,7 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  let itineraryDeletion: { admin: ReturnType<typeof createAdminClient>; userId: string; token: string } | null = null;
   try {
     const { id } = await params;
     const supabase = await createClient();
@@ -218,6 +221,8 @@ export async function DELETE(
       }
     }
 
+    const token = await prepareItineraryAccountDeletion(admin, id);
+    itineraryDeletion = { admin, userId: id, token };
     const { data: vols } = await admin.from('vols').select('id, type_avion_id, compagnie_libelle, duree_minutes, depart_utc, arrivee_utc, type_vol, commandant_bord, role_pilote').eq('pilote_id', id);
     const purgeAt = new Date();
     purgeAt.setDate(purgeAt.getDate() + 7);
@@ -401,6 +406,8 @@ export async function DELETE(
   } catch (e) {
     console.error('Pilot delete error:', e);
     const errorMessage = e instanceof Error ? e.message : 'Erreur serveur';
-    return NextResponse.json({ error: errorMessage }, { status: 500 });
+    return NextResponse.json({ error: errorMessage }, { status: e instanceof FlightSubmissionError ? e.status : 500 });
+  } finally {
+    if (itineraryDeletion) await releaseItineraryAccountDeletion(itineraryDeletion.admin, itineraryDeletion.userId, itineraryDeletion.token);
   }
 }

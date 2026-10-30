@@ -6,6 +6,8 @@ import { COUT_VOL_FERRY, calculerVolFerryAuto, calculerUsureFerry } from '@/lib/
 import { isCoPdg } from '@/lib/co-pdg-utils';
 import { resolveAeroportBaseRetour } from '@/lib/reparation-after-ferry';
 import { completeDueAutoFerryFlights } from '@/lib/vols-ferry-auto';
+import { assertAircraftOutsideItinerary } from '@/lib/company-itineraries/lifecycle';
+import { FlightSubmissionError } from '@/lib/plans-vol/submission';
 
 export async function GET(request: Request) {
   try {
@@ -104,6 +106,9 @@ export async function POST(request: Request) {
     if (!avion || avion.compagnie_id !== compagnie_id) {
       return NextResponse.json({ error: 'Avion invalide.' }, { status: 400 });
     }
+    // Early feedback before costs or writes; the INSERT trigger repeats this
+    // under the aircraft lock before the debit below can ever be requested.
+    await assertAircraftOutsideItinerary(admin, avion_id);
     if (avion.statut === 'in_flight') {
       return NextResponse.json({ error: 'L\'avion est déjà en vol.' }, { status: 400 });
     }
@@ -340,6 +345,6 @@ export async function POST(request: Request) {
     });
   } catch (e) {
     console.error('POST compagnies/vols-ferry:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return NextResponse.json({ error: e instanceof FlightSubmissionError ? e.message : 'Erreur serveur' }, { status: e instanceof FlightSubmissionError ? e.status : 500 });
   }
 }

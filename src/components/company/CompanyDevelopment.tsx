@@ -1,11 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Check, Clock3, FlaskConical, Leaf, LockKeyhole, RefreshCw, ShieldQuestion, Sparkles, Wifi, Globe2 } from 'lucide-react';
+import { Leaf, LockKeyhole, RefreshCw, ShieldQuestion, Sparkles, Wifi, Globe2 } from 'lucide-react';
 import { fetchJson } from '@/lib/fetch-json';
+import type { CompanyResearch } from '@/lib/company-research-tree';
+import CompanyResearchTree from './CompanyResearchTree';
+import CompanyItineraries from './CompanyItineraries';
 import styles from './CompanyDevelopment.module.css';
 
-type Research = { id: string; title: string; domain: string; description: string; panel: string | null; unlock_key: string | null; cost: number; delay_seconds: number; prerequisites: string[]; status: 'locked' | 'available' | 'running' | 'completed'; ready_at: string | null };
+type Research = CompanyResearch;
 type Card = { id: string; catalog_id: string; title: string; description: string; cost: number; delay_seconds: number; research_id: string | null; target_label?: string; expires_month: string };
 type Commitment = { id: string; title: string; cost: number; committed_at: string; active_at: string; status: 'installing' | 'active'; revenue_percent: number; signature: string; target_label?: string };
 type ServiceSettings = { wifi_enabled: boolean; wifi_price: number; seat_ratio: number; ife_level: number; service_flags?: { restauration?: boolean; bagages?: boolean; correspondance?: boolean } };
@@ -29,10 +32,9 @@ const utc = (value: string | null) => {
 function duration(seconds: number) {
   if (seconds <= 0) return 'Immédiat';
   if (seconds >= 86400 && seconds % 86400 === 0) return `${seconds / 86400} jour${seconds > 86400 ? 's' : ''}`;
-  if (seconds >= 3600 && seconds % 3600 === 0) return `${seconds / 3600} h`;
+  if (seconds >= 3600) return `${Math.floor(seconds / 3600)} h${Math.ceil(seconds % 3600 / 60) ? ` ${Math.ceil(seconds % 3600 / 60)} min` : ''}`;
   return `${Math.ceil(seconds / 60)} min`;
 }
-const statusLabels = { locked: 'Prérequis manquants', available: 'Disponible', running: 'En cours', completed: 'Terminée' };
 
 export default function CompanyDevelopment({ compagnieId, canManage, section, onBalanceChange }: { compagnieId: string; canManage: boolean; section: string; onBalanceChange: () => void }) {
   const [data, setData] = useState<Development | null>(null);
@@ -40,8 +42,6 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
   const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [domain, setDomain] = useState('');
-  const [query, setQuery] = useState('');
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [settings, setSettings] = useState<ServiceSettings>({ wifi_enabled: false, wifi_price: 0, seat_ratio: 1, ife_level: 0 });
   const settingsInitialized = useRef(false);
@@ -146,8 +146,6 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
   if (section !== 'direction' && !manages) return <p className={styles.state}>La gestion du développement est réservée à la direction de cette compagnie.</p>;
 
   const researchById = new Map(research.map(item => [item.id, item]));
-  const domains = [...new Set(research.map(item => item.domain))];
-  const filtered = research.filter(item => (!domain || item.domain === domain) && `${item.title} ${item.description}`.toLocaleLowerCase('fr').includes(query.toLocaleLowerCase('fr')));
   const dossierChoices = research.filter(item => item.status === 'completed' && item.panel);
 
   return <div id={section === 'direction' ? undefined : section} className={styles.development}>
@@ -164,19 +162,7 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
       </section>}
     </>}
 
-    {section === 'recherche' && <>
-      <div className={styles.filters}><label>Rechercher<input type="search" value={query} onChange={e => setQuery(e.target.value)} placeholder="Nom ou objectif d’une recherche" /></label><label>Domaine<select value={domain} onChange={e => setDomain(e.target.value)}><option value="">Tous les domaines</option>{domains.map(item => <option key={item} value={item}>{item}</option>)}</select></label></div>
-      {!filtered.length && <p className={styles.empty}>Aucune recherche ne correspond à ces critères.</p>}
-      <div className={styles.cardGrid}>{filtered.map(item => <article key={item.id} className={styles.card}>
-        <div className={styles.cardTop}><span className={styles.eyebrow}>{item.domain}</span><span className={styles.badge} data-status={item.status}>{item.status === 'completed' ? <Check aria-hidden className="h-3 w-3" /> : item.status === 'locked' ? <LockKeyhole aria-hidden className="h-3 w-3" /> : <Clock3 aria-hidden className="h-3 w-3" />}{statusLabels[item.status]}</span></div>
-        <h3>{item.title}</h3><p>{item.description}</p>
-        <dl className={styles.facts}><div><dt>Investissement</dt><dd>{money(item.cost)}</dd></div><div><dt>Déploiement</dt><dd>{duration(item.delay_seconds)}</dd></div></dl>
-        {!!item.prerequisites?.length && <p className={styles.hint}>Prérequis : {item.prerequisites.map(id => researchById.get(id)?.title ?? id).join(' · ')}</p>}
-        {item.status === 'running' && <p className={styles.hint}>Disponible le {utc(item.ready_at)}</p>}
-        {item.status === 'completed' && <p className={styles.successInline}>{item.panel ? 'Nouveau service disponible dans Services et contrats.' : 'Les possibilités de cette recherche sont débloquées.'}</p>}
-        {item.status === 'available' && <button type="button" disabled={busy} onClick={() => choose('research', item)} className={styles.primary}><FlaskConical aria-hidden className="h-4 w-4" />Financer la recherche</button>}
-      </article>)}</div>
-    </>}
+    {section === 'recherche' && <CompanyResearchTree research={research} busy={busy} onFinance={item=>choose('research',item)} onRefresh={()=>{void refresh().catch(e=>setError(e instanceof Error?e.message:'Actualisation impossible.'));}} />}
 
     {section === 'rse' && <>
       <div className={styles.monthly}><div><p className={styles.eyebrow}>Capacité mensuelle</p><strong>{data.monthly?.remaining ?? 0} action{data.monthly?.remaining === 1 ? '' : 's'} encore possible{data.monthly?.remaining === 1 ? '' : 's'}</strong><p>{data.monthly?.used ?? 0} engagée{data.monthly?.used === 1 ? '' : 's'} ce mois-ci</p></div><div><span>Prochaine distribution</span><p>{utc(data.monthly?.next_refill_at ?? null)}</p></div></div>
@@ -190,6 +176,7 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
 
     {section === 'services' && <>
       {data.global_event && <GlobalEventCard event={data.global_event} />}
+      <CompanyItineraries compagnieId={compagnieId} canManage={manages} unlocked={has('correspondance')} />
       <form className={styles.card} onSubmit={event => { event.preventDefault(); void mutate({ action: 'settings', settings }, 'Configuration des services enregistrée.'); }}>
         <div className={styles.sectionTitle}><Wifi aria-hidden className="h-5 w-5" /><h3>Expérience à bord</h3></div><p>Les options deviennent configurables une fois leur recherche terminée.</p>
         <div className={styles.formGrid}>

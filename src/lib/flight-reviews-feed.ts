@@ -1,0 +1,2 @@
+export const FLIGHT_REVIEWS_PAGE_SIZE = 25;
+export const FLIGHT_REVIEWS_FEED_LIMIT = 500;

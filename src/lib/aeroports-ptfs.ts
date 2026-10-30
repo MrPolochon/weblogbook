@@ -248,31 +248,17 @@ export function getAeroportInfo(code: string | null | undefined): AeroportPTFS |
  * @returns Un nombre positif valide, ou 0 si invalide
  */
 export function sanitizePrix(input: string | number): number {
-  // Si c'est déjà un nombre, vérifier qu'il est valide
-  if (typeof input === 'number') {
-    if (!isFinite(input) || isNaN(input) || input < 0) {
-      return 0;
-    }
-    return Math.floor(Math.abs(input));
+  let prix: number;
+  if (typeof input === 'number') prix = input;
+  else {
+    const normalized = input.trim().replace(/[\s\u00a0\u202f]/g, '').replace(',', '.');
+    if (!/^(?:\d+(?:\.\d*)?|\.\d+)$/.test(normalized)) return 0;
+    prix = Number(normalized);
   }
-
-  // Nettoyer la chaîne : garder seulement les chiffres
-  const cleaned = String(input).replace(/[^0-9]/g, '');
-  
-  // Si vide après nettoyage, retourner 0
-  if (!cleaned) {
+  if (!Number.isFinite(prix) || prix < 0) {
     return 0;
   }
-
-  // Parser et valider
-  const prix = parseInt(cleaned, 10);
-  
-  // Vérifications de sécurité
-  if (!isFinite(prix) || isNaN(prix) || prix < 0) {
-    return 0;
-  }
-
-  // Limite maximale raisonnable (éviter les overflow)
+  // Conserver les centimes : les tarifs cargo sont couramment inférieurs à 2 F$/kg.
   const LIMITE_MAX = 1000000; // 1 million F$ max
   return Math.min(prix, LIMITE_MAX);
 }

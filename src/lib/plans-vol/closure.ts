@@ -1076,11 +1076,17 @@ export async function finaliserCloturePlan(
   if (!paiementResult.success) {
     console.error('Erreur paiement vol:', paiementResult.message);
     // La route confirm_cloture peut avoir déjà mis statut = cloture avant cet appel : on annule pour permettre un nouvel essai
-    await admin
-      .from('plans_vol')
-      .update({ statut: 'en_attente_cloture', cloture_at: null })
-      .eq('id', plan.id)
-      .eq('statut', 'cloture');
+    if (plan.economy_version === 2 && plan.demande_cloture_at && paiementResult.message?.includes('Durée de vol anormalement courte')) {
+      // An invalid early request must not pin every later ATC/cron retry to the
+      // same impossible arrival time. A valid first request remains immutable.
+      await admin.from('plans_vol').update({ demande_cloture_at: null }).eq('id', plan.id).eq('statut', 'en_attente_cloture').eq('demande_cloture_at', plan.demande_cloture_at);
+    } else if (plan.economy_version !== 2) {
+      await admin
+        .from('plans_vol')
+        .update({ statut: 'en_attente_cloture', cloture_at: null })
+        .eq('id', plan.id)
+        .eq('statut', 'cloture');
+    }
     return {
       success: false,
       paiementResult,
@@ -1272,7 +1278,7 @@ export async function finaliserCloturePlan(
 }
 
 const PLAN_CLOTURE_SELECT =
-  'id, pilote_id, copilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, deroutement_at, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
+  'id, economy_version, pilote_id, copilote_id, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, demande_cloture_at, numero_vol, aeroport_arrivee, type_vol, nature_transport, type_cargaison, type_cargaison_libelle, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, compagnie_avion_id, siavi_avion_id, current_afis_user_id, strip_atd, deroutement_at, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id';
 
 /**
  * Clôture les vols déjà demandés par le pilote, restés en attente ATC

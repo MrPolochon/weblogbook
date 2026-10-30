@@ -16,6 +16,7 @@ import type { PlanVol } from '@/lib/types';
 import { ARME_MISSIONS } from '@/lib/armee-missions';
 import styles from './PilotOperations.module.css';
 import { loadUnrecordedClosedPlans } from '@/lib/logbook-registration';
+import PilotItineraryProgress, { type PilotItinerarySummary } from '@/components/company/PilotItineraryProgress';
 
 const STATUT_CONFIG: Record<string, { label: string; color: string; bgColor: string }> = {
   depose: { label: 'Déposé', color: 'text-slate-300', bgColor: 'bg-slate-500/20' },
@@ -39,7 +40,7 @@ export default async function MesPlansVolPage() {
   const admin = createAdminClient();
 
   // Profile and plans in parallel
-  const [{ data: profile }, { data: raw, error: plansError }, { data: plansClotures, error: closedPlansError }] = await Promise.all([
+  const [{ data: profile }, { data: raw, error: plansError }, { data: plansClotures, error: closedPlansError }, { data: itineraryRows, error: itinerariesError }] = await Promise.all([
     supabase.from('profiles').select('role, identifiant').eq('id', user.id).single(),
     admin
       .from('plans_vol')
@@ -49,6 +50,12 @@ export default async function MesPlansVolPage() {
       .order('created_at', { ascending: false }),
     // A pending staff review is already a logbook record, not an unrecorded plan.
     loadUnrecordedClosedPlans(admin, user.id),
+    admin.from('company_itineraries')
+      .select('id,company_id,flight_number,origin,destination,status,next_leg_index,legs:company_itinerary_legs(id,leg_index,origin,destination,status,plan_id)')
+      .eq('pilot_id', user.id)
+      .in('status', ['planned', 'active', 'paused', 'diverted'])
+      .order('created_at', { ascending: false })
+      .limit(10),
   ]);
 
   if (profile?.role === 'atc') redirect('/logbook');
@@ -131,6 +138,7 @@ export default async function MesPlansVolPage() {
         {[{label:'En exploitation',value:plansEnCours.length,detail:'Acceptés, en cours ou à clôturer'}, {label:'Plans ouverts',value:plansNonClotures.length,detail:'Dépôts et vols non clôturés'}, {label:'À corriger',value:plansRefuses.length,detail:'Plans refusés par le contrôle'}].map(item=><div key={item.label} className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-5 py-4"><dt className="text-sm text-slate-400">{item.label}</dt><dd className="mt-2 font-mono text-2xl font-semibold tabular-nums text-slate-100">{item.value}</dd><p className="mt-1 text-xs text-slate-500">{item.detail}</p></div>)}
       </dl>
       <div id="suivi-operationnel" className="scroll-mt-28"/>
+      {itinerariesError ? <p role="status" className="rounded-lg border border-slate-700 p-4 text-sm text-slate-400">Le suivi des itinéraires commerciaux est temporairement indisponible. <Link href="/logbook/plans-vol" className="text-sky-300 underline">Réessayer</Link></p> : <PilotItineraryProgress itineraries={(itineraryRows ?? []) as unknown as PilotItinerarySummary[]} hasActivePlan={hasActivePlan} />}
       {planActif && <section className="rounded-xl border border-sky-800/70 bg-slate-900 p-4 sm:p-5" aria-labelledby="active-plan-heading"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-xs uppercase tracking-wider text-sky-400">Vol suivi</p><h2 id="active-plan-heading" className="mt-1 font-mono text-xl font-semibold text-slate-100">{planActif.numero_vol} · {planActif.aeroport_depart} → {planActif.aeroport_arrivee}</h2></div><span className="rounded-lg border border-slate-600 px-3 py-1.5 text-sm text-slate-300">{STATUT_CONFIG[planActif.statut]?.label || planActif.statut}</span></div><p className="mt-3 text-sm text-slate-400">{planActif.type_vol} · durée prévue {planActif.temps_prev_min || '—'} min · {planActif.automonitoring ? 'Autosurveillance' : controleurIdentifiant ? `Contrôle : ${controleurIdentifiant}` : 'Prise en charge à confirmer'}</p><a href="#plans-operationnels" className="mt-3 inline-flex min-h-10 items-center gap-2 text-sm font-medium text-sky-300 hover:text-sky-200">Accéder aux actions du plan <ArrowRight aria-hidden className="h-4 w-4"/></a></section>}
 
       {/* Pause mission MEDEVAC : segment clôturé + segment suivant à activer */}

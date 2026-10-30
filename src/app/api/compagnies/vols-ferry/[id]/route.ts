@@ -6,6 +6,8 @@ import { calculerUsureFerry } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
 import { getCompteEntrepriseCanonique } from '@/lib/felitz/ensure-comptes';
 import { advanceReparationIfFerryArrivedAtHangar, completeReparationReturnFerry } from '@/lib/reparation-after-ferry';
+import { assertAircraftOutsideItinerary } from '@/lib/company-itineraries/lifecycle';
+import { FlightSubmissionError } from '@/lib/plans-vol/submission';
 
 export async function PATCH(
   request: Request,
@@ -47,6 +49,8 @@ export async function PATCH(
       if (vol.statut === 'completed') {
         return NextResponse.json({ error: 'Ce vol est déjà clôturé.' }, { status: 400 });
       }
+      if (!['planned', 'in_progress'].includes(vol.statut)) return NextResponse.json({ error: 'Seul un ferry en cours ou prévu peut être clôturé.' }, { status: 400 });
+      await assertAircraftOutsideItinerary(admin, vol.avion_id);
 
       // Calculer l'usure (basée sur une distance estimée)
       const usure = calculerUsureFerry(500); // Distance fixe pour simplifier
@@ -142,6 +146,6 @@ export async function PATCH(
     return NextResponse.json({ error: 'Action invalide' }, { status: 400 });
   } catch (e) {
     console.error('PATCH compagnies/vols-ferry/[id]:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+    return NextResponse.json({ error: e instanceof FlightSubmissionError ? e.message : 'Erreur serveur' }, { status: e instanceof FlightSubmissionError ? e.status : 500 });
   }
 }

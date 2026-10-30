@@ -14,6 +14,7 @@ import PorteDepartSelect from '@/components/PorteDepartSelect';
 import BriaDialog from '@/components/BriaDialog';
 import NotamsAirportWarning from '@/components/NotamsAirportWarning';
 import { toast } from 'sonner';
+import type { ItineraryDetail } from '@/components/company/CompanyItineraries';
 
 interface TypeAvion {
   id: string;
@@ -80,6 +81,8 @@ interface Props {
   armeeAvions?: AvionArmeeItem[];
   /** Préremplit route / durée / callsign depuis une carte mission (query ?mission=). */
   initialMissionId?: string;
+  /** Prépare le prochain tronçon avec le devis et les confirmations habituels. */
+  initialItineraryId?: string;
 }
 
 /** Embeds PostgREST : objet, tableau ou null — évite capacité 0 si tableau vide. */
@@ -107,6 +110,7 @@ export default function DepotPlanVolForm({
   avionsParCompagnie = {},
   armeeAvions = [],
   initialMissionId = '',
+  initialItineraryId = '',
 }: Props) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -165,6 +169,10 @@ export default function DepotPlanVolForm({
   const submitBusyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [itineraryDetail, setItineraryDetail] = useState<ItineraryDetail | null>(null);
+  const [itineraryError, setItineraryError] = useState('');
+  const [itineraryAttempt, setItineraryAttempt] = useState(0);
+  const itineraryLocked = Boolean(initialItineraryId);
   const [showBria, setShowBria] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const wizardFormRef = useRef<HTMLFormElement>(null);
@@ -330,6 +338,37 @@ export default function DepotPlanVolForm({
       setCompagnieAvionId('');
     }
   }, [aeroport_depart, avionsCompagnie, compagnie_avion_id]);
+
+  useEffect(() => {
+    if (!initialItineraryId) return;
+    const controller = new AbortController();
+    setItineraryDetail(null); setItineraryError('');
+    void fetchJson<ItineraryDetail>(`/api/itineraires/${encodeURIComponent(initialItineraryId)}`, { signal: controller.signal, cache: 'no-store' })
+      .then(detail => {
+        if (controller.signal.aborted) return;
+        if (!detail.itinerary.can_resume || !detail.next_leg || detail.current_plan_id) throw new Error('Cet itinéraire ne peut pas être repris maintenant. Vérifiez son pilote et clôturez le tronçon en cours.');
+        if (!compagniesDisponibles.some(company => company.id === detail.itinerary.company_id)) throw new Error('Vous devez être membre de cette compagnie pour préparer ce départ.');
+        setItineraryDetail(detail);
+      })
+      .catch(err => { if (!controller.signal.aborted) setItineraryError(err instanceof Error ? err.message : 'Itinéraire indisponible.'); });
+    return () => controller.abort();
+  }, [initialItineraryId, itineraryAttempt, compagniesDisponibles]);
+
+  // Le changement de compagnie réinitialise normalement l’appareil. Attendre ce
+  // changement avant de préremplir le tronçon préserve cette protection du dépôt.
+  useEffect(() => {
+    const itinerary = itineraryDetail?.itinerary, leg = itineraryDetail?.next_leg;
+    if (!itinerary || !leg) return;
+    if (selectedCompagnieId !== itinerary.company_id) { setSelectedCompagnieId(itinerary.company_id); return; }
+    callsignManualRef.current = true;
+    setVolCommercial(true); setVolFerry(false); setInventaireAvionId(''); setArmeeAvionId(''); setArmeeMissionId('');
+    setCompagnieAvionId(itinerary.aircraft_id); setAeroportDepart(leg.origin); setAeroportArrivee(leg.destination);
+    setNumeroVol(itinerary.flight_number); setNatureTransport(itinerary.nature_transport);
+    setTempsPrevMin(String(leg.preparation.temps_prev_min ?? '')); setTypeVol(leg.preparation.type_vol === 'IFR' ? 'IFR' : 'VFR');
+    setIntentionsVol(leg.preparation.intentions_vol ?? '');
+    setNiveauCroisiere(String(leg.preparation.niveau_croisiere ?? ''));
+    setHeureDepart(''); setPorte(''); setAHasGates(null);
+  }, [itineraryDetail, selectedCompagnieId]);
 
   // Charger les SID quand aéroport de départ change (IFR).
   // AbortController : si l'utilisateur change rapidement d'aéroport, l'ancienne réponse
@@ -574,6 +613,8 @@ export default function DepotPlanVolForm({
   function getFormData(volSansAtc: boolean = false) {
     const t = parseInt(temps_prev_min, 10);
     return {
+      itinerary_id: itineraryDetail?.itinerary.id,
+      itinerary_leg_id: itineraryDetail?.next_leg?.id,
       event_reservation_id: initialReservation?.id,
       aeroport_depart,
       aeroport_arrivee,
@@ -771,10 +812,13 @@ export default function DepotPlanVolForm({
   const flightMode: 'personnel' | 'commercial' | 'ferry' =
     vol_commercial ? 'commercial' : vol_ferry ? 'ferry' : 'personnel';
 
+  if (itineraryLocked && !itineraryDetail) return <section className="space-y-4 rounded-xl border border-slate-700 bg-slate-900 p-5"><p role={itineraryError ? 'alert' : 'status'} className="text-sm text-slate-200">{itineraryError || 'Chargement du prochain tronçon de l’itinéraire…'}</p>{itineraryError && <button type="button" className="min-h-12 rounded-lg border border-slate-600 px-4 text-sm text-sky-200" onClick={() => setItineraryAttempt(value => value + 1)}>Réessayer le chargement de l’itinéraire</button>}<Link href="/ma-compagnie#services" className="block text-sm text-sky-300 underline">Consulter les itinéraires de la compagnie</Link></section>;
+
   return (
     <>
+    {itineraryDetail?.next_leg && <section className="mb-5 space-y-3 rounded-xl border border-sky-700 bg-slate-900 p-5" aria-label="Tronçon de l’itinéraire"><h2 className="font-semibold text-sky-100">{itineraryDetail.itinerary.flight_number} · Tronçon {itineraryDetail.next_leg.leg_index}/{itineraryDetail.legs.length}</h2><p className="font-mono text-sm text-slate-100">{itineraryDetail.next_leg.origin} → {itineraryDetail.next_leg.destination} · Destination finale : {itineraryDetail.itinerary.destination}</p><p className="text-sm leading-relaxed text-slate-400">Vérifiez le chargement confirmé, les horaires UTC, les procédures et l’équipage avant de déposer ce départ. À l’arrivée, clôturez ce tronçon pour préparer le suivant.</p><ol className="flex flex-wrap gap-2 text-xs text-slate-400" aria-label="Suivi du parcours">{itineraryDetail.legs.map(leg => <li key={leg.id} className={`rounded-lg border px-3 py-2 ${leg.id === itineraryDetail.next_leg?.id ? 'border-sky-600 text-sky-200' : 'border-slate-700'}`}>{leg.leg_index}. {leg.origin} → {leg.destination}{leg.status === 'completed' ? ' · clôturé' : ''}</li>)}</ol><Link className="inline-block text-xs text-sky-300 underline" href={`/ma-compagnie?c=${encodeURIComponent(itineraryDetail.itinerary.company_id)}#services`}>Revenir au parcours de la compagnie</Link></section>}
     {initialReservation && <p className="mb-4 rounded-lg border border-amber-500/40 p-3 text-amber-200">Dernière étape de votre inscription : déposez ce plan de vol pour la confirmer. Créneau choisi : {initialReservation.departure} → {initialReservation.arrival} · {new Date(initialReservation.departure_at).toLocaleString('fr-FR',{timeZone:'UTC'})} UTC · {initialReservation.aircraft}. Choisissez votre appareil et complétez les procédures du vol. Le callsign, la route, la durée et l’horaire seront vérifiés.</p>}
-    <div className="flex flex-wrap gap-3 mb-4 text-sm"><button type="button" onClick={saveDraft} className="rounded-lg border border-sky-700 p-2">Enregistrer le brouillon</button><button type="button" onClick={restoreDraft} className="rounded-lg border border-slate-700 p-2">Restaurer mon brouillon</button><button type="button" onClick={()=>{try{localStorage.removeItem(draftKey);toast.success('Brouillon supprimé.');}catch{toast.error('Suppression impossible.');}}} className="p-2 text-slate-400">Supprimer le brouillon</button></div>
+    {!itineraryLocked && <div className="flex flex-wrap gap-3 mb-4 text-sm"><button type="button" onClick={saveDraft} className="rounded-lg border border-sky-700 p-2">Enregistrer le brouillon</button><button type="button" onClick={restoreDraft} className="rounded-lg border border-slate-700 p-2">Restaurer mon brouillon</button><button type="button" onClick={()=>{try{localStorage.removeItem(draftKey);toast.success('Brouillon supprimé.');}catch{toast.error('Suppression impossible.');}}} className="p-2 text-slate-400">Supprimer le brouillon</button></div>}
     {showBria && <BriaDialog
       onClose={() => setShowBria(false)}
       draft={{
@@ -854,6 +898,7 @@ export default function DepotPlanVolForm({
               accent="slate"
               icon={<Plane className="h-5 w-5" />}
               title="Personnel"
+              disabled={itineraryLocked}
               subtitle="Avion de votre inventaire"
               onClick={() => { setVolCommercial(false); setVolFerry(false); }}
             />
@@ -863,6 +908,7 @@ export default function DepotPlanVolForm({
               accent="sky"
               icon={<Building2 className="h-5 w-5" />}
               title="Commercial"
+              disabled={itineraryLocked}
               subtitle="Pax / cargo rémunérés"
               onClick={() => { setVolCommercial(true); setVolFerry(false); }}
             />
@@ -872,6 +918,7 @@ export default function DepotPlanVolForm({
               accent="amber"
               icon={<Navigation className="h-5 w-5" />}
               title="Ferry (à vide)"
+              disabled={itineraryLocked}
               subtitle="Repositionnement"
               onClick={() => { setVolCommercial(false); setVolFerry(true); }}
             />
@@ -894,6 +941,7 @@ export default function DepotPlanVolForm({
                 Pour quelle compagnie ? *
               </label>
               <select aria-label="Pour quelle compagnie ?"
+                disabled={itineraryLocked}
                 className={`input w-full ${fieldErrors.compagnie ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={selectedCompagnieId}
                 onChange={(e) => { setSelectedCompagnieId(e.target.value); setFieldErrors(p => ({ ...p, compagnie: '' })); }}
@@ -951,6 +999,7 @@ export default function DepotPlanVolForm({
           {/* Avions individuels avec immatriculation */}
           <div>
               <select
+                disabled={itineraryLocked}
                 className={`input w-full ${fieldErrors.compagnie_avion_id ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={compagnie_avion_id}
                 onChange={(e) => {
@@ -1119,6 +1168,7 @@ export default function DepotPlanVolForm({
                 <button
                   type="button"
                   onClick={() => setNatureTransport('passagers')}
+                  disabled={itineraryLocked}
                   className={`group flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
                     nature_transport === 'passagers'
                       ? 'bg-gradient-to-br from-sky-500/30 to-sky-600/20 text-sky-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_12px_rgba(14,165,233,0.2)]'
@@ -1131,6 +1181,7 @@ export default function DepotPlanVolForm({
                 <button
                   type="button"
                   onClick={() => setNatureTransport('cargo')}
+                  disabled={itineraryLocked}
                   className={`group flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold transition-all ${
                     nature_transport === 'cargo'
                       ? 'bg-gradient-to-br from-amber-500/30 to-amber-600/20 text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_4px_12px_rgba(251,191,36,0.2)]'
@@ -1483,7 +1534,7 @@ export default function DepotPlanVolForm({
               value={aeroport_depart}
               onChange={(e) => { setAeroportDepart(e.target.value); setFieldErrors(p => ({ ...p, aeroport_depart: '', porte: '' })); setPorte(''); setAHasGates(null); }}
               required
-              disabled={missionLocked || departVerrouilleParAvion}
+              disabled={itineraryLocked || missionLocked || departVerrouilleParAvion}
             >
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
@@ -1512,7 +1563,7 @@ export default function DepotPlanVolForm({
               value={aeroport_arrivee}
               onChange={(e) => { setAeroportArrivee(e.target.value); setFieldErrors(p => ({ ...p, aeroport_arrivee: '' })); }}
               required
-              disabled={missionLocked}
+              disabled={itineraryLocked || missionLocked}
             >
               <option value="">— Choisir —</option>
               {AEROPORTS_VOL_CIVIL.map((a) => (
@@ -1554,6 +1605,7 @@ export default function DepotPlanVolForm({
           <div>
             <label className="label">Numéro de vol *</label>
               <input aria-label="Numéro de vol"
+                readOnly={itineraryLocked}
                 type="text"
                 className={`input font-mono ${fieldErrors.numero_vol ? 'border-red-500/60 focus:border-red-500' : ''}`}
                 value={numero_vol}
@@ -1568,8 +1620,8 @@ export default function DepotPlanVolForm({
                 {fieldErrors.numero_vol}
               </p>
             )}
-            <p className="text-xs text-slate-400 mt-1.5">Indicatif complet et librement modifiable. Votre saisie sera conservée.</p>
-            {suggestedCallsign && <button type="button" className="mt-1 text-xs text-sky-300 underline underline-offset-2" onClick={() => {
+            <p className="text-xs text-slate-400 mt-1.5">{itineraryLocked ? 'Indicatif conservé pour tous les tronçons de cet itinéraire.' : 'Indicatif complet et librement modifiable. Votre saisie sera conservée.'}</p>
+            {!itineraryLocked && suggestedCallsign && <button type="button" className="mt-1 text-xs text-sky-300 underline underline-offset-2" onClick={() => {
               callsignManualRef.current = false; setNumeroVol(suggestedCallsign);
               setFieldErrors(p => ({ ...p, numero_vol: '' }));
             }}>Reprendre {vol_commercial && !vol_ferry ? 'le code compagnie' : 'l’immatriculation'} : {suggestedCallsign}</button>}
@@ -2110,9 +2162,9 @@ function SectionHeader({ icon, label, subtitle, accent = 'sky', badge }: { step?
   return <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><span aria-hidden className={`inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${c.border} ${c.bg} ${c.text}`}>{icon}</span><div><h2 className="text-base font-semibold leading-tight text-slate-100">{label}</h2>{subtitle && <p className="mt-1 text-sm leading-relaxed text-slate-400">{subtitle}</p>}</div></div>{badge}</div>;
 }
 
-function ModeCard({ active, accent, icon, title, subtitle, onClick }: { active: boolean; accent: AccentColor; icon: React.ReactNode; title: string; subtitle: string; onClick: () => void }) {
+function ModeCard({ active, accent, icon, title, subtitle, onClick, disabled = false }: { active: boolean; accent: AccentColor; icon: React.ReactNode; title: string; subtitle: string; onClick: () => void; disabled?: boolean }) {
   const c=ACCENT_CLASSES[accent];
-  return <button type="button" onClick={onClick} aria-pressed={active} className={`min-h-20 rounded-lg border p-3 text-left transition-colors ${active ? c.border+' '+c.bg : 'border-slate-700 bg-slate-900 hover:border-slate-500'}`}><span className="flex items-start gap-3"><span aria-hidden className={`mt-0.5 shrink-0 ${active ? c.text : 'text-slate-500'}`}>{icon}</span><span><span className="block text-sm font-medium text-slate-100">{title}</span><span className="mt-1 block text-xs leading-relaxed text-slate-400">{subtitle}</span></span>{active && <CheckCircle2 aria-hidden className="ml-auto h-4 w-4 shrink-0 text-sky-400"/>}</span></button>;
+  return <button type="button" disabled={disabled} onClick={onClick} aria-pressed={active} className={`min-h-20 rounded-lg border p-3 text-left transition-colors disabled:cursor-default ${active ? c.border+' '+c.bg : 'border-slate-700 bg-slate-900 hover:border-slate-500'}`}><span className="flex items-start gap-3"><span aria-hidden className={`mt-0.5 shrink-0 ${active ? c.text : 'text-slate-500'}`}>{icon}</span><span><span className="block text-sm font-medium text-slate-100">{title}</span><span className="mt-1 block text-xs leading-relaxed text-slate-400">{subtitle}</span></span>{active && <CheckCircle2 aria-hidden className="ml-auto h-4 w-4 shrink-0 text-sky-400"/>}</span></button>;
 }
 
 function RouteVisual({ depart, arrivee }: { depart: string; arrivee: string }) {

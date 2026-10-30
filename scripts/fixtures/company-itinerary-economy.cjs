@@ -1,0 +1,40 @@
+const {test}=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs');const {PGlite}=require('@electric-sql/pglite');
+const id=n=>`${String(n).padStart(8,'0')}-3333-4333-8333-333333333333`;
+const actor=id(1),copilot=id(2),controller=id(3),company=id(10),aircraft=id(20),type=id(30);
+async function setup(){const db=new PGlite();await db.exec(`
+CREATE ROLE anon;CREATE ROLE authenticated;CREATE ROLE service_role BYPASSRLS;
+CREATE TABLE profiles(id uuid PRIMARY KEY,role text);INSERT INTO profiles VALUES('${actor}','pilote'),('${copilot}','pilote'),('${controller}','atc');
+CREATE TABLE compagnies(id uuid PRIMARY KEY,pdg_id uuid,nom text,prix_billet_pax numeric,prix_kg_cargo numeric,pourcentage_salaire numeric,alliance_id uuid,vban text);
+CREATE TABLE compagnie_employes(compagnie_id uuid,pilote_id uuid);INSERT INTO compagnie_employes VALUES('${company}','${copilot}');
+CREATE TABLE types_avion(id uuid PRIMARY KEY,nom text,constructeur text,capacite_pax integer,capacite_cargo_kg integer);
+CREATE TABLE compagnie_avions(id uuid PRIMARY KEY,compagnie_id uuid,type_avion_id uuid,aeroport_actuel text,statut text,detruit boolean DEFAULT false,bloque_incident boolean DEFAULT false,usure_percent integer DEFAULT 100);
+CREATE TABLE inventaire_avions(id uuid PRIMARY KEY,proprietaire_id uuid);
+CREATE TABLE compagnie_locations(id uuid PRIMARY KEY,avion_id uuid,loueur_compagnie_id uuid,locataire_compagnie_id uuid,statut text,start_at timestamptz,end_at timestamptz,last_billed_at timestamptz,prix_journalier integer,pourcentage_revenu_loueur integer);
+CREATE TABLE tarifs_liaisons(compagnie_id uuid,aeroport_depart text,aeroport_arrivee text,prix_billet numeric);
+CREATE TABLE aeroports(code_oaci text PRIMARY KEY,passagers_disponibles integer,passagers_max integer,cargo_disponible integer,cargo_max integer,updated_at timestamptz,last_flight_arrival timestamptz);
+CREATE TABLE taxes_aeroport(code_oaci text PRIMARY KEY,taxe_pourcent numeric,taxe_vfr_pourcent numeric);
+CREATE TABLE reparation_demandes(avion_id uuid,statut text);CREATE TABLE vols_ferry(avion_id uuid,statut text);
+CREATE TABLE alliance_parametres(alliance_id uuid,pret_avions_actif boolean,taxe_alliance_actif boolean,taxe_alliance_pourcent numeric,codeshare_actif boolean);
+CREATE TABLE alliance_membres(alliance_id uuid,compagnie_id uuid,codeshare_pourcent numeric);
+CREATE TABLE prets_bancaires(id uuid PRIMARY KEY,compagnie_id uuid,statut text,montant_total_du integer,montant_rembourse integer,rembourse_at timestamptz);
+CREATE TABLE felitz_comptes(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),type text,compagnie_id uuid,proprietaire_id uuid,alliance_id uuid,vban text UNIQUE,solde integer DEFAULT 0,created_at timestamptz DEFAULT now());
+CREATE TABLE felitz_transactions(id uuid DEFAULT gen_random_uuid(),compte_id uuid,type text,montant integer CHECK(montant>=0),libelle text);
+CREATE TABLE atc_plans_controles(plan_vol_id uuid,user_id uuid,aeroport text);CREATE TABLE atc_sessions(id uuid DEFAULT gen_random_uuid(),user_id uuid,aeroport text);
+CREATE TABLE messages(destinataire_id uuid,titre text,contenu text,type_message text CHECK(type_message='systeme'),metadata jsonb);
+CREATE TABLE plans_vol(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),pilote_id uuid,copilote_id uuid,compagnie_id uuid,compagnie_avion_id uuid,inventaire_avion_id uuid,numero_vol text,aeroport_depart text,aeroport_arrivee text,statut text,vol_commercial boolean,vol_ferry boolean,nature_transport text,nb_pax_genere integer,cargo_kg_genere integer,revenue_brut integer,salaire_pilote integer,prix_billet_utilise integer,type_cargaison text,type_cargaison_libelle text,location_id uuid,location_loueur_compagnie_id uuid,location_pourcentage_revenu_loueur integer,location_prix_journalier integer,heure_depart_estimee timestamptz,created_at timestamptz DEFAULT now(),current_holder_user_id uuid,accepted_at timestamptz,demande_cloture_at timestamptz,cloture_at timestamptz,strip_atd text,temps_prev_min integer,type_vol text,current_afis_user_id uuid,deroutement_at timestamptz,revenue_effectif integer,revenue_net integer);
+CREATE TABLE economy_release_settings(id boolean PRIMARY KEY,enabled boolean DEFAULT false,activated_at timestamptz);INSERT INTO economy_release_settings VALUES(true,false,null);
+ALTER TABLE plans_vol ADD COLUMN current_holder_position text,ADD COLUMN current_holder_aeroport text,ADD COLUMN automonitoring boolean,ADD COLUMN pending_transfer_aeroport text,ADD COLUMN pending_transfer_position text,ADD COLUMN pending_transfer_at timestamptz;
+INSERT INTO profiles VALUES('${id(4)}','admin');
+CREATE TABLE test_effects(value jsonb);INSERT INTO test_effects VALUES('{}');CREATE TABLE test_reputation(value numeric);INSERT INTO test_reputation VALUES(0);
+CREATE TABLE test_reviews(plan_id uuid PRIMARY KEY);CREATE TABLE test_fail_review(value boolean);INSERT INTO test_fail_review VALUES(false);
+CREATE FUNCTION company_development_effects(uuid,uuid,timestamptz) RETURNS jsonb LANGUAGE sql AS $$SELECT value FROM test_effects$$;
+CREATE FUNCTION company_development_effects_for_flight(uuid,uuid,timestamptz,text,text,text) RETURNS jsonb LANGUAGE sql AS $$SELECT value FROM test_effects$$;
+CREATE FUNCTION flight_review_reputation(uuid,timestamptz) RETURNS numeric LANGUAGE sql AS $$SELECT value FROM test_reputation$$;
+CREATE FUNCTION publish_flight_review(uuid) RETURNS void LANGUAGE plpgsql AS $$BEGIN IF (SELECT value FROM test_fail_review) THEN RAISE EXCEPTION 'review failure';END IF;INSERT INTO test_reviews VALUES($1) ON CONFLICT DO NOTHING;END$$;
+INSERT INTO compagnies VALUES('${company}','${actor}','Air Test',100,2,10,null,null);INSERT INTO types_avion VALUES('${type}','Airbus A320','Airbus',100,1000);
+INSERT INTO compagnie_avions(id,compagnie_id,type_avion_id,aeroport_actuel,statut) VALUES('${aircraft}','${company}','${type}','IRFD','ground');
+INSERT INTO aeroports VALUES('IRFD',10000,10000,100000,100000,now(),null),('ILAR',10000,10000,100000,100000,now(),null),('ITKO',10000,10000,100000,100000,now(),null);
+INSERT INTO taxes_aeroport VALUES('ILAR',0,0),('IRFD',20,21);
+`);await db.exec(fs.readFileSync('supabase/flight_submission_integrity_20261029.sql','utf8'));const sql=fs.readFileSync('supabase/flight_economy_20261030.sql','utf8');await db.exec(sql);await db.exec(sql);return db;}
+
+module.exports={setup,id,actor,copilot,controller,company,aircraft,type};

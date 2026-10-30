@@ -89,13 +89,14 @@ export async function POST(request: Request) {
   // Vérifier que le plan de vol appartient à l'utilisateur
   const { data: plan } = await admin
     .from('plans_vol')
-    .select('id, pilote_id')
+    .select('id, pilote_id, statut')
     .eq('id', body.plan_vol_id)
     .single();
 
   if (!plan || plan.pilote_id !== user.id) {
     return NextResponse.json({ error: 'Plan de vol introuvable ou non autorisé' }, { status: 403 });
   }
+  if (['cloture', 'annule', 'refuse', 'en_pause', 'planifie_suivant'].includes(plan.statut)) return NextResponse.json({ error: 'Ce vol est terminé ou indisponible pour un service au sol.' }, { status: 409 });
 
   // Éviter les doublons (même service_type en cours pour ce plan)
   const { data: existing } = await admin
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
     .select()
     .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.message }, { status: error.code === '23514' ? 409 : 500 });
 
   // Créer les entrées de contribution pour chaque membre de l'équipe
   if (teamId && req) {

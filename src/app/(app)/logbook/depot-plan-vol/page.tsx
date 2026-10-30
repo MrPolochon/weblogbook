@@ -7,7 +7,7 @@ import styles from '../plans-vol/PilotOperations.module.css';
 import DepotPlanVolForm, { type AvionArmeeItem } from './DepotPlanVolForm';
 import { filterStudentInventory } from '@/lib/instruction-fictive-aircraft';
 
-export default async function DepotPlanVolPage({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ mission?: string; duplicate?: string; reservation?: string }> }) {
+export default async function DepotPlanVolPage({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ mission?: string; duplicate?: string; reservation?: string; itinerary?: string }> }) {
   const searchParams = await searchParamsPromise;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -15,8 +15,9 @@ export default async function DepotPlanVolPage({ searchParams: searchParamsPromi
   const { data: profile } = await supabase.from('profiles').select('role, armee').eq('id', user.id).single();
   if (profile?.role === 'atc') redirect('/logbook');
 
-  const missionId = searchParams?.mission || '';
-  const { data: initialDraft } = searchParams?.duplicate && /^[a-f0-9-]{36}$/i.test(searchParams.duplicate)
+  const itineraryId = searchParams?.itinerary || '';
+  const missionId = itineraryId ? '' : searchParams?.mission || '';
+  const { data: initialDraft } = !itineraryId && searchParams?.duplicate && /^[a-f0-9-]{36}$/i.test(searchParams.duplicate)
     ? await supabase.from('plans_vol').select('aeroport_depart,aeroport_arrivee,temps_prev_min,type_vol,route_ifr,niveau_croisiere,intentions_vol').eq('id',searchParams.duplicate).eq('pilote_id',user.id).maybeSingle()
     : { data: null };
 
@@ -37,7 +38,7 @@ export default async function DepotPlanVolPage({ searchParams: searchParamsPromi
   }
 
   const admin = createAdminClient();
-  const { data: eventReservation } = searchParams?.reservation && /^[a-f0-9-]{36}$/i.test(searchParams.reservation)
+  const { data: eventReservation } = !itineraryId && searchParams?.reservation && /^[a-f0-9-]{36}$/i.test(searchParams.reservation)
     ? await admin.from('event_reservations').select('id,event_id,departure,arrival,departure_at,duration_minutes,callsign,airline,aircraft')
       .eq('id',searchParams.reservation).eq('user_id',user.id).eq('role','pilot').eq('status','confirmed').is('claimed_at',null).maybeSingle()
     : { data: null };
@@ -189,6 +190,7 @@ export default async function DepotPlanVolPage({ searchParams: searchParamsPromi
         avionsParCompagnie={avionsParCompagnie}
         armeeAvions={armeeAvions}
         initialMissionId={missionId}
+        initialItineraryId={itineraryId}
       />
     </div>
   );

@@ -11,7 +11,7 @@ export default function AvisWebPage() {
       <header className="mb-7 border-b border-slate-700/60 pb-7">
         <div className="mb-3 flex items-center gap-3"><span className="rounded-xl bg-sky-500/15 p-3 text-sky-300"><MessagesSquare size={26} /></span><h1 className="text-3xl font-semibold tracking-tight">Avis Web</h1></div>
         <p className="text-slate-300">Les voyages se racontent ici.</p>
-        <p className="mt-2 text-sm leading-relaxed text-slate-500">Un fil public d’expériences de voyageurs virtuels, générées à partir des vols du réseau. Ces publications sont fictives et font partie du jeu.</p>
+        <p className="mt-2 text-sm leading-relaxed text-slate-500">Les vols transportant des passagers ou du fret suscitent de 3 à 30 publications selon leur chargement. Ce fil conserve les 500 publications les plus récentes du réseau. Ces expériences de voyageurs virtuels sont fictives et font partie du jeu.</p>
       </header>
       <FlightReviewFeed />
     </div>
