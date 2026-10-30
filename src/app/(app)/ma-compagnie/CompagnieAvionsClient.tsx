@@ -804,7 +804,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                                       type="button"
                                       onClick={() => openTransferModal(a.id)}
                                       className="text-xs text-emerald-400 hover:underline"
-                                      title="Donner / transférer à un membre de l'alliance"
+                                      title="Donner / transférer à une autre compagnie"
                                     >
                                       <Gift className="h-3.5 w-3.5" />
                                     </button>
@@ -1019,7 +1019,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                   {(transferType === 'don') && (
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={transferSansDest} onChange={(e) => setTransferSansDest(e.target.checked)} className="rounded" />
-                      <span className="text-sm text-slate-300">Sans destinataire (tout le monde peut récupérer)</span>
+                      <span className="text-sm text-slate-300">Sans destinataire (les membres de l&apos;alliance peuvent récupérer)</span>
                     </label>
                   )}
                   {!transferSansDest && (
