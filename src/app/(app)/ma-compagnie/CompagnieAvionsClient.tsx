@@ -7,6 +7,7 @@ import { Plane, Wrench, AlertTriangle, Edit2, MapPin, Percent, ShoppingCart, Sku
 import { COUT_AFFRETER_TECHNICIENS, COUT_VOL_FERRY, TEMPS_MAINTENANCE_MIN, TEMPS_MAINTENANCE_MAX, calculerCoutReparationHub, isAvionCompagnieAuSol } from '@/lib/compagnie-utils';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import AircraftTransferInbox from './AircraftTransferInbox';
 
 type TypeAvion = { id: string; nom: string; constructeur: string; prix?: number };
 type Hub = { aeroport_code: string };
@@ -61,6 +62,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
   const [transferAvionId, setTransferAvionId] = useState<string | null>(null);
   const [transferType, setTransferType] = useState<'don' | 'vente' | 'pret'>('don');
   const [transferDestId, setTransferDestId] = useState('');
+  const [transferAudience, setTransferAudience] = useState<'alliance' | 'externe'>('alliance');
   const [transferSansDest, setTransferSansDest] = useState(false);
   const [transferPrix, setTransferPrix] = useState('');
   const [transferDuree, setTransferDuree] = useState('7');
@@ -318,6 +320,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
     if (!allianceId) return;
     setTransferAvionId(avionId);
     setTransferDestId('');
+    setTransferAudience('alliance');
     setTransferSansDest(false);
     setTransferPrix('');
     setTransferDuree('7');
@@ -341,7 +344,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
   async function handleTransferAlliance() {
     if (!allianceId || !transferAvionId) return;
-    const destRequired = transferType === 'pret' || (transferType === 'don' && !transferSansDest);
+    const destRequired = transferAudience === 'externe' || transferType === 'pret' || (transferType === 'don' && !transferSansDest);
     if (destRequired && !transferDestId) return;
     const typesDisponibles: Array<'don' | 'vente' | 'pret'> = [];
     if (allianceParams?.don_avions_actif) typesDisponibles.push('don');
@@ -351,8 +354,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       toast.error('Ce type de transfert n\'est pas activé dans l\'alliance.');
       return;
     }
-    if (transferType === 'vente' && (!transferPrix || parseInt(transferPrix, 10) < 0)) {
-      toast.error('Indiquez un prix pour la vente.');
+    if (transferType === 'vente' && (!Number.isSafeInteger(Number(transferPrix)) || Number(transferPrix) < 1 || Number(transferPrix) > 2147483647)) {
+      toast.error('Indiquez un prix entier strictement positif pour la vente.');
       return;
     }
     setTransferLoading(true);
@@ -360,9 +363,9 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       const body: Record<string, unknown> = {
         type_transfert: transferType,
         compagnie_avion_id: transferAvionId,
-        compagnie_dest_id: (transferType === 'vente' || (transferType === 'don' && transferSansDest)) ? null : transferDestId,
+        compagnie_dest_id: transferAudience === 'externe' ? transferDestId : (transferType === 'vente' || (transferType === 'don' && transferSansDest)) ? null : transferDestId,
       };
-      if (transferType === 'vente') body.prix = parseInt(transferPrix, 10) || 0;
+      if (transferType === 'vente') body.prix = Number(transferPrix);
       if (transferType === 'pret') body.duree_jours = parseInt(transferDuree, 10) || 7;
       const res = await fetch(`/api/alliances/${allianceId}/transferts`, {
         method: 'POST',
@@ -371,7 +374,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
       });
       const d = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(d.error || 'Erreur');
-      toast.success('Proposition envoyée. Consultez Alliance > Flotte pour accepter ou récupérer.');
+      toast.success('Proposition envoyée. Le destinataire peut répondre depuis Ma compagnie > Flotte.');
       setShowTransferModal(false);
       setTransferAvionId(null);
       startTransition(() => router.refresh());
@@ -457,6 +460,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
 
   return (
     <div className="card">
+      {isPdg && <AircraftTransferInbox compagnieId={compagnieId} onAccepted={() => { void loadAvions(); startTransition(() => router.refresh()); }} />}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
         <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
           <Plane className="h-5 w-5 text-sky-400 shrink-0" />
@@ -971,15 +975,26 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
           <div className="bg-slate-800 rounded-xl p-6 max-w-md w-full border border-slate-700 mx-4 max-h-[90dvh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
               <Gift className="h-5 w-5 text-emerald-400" />
-              Transférer à un membre de l&apos;alliance
+              Transférer un appareil
             </h3>
             <div className="space-y-3">
               <div>
+                <label className="label" htmlFor="transfer-audience">Destinataire</label>
+                <select id="transfer-audience" className="input w-full" value={transferAudience} onChange={(e) => {
+                  const audience = e.target.value as 'alliance' | 'externe';
+                  setTransferAudience(audience); setTransferDestId(''); setTransferSansDest(false);
+                  if (audience === 'externe' && transferType === 'pret') setTransferType(allianceParams?.don_avions_actif ? 'don' : 'vente');
+                }}>
+                  <option value="alliance">Membre de mon alliance</option>
+                  <option value="externe" disabled={!(allianceParams?.don_avions_actif || allianceParams?.transfert_avions_actif)}>Compagnie hors de mon alliance</option>
+                </select>
+              </div>
+              <div>
                 <label className="label">Type</label>
-                <select className="input w-full" value={transferType} onChange={(e) => setTransferType(e.target.value as 'don' | 'vente' | 'pret')}>
+                <select className="input w-full" value={transferType} onChange={(e) => { setTransferType(e.target.value as 'don' | 'vente' | 'pret'); setTransferSansDest(false); }}>
                   {allianceParams?.don_avions_actif && <option value="don">Don (gratuit)</option>}
                   {allianceParams?.transfert_avions_actif && <option value="vente">Vente</option>}
-                  {allianceParams?.pret_avions_actif && <option value="pret">Prêt</option>}
+                  {transferAudience === 'alliance' && allianceParams?.pret_avions_actif && <option value="pret">Prêt</option>}
                   {allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif && (
                     <option value="">Aucun type activé par l&apos;alliance</option>
                   )}
@@ -988,7 +1003,16 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                   <p className="text-xs text-amber-400 mt-1">Le Président ou Vice-Président doit activer les transferts dans Alliance &gt; Paramètres.</p>
                 )}
               </div>
-              {transferType === 'vente' ? (
+              {transferAudience === 'externe' ? (
+                <div>
+                  <label className="label" htmlFor="transfer-external-company">Compagnie destinataire</label>
+                  <select id="transfer-external-company" className="input w-full" value={transferDestId} onChange={(e) => setTransferDestId(e.target.value)}>
+                    <option value="">— Choisir —</option>
+                    {compagnies.filter(c => c.id !== compagnieId && !allianceMembres.some(m => m.compagnie_id === c.id)).map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                  </select>
+                  <p className="text-xs text-slate-400 mt-1">Don ou vente à une compagnie précise. Pour un prêt temporaire extérieur, utilisez « Mettre en location ».</p>
+                </div>
+              ) : transferType === 'vente' ? (
                 <p className="text-xs text-slate-400">Mise en vente dans l&apos;alliance. Tout membre peut acheter (premier arrivé, premier servi).</p>
               ) : (
                 <>
@@ -1016,7 +1040,7 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
               {transferType === 'vente' && (
                 <div>
                   <label className="label">Prix (F$)</label>
-                  <input className="input w-full" type="number" min="0" value={transferPrix} onChange={(e) => setTransferPrix(e.target.value)} placeholder="0" />
+                  <input className="input w-full" type="number" min="1" step="1" value={transferPrix} onChange={(e) => setTransferPrix(e.target.value)} placeholder="Prix de vente" />
                 </div>
               )}
               {transferType === 'pret' && (
@@ -1032,6 +1056,8 @@ export default function CompagnieAvionsClient({ compagnieId, soldeCompagnie = 0,
                 onClick={handleTransferAlliance}
                 disabled={
                   transferLoading ||
+                  !allianceParams ||
+                  (transferAudience === 'externe' && (!transferDestId || !(allianceParams?.don_avions_actif || allianceParams?.transfert_avions_actif))) ||
                   ((transferType === 'pret' || (transferType === 'don' && !transferSansDest)) && !transferDestId) ||
                   Boolean(allianceParams && !allianceParams.don_avions_actif && !allianceParams.transfert_avions_actif && !allianceParams.pret_avions_actif)
                 }
