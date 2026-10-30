@@ -11,6 +11,7 @@ import {
 type AdminClient = ReturnType<typeof createAdminClient>;
 
 type PlanPaiement = {
+  economy_version?: number;
   deroutement_at?: string | null;
   id: string;
   pilote_id: string;
@@ -62,6 +63,10 @@ type PaiementVolResult = {
     taxeAlliance?: number;
     codeshare?: number;
     bonusGroundServices?: number;
+    economieVersion?: number;
+    carburant?: number;
+    aideTransition?: number;
+    usureAppliquee?: number;
   };
   missionArmee?: {
     missionId: string;
@@ -450,6 +455,29 @@ export async function envoyerChequesVol(
 ): Promise<PaiementVolResult> {
   const logRef = `[CHEQUE][Vol ${plan.numero_vol || plan.id}][Pilote ${plan.pilote_id}]`;
   console.log(`${logRef} envoyerChequesVol démarré (vol_commercial=${plan.vol_commercial}, compagnie_id=${plan.compagnie_id}, revenue_brut=${plan.revenue_brut})`);
+
+  // The version belongs to the deposited plan, never to the current feature flag.
+  // In particular, disabling new sales must not strand an already accepted flight.
+  let economyVersion = plan.economy_version;
+  if (economyVersion === undefined && plan.vol_commercial) {
+    const { data: stored, error } = await admin.from('plans_vol').select('economy_version').eq('id', plan.id).single();
+    if (error) return { success: false, message: 'La version du règlement est indisponible. Aucun paiement effectué.' };
+    economyVersion = stored?.economy_version ?? 1;
+  }
+  if (economyVersion === 2) {
+    const { data: result, error } = await admin.rpc('settle_flight_economy', { p_plan: plan.id });
+    if (error || !result) {
+      console.error(`${logRef} Règlement économique annulé:`, error?.message);
+      return { success: false, message: error?.message || 'Le règlement a échoué. Aucun paiement partiel effectué.' };
+    }
+    return { success: true, message: 'Règlement crédité sur Felitz Bank.', revenus: {
+      brut: Number(result.gross_revenue), net: Number(result.company_net), salaire: Number(result.salary_total),
+      taxes: Number(result.airport_tax), coefficient: Math.max(0, 1 - Number(result.delay_discount_percent) / 100),
+      tempsReel: Number(result.actual_minutes), ecartPonctualite: Number(result.delay_minutes),
+      remboursementPret: Number(result.loan_repayment), taxeAlliance: Number(result.alliance_tax), codeshare: Number(result.codeshare),
+      economieVersion: 2, carburant: Number(result.fuel_cost), aideTransition: Number(result.transition_adjustment), usureAppliquee: Number(result.wear_applied),
+    } };
+  }
 
   const missionArmee = await payerMissionArmee(admin, plan, dateFinVol);
   if (missionArmee && 'error' in missionArmee) {
@@ -1059,6 +1087,12 @@ export async function finaliserCloturePlan(
       usureAppliquee: 0,
       error: paiementResult.message || 'Paiement de clôture impossible (comptes Felitz ou plan non éligible).',
     };
+  }
+
+  // Version 2 closes, applies wear, books every movement and publishes the review
+  // in one idempotent transaction. Repeating the legacy wear would damage aircraft.
+  if (paiementResult.revenus?.economieVersion === 2) {
+    return { success: true, paiementResult, usureAppliquee: paiementResult.revenus.usureAppliquee ?? 0 };
   }
 
   let usureAppliquee = 0;

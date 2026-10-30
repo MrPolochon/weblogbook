@@ -9,6 +9,8 @@ export interface DisplayFlightQuote {
   prix_kg_cargo_utilise: number;
   type_cargaison: string | null;
   type_cargaison_libelle: string | null;
+  economy_version?: 1 | 2;
+  economy_snapshot?: import('@/lib/flight-economy/calculator').EconomySnapshot;
 }
 
 /** A suggestion is only applied until the pilot edits the full callsign. */
@@ -32,6 +34,12 @@ export function readDisplayFlightQuote(value: unknown, now = Date.now()): Displa
   if ((q.type_cargaison != null && typeof q.type_cargaison !== 'string') ||
       (q.type_cargaison_libelle != null && typeof q.type_cargaison_libelle !== 'string')) {
     throw new Error('La cargaison du vol est invalide. Actualisez le chargement.');
+  }
+  if (q.economy_version === 2 && (!q.economy_snapshot ||
+    !Number.isFinite(q.economy_snapshot.reference_minutes) || q.economy_snapshot.reference_minutes < 1 ||
+    !Number.isFinite(q.economy_snapshot.fuel_cost) || q.economy_snapshot.fuel_cost < 0 ||
+    !Number.isFinite(q.economy_snapshot.transition_adjustment) || q.economy_snapshot.transition_adjustment < 0)) {
+    throw new Error('Le devis économique est incomplet. Actualisez le chargement.');
   }
   return q as DisplayFlightQuote;
 }

@@ -207,6 +207,7 @@ export default function NavBar({
       label: 'Infos',
       items: [
         { href: '/documents', label: 'Documents', icon: FileText, badge: 0 },
+        { href: '/avis-web', label: 'Avis Web', icon: Users, badge: 0 },
         { href: '/code-de-conduite', label: 'Code de conduite', icon: ScrollText, badge: 0 },
         { href: '/app/calendrier', label: 'Calendrier', icon: CalendarDays, badge: 0 },
         { href: '/notams', label: 'NOTAMs', icon: ScrollText, badge: 0 },

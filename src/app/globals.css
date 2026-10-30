@@ -1635,5 +1635,5 @@ html[data-theme="halloween"] body.pilot-professional-mode :is(.text-sky-400, .te
 html[data-theme="halloween"] body.pilot-professional-mode :is(a, button, input, select, textarea):focus-visible { outline-color: #38bdf8; }
 @media print {
   body.pilot-professional-mode .space-nav-header,
-  body.pilot-professional-mode .pilot-workspace > div:first-child { display: none; }
+  body.pilot-professional-mode .pilot-workspace-toolbar { display: none; }
 }

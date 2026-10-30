@@ -130,14 +130,14 @@ export async function PATCH(
       if (!Number.isFinite(v) || v < 0 || v > 10_000_000) {
         return NextResponse.json({ error: 'prix_billet_pax doit être entre 0 et 10 000 000' }, { status: 400 });
       }
-      updates.prix_billet_pax = Math.round(v);
+      updates.prix_billet_pax = Math.round(v * 100) / 100;
     }
     if (prix_kg_cargo !== undefined) {
       const v = Number(prix_kg_cargo);
       if (!Number.isFinite(v) || v < 0 || v > 1_000_000) {
         return NextResponse.json({ error: 'prix_kg_cargo doit être entre 0 et 1 000 000' }, { status: 400 });
       }
-      updates.prix_kg_cargo = Math.round(v);
+      updates.prix_kg_cargo = Math.round(v * 100) / 100;
     }
     if (pourcentage_salaire !== undefined) {
       const v = Number(pourcentage_salaire);

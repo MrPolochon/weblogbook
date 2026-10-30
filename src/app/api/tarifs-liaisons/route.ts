@@ -46,6 +46,10 @@ export async function POST(req: NextRequest) {
     if (!compagnie_id || !aeroport_depart || !aeroport_arrivee) {
       return NextResponse.json({ error: 'Données incomplètes' }, { status: 400 });
     }
+    const ticketPrice = Number(prix_billet ?? 100);
+    if (!Number.isFinite(ticketPrice) || ticketPrice < 0 || ticketPrice > 10_000_000) {
+      return NextResponse.json({ error: 'Le prix du billet doit être compris entre 0 et 10 000 000 F$.' }, { status: 400 });
+    }
 
     // Vérifier que l'utilisateur est PDG de cette compagnie
     const admin = createAdminClient();
@@ -70,7 +74,7 @@ export async function POST(req: NextRequest) {
         compagnie_id,
         aeroport_depart,
         aeroport_arrivee,
-        prix_billet: prix_billet || 100,
+        prix_billet: Math.round(ticketPrice * 100) / 100,
         bidirectionnel: bidirectionnel || false,
       }, { onConflict: 'compagnie_id,aeroport_depart,aeroport_arrivee' })
       .select()
@@ -86,7 +90,7 @@ export async function POST(req: NextRequest) {
           compagnie_id,
           aeroport_depart: aeroport_arrivee,
           aeroport_arrivee: aeroport_depart,
-          prix_billet: prix_billet || 100,
+          prix_billet: Math.round(ticketPrice * 100) / 100,
           bidirectionnel: true,
         }, { onConflict: 'compagnie_id,aeroport_depart,aeroport_arrivee' });
     }

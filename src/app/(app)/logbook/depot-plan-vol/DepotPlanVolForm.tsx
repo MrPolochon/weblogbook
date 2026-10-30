@@ -1246,7 +1246,7 @@ export default function DepotPlanVolForm({
                 </div>
                 <div className="text-right">
                   <div className="text-[10px] font-mono uppercase tracking-widest text-emerald-400">
-                    {withCopilote ? `Salaire équipage (${selectedCompagnie.pourcentage_salaire}%)` : `Votre salaire (${selectedCompagnie.pourcentage_salaire}%)`}
+                    {currentQuote?.economy_version === 2 ? 'Salaire garanti du devis' : withCopilote ? `Salaire équipage (${selectedCompagnie.pourcentage_salaire}%)` : `Votre salaire (${selectedCompagnie.pourcentage_salaire}%)`}
                   </div>
                   <div className="font-mono text-base font-bold text-emerald-300 tabular-nums">{salairePilote.toLocaleString('fr-FR')} <span className="text-xs text-emerald-400/70">F$</span></div>
                   {withCopilote && (
@@ -1256,6 +1256,14 @@ export default function DepotPlanVolForm({
                   )}
                 </div>
               </div>
+
+              {currentQuote?.economy_version === 2 && currentQuote.economy_snapshot && (
+                <div className="mt-3 rounded-lg border border-sky-500/20 bg-sky-950/20 p-3 text-xs text-slate-300">
+                  <p>Carburant prévu : {currentQuote.economy_snapshot.fuel_cost.toLocaleString('fr-FR')} F$ · aide de transition incluse dans la recette : {currentQuote.economy_snapshot.transition_adjustment.toLocaleString('fr-FR')} F$.</p>
+                  <p className="mt-1">Salaire garanti à la clôture, crédité sur Felitz Bank. Les taxes staff et les contrats sont déduits de la part compagnie ; un déficit reste possible.</p>
+                  <p className="mt-1 text-sky-200">Référence de ponctualité : {currentQuote.economy_snapshot.reference_minutes} min après le départ prévu (ou la prise en charge si elle est antérieure). Franchise de 5 min, puis décote progressive sur les recettes. Votre durée prévue reste une information opérationnelle.</p>
+                </div>
+              )}
 
               {/* Avertissement remplissage insuffisant */}
               {currentQuote && vol_commercial && (
@@ -1955,7 +1963,7 @@ export default function DepotPlanVolForm({
         </dl>
         <div className="mt-4 border-t border-slate-800 pt-4 text-sm"><p className="mb-1 text-xs text-slate-500">{type_vol === 'IFR' ? 'Route et procédures' : 'Intentions de vol'}</p><p className="break-words font-mono text-slate-300">{type_vol === 'IFR' ? [sid_depart, stripRouteBrackets(route_ifr), star_arrivee].filter(Boolean).join(' · ') : intentions_vol}</p></div>
         {note_atc.trim() && <div className="mt-4 text-sm"><p className="mb-1 text-xs text-slate-500">Remarque pour l’ATC</p><p className="whitespace-pre-wrap break-words text-slate-300">{note_atc}</p></div>}
-        {quoteRequired && currentQuote && <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 p-3"><p className="text-sm text-slate-300">Chargement confirmé : {nbPax.toLocaleString('fr-FR')} passagers · {(nature_transport === 'cargo' ? cargoKg : cargoComplementaire).toLocaleString('fr-FR')} kg de fret.</p><p className="mt-1 text-xs text-slate-400">Recette brute estimée : {revenuBrut.toLocaleString('fr-FR')} F$ · salaire {withCopilote ? 'équipage' : 'pilote'} estimé : {salairePilote.toLocaleString('fr-FR')} F$. Les règles de règlement à la clôture restent applicables.</p></div>}
+        {quoteRequired && currentQuote && <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 p-3"><p className="text-sm text-slate-300">Chargement confirmé : {nbPax.toLocaleString('fr-FR')} passagers · {(nature_transport === 'cargo' ? cargoKg : cargoComplementaire).toLocaleString('fr-FR')} kg de fret.</p><p className="mt-1 text-xs text-slate-400">Recette brute estimée : {revenuBrut.toLocaleString('fr-FR')} F$ · salaire {withCopilote ? 'équipage' : 'pilote'} {currentQuote.economy_version === 2 ? 'garanti' : 'estimé'} : {salairePilote.toLocaleString('fr-FR')} F$. Les règles de règlement à la clôture restent applicables.</p>{currentQuote.economy_snapshot && <p className="mt-1 text-xs text-sky-200">Référence économique : {currentQuote.economy_snapshot.reference_minutes} min · carburant {currentQuote.economy_snapshot.fuel_cost.toLocaleString('fr-FR')} F$ · aide de transition {currentQuote.economy_snapshot.transition_adjustment.toLocaleString('fr-FR')} F$ incluse dans la recette.</p>}</div>}
         <button type="button" onClick={() => setWizardStep(2)} className="mt-4 inline-flex min-h-10 items-center text-sm font-medium text-sky-300 underline underline-offset-4 hover:text-sky-200">Revenir aux informations du vol</button>
       </section>
       {/* Confirmation vol sans ATC */}
