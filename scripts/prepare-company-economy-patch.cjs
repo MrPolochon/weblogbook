@@ -3,8 +3,8 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const root=path.resolve(__dirname,'..'),dir=path.join(root,'tmp','company-economy-patch');
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
-const report=JSON.parse(fs.readFileSync(path.join(root,'tmp/itineraries-real-schema-validation.json'),'utf8'));
-const names=['company_research_limit','company_itineraries','company_economy_corrections','company_flight_ground_cleanup','company_flight_review_batches'];
+const report=JSON.parse(fs.readFileSync(path.resolve(root,process.argv[2]||'tmp/company-economy-patch/review-style-copy-validation.json'),'utf8'));
+const names=['company_research_limit','company_itineraries','company_economy_corrections','company_flight_ground_cleanup','company_flight_review_batches','company_flight_review_style'];
 const migrations=names.map(name=>{
  const file=`supabase/${name}_20261030.sql`,source=fs.readFileSync(path.join(root,file),'utf8'),sha256=hash(source);
  if(report.status!=='passed'||!report.newMigrations?.some(item=>item.file===file&&item.sha256===sha256))throw Error(`Schema-copy validation missing or stale: ${file}`);
@@ -13,7 +13,7 @@ const migrations=names.map(name=>{
 const tables=['profiles','compagnies','compagnie_avions','plans_vol','vols','felitz_comptes','felitz_transactions','flight_submission_quotes','flight_economy_settlements','flight_reviews','company_research_projects','company_rse_hands','company_rse_commitments','company_development_cycles','company_service_settings','company_global_events','ground_service_requests'];
 const projection=tables.map(table=>`SELECT '${table}'::text table_name,count(*)::bigint row_count,md5(coalesce(jsonb_agg(r ORDER BY r::text)::text,'[]')) row_hash FROM (SELECT ${table==='plans_vol'?"to_jsonb(t)-'company_itinerary_id'-'company_itinerary_leg_id'-'review_generated_count'-'review_generated_at'":table==='flight_reviews'?"to_jsonb(t)-'review_sequence'":'to_jsonb(t)'} r FROM public.${table} t) observed`).join('\nUNION ALL\n');
 const checks=[['research_limit','company_development_guard_research_limit','company_research_projects','company_research_concurrency_limit'],['itineraries','sync_company_itinerary_leg','plans_vol','sync_company_itinerary_leg'],['ground_cleanup','cleanup_ground_requests_after_flight','plans_vol','cleanup_ground_requests_after_flight'],['ferry_restrictions','guard_new_ferry_development_restrictions','vols_ferry','guard_new_ferry_development_restrictions'],['review_batches','guard_flight_review_batch_marker','plans_vol','guard_flight_review_batch_marker']];
-const guard=checks.map(([key,fn,table,trigger])=>`'${key}',EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.${table}'::regclass AND tgname='${trigger}' AND tgenabled<>'D') AND to_regprocedure('public.${fn}()') IS NOT NULL`).join(',\n');
+const guard=[...checks.map(([key,fn,table,trigger])=>`'${key}',EXISTS(SELECT 1 FROM pg_trigger WHERE tgrelid='public.${table}'::regclass AND tgname='${trigger}' AND tgenabled<>'D') AND to_regprocedure('public.${fn}()') IS NOT NULL`),"'review_style',to_regprocedure('public.restyle_flight_reviews(uuid,uuid)') IS NOT NULL"].join(',\n');
 const sql=`-- Additive economy patch. All original business rows and public opening state are verified unchanged.
 BEGIN;
 SET LOCAL lock_timeout='5s';
