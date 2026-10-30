@@ -3,8 +3,8 @@
 const fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const root=path.resolve(__dirname,'..'),dir=path.join(root,'tmp','company-economy-patch');
 const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
-const report=JSON.parse(fs.readFileSync(path.resolve(root,process.argv[2]||'tmp/company-economy-patch/review-style-copy-validation.json'),'utf8'));
-const names=['company_research_limit','company_itineraries','company_economy_corrections','company_flight_ground_cleanup','company_flight_review_batches','company_flight_review_style'];
+const report=JSON.parse(fs.readFileSync(path.resolve(root,process.argv[2]||'tmp/company-economy-patch/review-experiences-copy-validation.json'),'utf8'));
+const names=['company_research_limit','company_itineraries','company_economy_corrections','company_flight_ground_cleanup','company_flight_review_batches','company_flight_review_style','company_flight_review_experiences'];
 const migrations=names.map(name=>{
  const file=`supabase/${name}_20261030.sql`,source=fs.readFileSync(path.join(root,file),'utf8'),sha256=hash(source);
  if(report.status!=='passed'||!report.newMigrations?.some(item=>item.file===file&&item.sha256===sha256))throw Error(`Schema-copy validation missing or stale: ${file}`);
