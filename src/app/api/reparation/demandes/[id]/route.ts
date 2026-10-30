@@ -418,6 +418,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           : ERR_REPARATION_STATUT,
       }, { status: 400 });
     }
+    if (demande.maintenance_not_before && Date.parse(demande.maintenance_not_before)>Date.now()) {
+      const remaining = Math.ceil((Date.parse(demande.maintenance_not_before)-Date.now())/60_000);
+      return NextResponse.json({ error: `Le cycle technique nécessite encore ${remaining} minute(s) avant sa clôture.`, maintenance_not_before: demande.maintenance_not_before }, { status: 400 });
+    }
 
     const { data: scores } = await admin.from('reparation_mini_jeux_scores')
       .select('score, type_jeu').eq('demande_id', id);
@@ -484,7 +488,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         .limit(1).maybeSingle();
       tarif = t;
     }
-    let prixParPoint = tarif?.prix_par_point || 1000;
+    let prixParPoint = tarif?.prix_par_point ?? 1000;
     if (ent?.alliance_reparation_actif && ent.alliance_id && ent.prix_alliance_pourcent != null) {
       const { data: membre } = await admin.from('alliance_membres')
         .select('id').eq('alliance_id', ent.alliance_id).eq('compagnie_id', demande.compagnie_id).limit(1);
@@ -492,7 +496,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         prixParPoint = Math.round(prixParPoint * (ent.prix_alliance_pourcent / 100));
       }
     }
-    const pointsRepares = Math.max(0, usureApres - santeBefore);
+    const pointsRepares = Math.max(demande.development_effects?.inspection_required ? 5 : 0, usureApres - santeBefore);
     const prixTotal = pointsRepares * prixParPoint;
 
     const { data: avionUpdated, error: avionUpdErr } = await admin
@@ -544,7 +548,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       );
     }
 
-    return NextResponse.json({ ok: true, score: scoresMoyenne, usure_apres: usureApres, prix_total: prixTotal });
+    const { data: finalRepair } = await admin.from('reparation_demandes').select('prix_total').eq('id',id).single();
+    return NextResponse.json({ ok: true, score: scoresMoyenne, usure_apres: usureApres, prix_total: finalRepair?.prix_total ?? prixTotal });
   }
 
   if (action === 'facturer') {

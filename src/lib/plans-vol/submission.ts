@@ -37,8 +37,11 @@ export interface FlightQuote {
   quote_id: string; expires_at: string; nb_pax_genere: number; cargo_kg_genere: number;
   revenue_brut: number; salaire_pilote: number; prix_billet_utilise: number; prix_kg_cargo_utilise: number;
   type_cargaison: string | null; type_cargaison_libelle: string | null;
+  economy_version?: 1 | 2;
+  economy_snapshot?: import('@/lib/flight-economy/calculator').EconomySnapshot;
 }
-/** Current economy only. The persistent UTC-day draw survives cancellation and duplicate previews. */
+/** The database opts new quotes into the enabled economy. Daily draws survive
+ * cancellation, price edits and repeated previews, across both economy versions. */
 export async function getFlightQuote(admin: Admin, actor: string, body: Record<string, unknown>): Promise<FlightQuote> {
   const scope = quoteScope(body);
   let company: Record<string, any> | null = null;
@@ -81,7 +84,7 @@ export async function getFlightQuote(admin: Admin, actor: string, body: Record<s
       if (type === 'marchandise_rare') label = getMarchandiseRareAleatoire();
     }
   }
-  const { data, error } = await admin.rpc('get_flight_submission_quote', { p_actor: actor, p_scope: scope, p_candidate: { nb_pax_genere: pax, cargo_kg_genere: cargo, type_cargaison: type, type_cargaison_libelle: label, cargo_bonus_percent: type === 'marchandise_rare' ? getCargaisonInfo(type).bonusRevenu : 0, prix_billet_reference: scope.nature_transport === 'cargo' ? kg : ticket, prix_kg_reference: kg } });
+  const { data, error } = await admin.rpc('get_flight_submission_quote', { p_actor: actor, p_scope: scope, p_candidate: { nb_pax_genere: pax, cargo_kg_genere: cargo, type_cargaison: type, type_cargaison_libelle: label, cargo_bonus_percent: type === 'marchandise_rare' ? getCargaisonInfo(type).bonusRevenu : 0, prix_billet_reference: scope.nature_transport === 'cargo' ? kg : ticket, prix_kg_reference: kg, flight_rules: body.type_vol === 'VFR' ? 'VFR' : 'IFR' } });
   if (error || !data) throw submissionError(error);
   if (body.quote_id && body.quote_id !== data.quote_id) throw new FlightSubmissionError('Le devis du vol a expiré. Actualisez le chargement.', 409);
   return data as FlightQuote;

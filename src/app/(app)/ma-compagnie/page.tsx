@@ -161,9 +161,9 @@ export default async function MaCompagniePage({ searchParams: searchParamsPromis
         callsign_telephonie: compagnie?.callsign_telephonie || null,
         vban: compagnie?.vban || null,
         pdg_identifiant: pdgIdentifiant,
-        pourcentage_salaire: compagnie?.pourcentage_salaire || 20,
-        prix_billet_pax: compagnie?.prix_billet_pax || 100,
-        prix_kg_cargo: compagnie?.prix_kg_cargo || 5,
+        pourcentage_salaire: compagnie?.pourcentage_salaire ?? 20,
+        prix_billet_pax: compagnie?.prix_billet_pax ?? 100,
+        prix_kg_cargo: compagnie?.prix_kg_cargo ?? 5,
         logo_url: compagnie?.logo_url || null,
         alliance_id: compagnie?.alliance_id ?? null,
       }}

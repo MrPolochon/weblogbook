@@ -3,8 +3,10 @@
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import CompanyPerformance from '@/components/CompanyPerformance';
 import CompanyIdentityRequests from '@/components/CompanyIdentityRequests';
+import CompanyDevelopment from '@/components/company/CompanyDevelopment';
+import styles from './CompanyWorkspace.module.css';
 import { useRouter } from 'next/navigation';
-import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut, LayoutGrid } from 'lucide-react';
+import { Building2, Users, Plane, Crown, Clock, Settings, DollarSign, Save, RefreshCw, ChevronDown, Route, UserPlus, Send, X, Check, Loader2, Search, ImagePlus, Trash2, Radio, LogOut, LayoutGrid, FlaskConical, Leaf, SlidersHorizontal, ArrowUpRight } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import TarifsLiaisonsClient from './TarifsLiaisonsClient';
@@ -77,7 +79,28 @@ export default function MaCompagnieClient({
   const isLeader = isLeaderProp ?? isPdg;
   const router = useRouter();
   const [, startTransition] = useTransition();
-  const [showSettings, setShowSettings] = useState(false);
+  const [activeSection, setActiveSection] = useState('direction');
+  useEffect(() => {
+    const syncSection = () => {
+      const hash = window.location.hash.slice(1);
+      const section = hash === 'flotte' ? 'operations' : hash === 'portes' ? 'reseau' : hash;
+      const allowed = isLeader
+        ? ['direction', 'equipe', 'operations', 'reseau', 'finances', 'recherche', 'rse', 'services', 'parametres']
+        : ['direction', 'equipe', 'operations'];
+      setActiveSection(allowed.includes(section) ? section : 'direction');
+      if (hash === 'flotte' || (hash === 'portes' && isLeader)) {
+        requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ block: 'start' }));
+      }
+    };
+    syncSection();
+    window.addEventListener('hashchange', syncSection);
+    return () => window.removeEventListener('hashchange', syncSection);
+  }, [isLeader]);
+
+  function selectSection(section: string) {
+    setActiveSection(section);
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}#${section}`);
+  }
   const [pourcentageSalaire, setPourcentageSalaire] = useState(compagnie.pourcentage_salaire.toString());
   const [prixBillet, setPrixBillet] = useState(compagnie.prix_billet_pax.toString());
   const [prixCargo, setPrixCargo] = useState(compagnie.prix_kg_cargo.toString());
@@ -299,7 +322,7 @@ export default function MaCompagnieClient({
   }
 
   function handleCompagnieChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    router.push(`/ma-compagnie?c=${e.target.value}`);
+    router.push(`/ma-compagnie?c=${e.target.value}#${activeSection}`);
   }
 
   async function handleQuitterAlliance() {
@@ -335,8 +358,8 @@ export default function MaCompagnieClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           pourcentage_salaire: financialInput(pourcentageSalaire, 'Salaire (%)', 100, true),
-          prix_billet_pax: financialInput(prixBillet, 'Prix du billet', 10_000_000, true),
-          prix_kg_cargo: financialInput(prixCargo, 'Prix du fret', 1_000_000, true),
+          prix_billet_pax: financialInput(prixBillet, 'Prix du billet', 10_000_000),
+          prix_kg_cargo: financialInput(prixCargo, 'Prix du fret', 1_000_000),
           code_oaci: codeOaci || null,
           callsign_telephonie: callsignTel || null,
         })
@@ -359,14 +382,16 @@ export default function MaCompagnieClient({
     }
   }
 
-  // Sections de la barre d'ancrage. On les filtre dynamiquement selon le role
-  // (un employe simple n'a pas acces aux sections finances PDG, etc.).
+  // Les panneaux restent montés pour conserver les formulaires lors de la navigation.
   const navSections: { id: string; label: string; icon: typeof Users; show: boolean }[] = [
     { id: 'direction', label: isLeader ? 'Direction' : 'Vue d’ensemble', icon: Building2, show: true },
     { id: 'equipe', label: 'Équipe', icon: Users, show: true },
     { id: 'operations', label: 'Exploitation', icon: Plane, show: true },
     { id: 'reseau', label: 'Réseau', icon: Route, show: isLeader },
     { id: 'finances', label: 'Finances', icon: DollarSign, show: isLeader },
+    { id: 'recherche', label: 'Recherche', icon: FlaskConical, show: isLeader },
+    { id: 'rse', label: 'Actions RSE', icon: Leaf, show: isLeader },
+    { id: 'services', label: 'Services et contrats', icon: SlidersHorizontal, show: isLeader },
     { id: 'parametres', label: 'Paramètres', icon: Settings, show: isLeader },
   ];
 
@@ -375,10 +400,10 @@ export default function MaCompagnieClient({
   const totalHeuresAffichees = formatHeures(totalHeuresMin);
 
   return (
-    <div className="space-y-6">
+    <div className={`${styles.workspace} space-y-5`}>
       {/* === IDENTITÉ DE LA COMPAGNIE === */}
       <header className="card overflow-hidden border-slate-700/70 p-0">
-        <div className="bg-slate-900/80 p-5 sm:p-6">
+        <div className="bg-slate-900/80 p-4 sm:p-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4 min-w-0">
               <div className="relative shrink-0">
@@ -386,14 +411,14 @@ export default function MaCompagnieClient({
                   <Image
                     src={logoUrl}
                     alt={`Logo ${compagnie.nom}`}
-                    width={64}
-                    height={64}
-                    className="h-16 w-16 rounded-xl border border-slate-600 object-contain bg-white p-1 ring-2 ring-sky-500/20"
+                    width={48}
+                    height={48}
+                    className="h-12 w-12 rounded-lg border border-slate-600 object-contain bg-white p-1"
                     unoptimized
                   />
                 ) : (
-                  <div className="h-16 w-16 rounded-xl bg-slate-800/80 ring-2 ring-sky-500/20 flex items-center justify-center">
-                    <Building2 className="h-8 w-8 text-sky-400" />
+                  <div className="h-12 w-12 rounded-lg bg-slate-800/80 flex items-center justify-center">
+                    <Building2 className="h-6 w-6 text-sky-400" />
                   </div>
                 )}
               </div>
@@ -406,19 +431,19 @@ export default function MaCompagnieClient({
                         aria-label="Compagnie affichée"
                         value={selectedCompagnieId}
                         onChange={handleCompagnieChange}
-                        className="text-2xl sm:text-3xl font-bold text-slate-100 bg-transparent border-none cursor-pointer hover:text-sky-300 transition-colors appearance-none pr-7"
+                        className={`${styles.companySelect} text-xl sm:text-2xl font-bold text-slate-100 bg-transparent border-none cursor-pointer hover:text-sky-300 transition-colors appearance-none pr-7`}
                         style={{ backgroundImage: 'none' }}
                       >
                         {compagniesDisponibles.map(c => (
                           <option key={c.id} value={c.id} className="bg-slate-800 text-slate-100">
-                            {c.nom} {c.role === 'pdg' ? '(PDG)' : ''}
+                            {c.nom}
                           </option>
                         ))}
                       </select>
                       <ChevronDown className="h-5 w-5 text-slate-400 -ml-6 pointer-events-none" />
                     </div>
                   ) : (
-                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-100 truncate">{compagnie.nom}</h1>
+                    <h1 className="text-xl sm:text-2xl font-bold text-slate-100 truncate">{compagnie.nom}</h1>
                   )}
                   {isLeader && (
                     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ring-1 ${isPdg ? 'bg-amber-500/20 text-amber-300 ring-amber-400/30' : 'bg-sky-500/20 text-sky-300 ring-sky-400/30'}`}>
@@ -447,41 +472,9 @@ export default function MaCompagnieClient({
               </div>
             </div>
 
-            {/* Actions */}
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              {isLeader && (
-                <>
-                  <button
-                    onClick={() => { setShowSettings(true); document.getElementById('parametres')?.scrollIntoView({ block: 'start', behavior: 'auto' }); }}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                      showSettings
-                        ? 'bg-sky-500/20 text-sky-300 border border-sky-500/50 shadow-md shadow-sky-500/10'
-                        : 'bg-slate-700/70 text-slate-300 hover:bg-slate-600 hover:scale-[1.02]'
-                    }`}
-                  >
-                    <Settings className={`h-4 w-4 transition-transform ${showSettings ? 'rotate-90' : ''}`} />
-                    Paramètres
-                  </button>
-                  {compagnie.alliance_id && (
-                    <>
-                      <Link href="/alliance" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-700/70 text-slate-300 hover:bg-slate-600 transition-all hover:scale-[1.02]">
-                        <Users className="h-4 w-4" />
-                        Alliance
-                      </Link>
-                      {isLeader && (
-                        <button
-                          onClick={handleQuitterAlliance}
-                          disabled={quittingAlliance}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-900/30 text-red-300 hover:bg-red-900/50 disabled:opacity-50 transition-all"
-                        >
-                          <LogOut className="h-4 w-4" />
-                          {quittingAlliance ? 'En cours…' : "Quitter l'alliance"}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </>
-              )}
+            <div className="flex flex-wrap items-center gap-2">
+              {compagnie.alliance_id && <Link href="/alliance" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-700 px-3 text-sm text-slate-300 hover:bg-slate-800"><Users aria-hidden className="h-4 w-4" />Alliance</Link>}
+              <Link href="/logbook/depot-plan-vol" className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-600/60 bg-sky-500/10 px-3 text-sm font-semibold text-sky-200 hover:bg-sky-500/20">Préparer un vol<ArrowUpRight aria-hidden className="h-4 w-4" /></Link>
             </div>
           </div>
         </div>
@@ -500,10 +493,10 @@ export default function MaCompagnieClient({
             </Link>
             <div className="p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
-                <Users className="h-3.5 w-3.5" /> Equipe
+                <Users className="h-3.5 w-3.5" /> Équipe
               </p>
               <p className="mt-1 text-xl font-bold text-sky-300 tabular-nums">{totalPilotes}</p>
-              <p className="text-[10px] text-slate-500">{totalHeuresAffichees} cumulees</p>
+              <p className="text-[10px] text-slate-500">{totalHeuresAffichees} cumulées</p>
             </div>
             <div className="p-4">
               <p className="text-xs uppercase tracking-wide text-slate-500 flex items-center gap-1.5">
@@ -522,100 +515,40 @@ export default function MaCompagnieClient({
                 <span className="text-amber-300">{compagnie.prix_kg_cargo}</span>
                 <span className="text-slate-500 text-xs"> F$/kg</span>
               </p>
-              <p className="text-[10px] text-slate-500">par defaut</p>
+              <p className="text-[10px] text-slate-500">par défaut</p>
             </div>
           </div>
         )}
+        <nav aria-label="Rubriques de la compagnie" className={styles.navigation}>
+          {navSections.filter(s => s.show).map(s => {
+            const Icon = s.icon;
+            return <a key={s.id} href={'#' + s.id} aria-current={activeSection === s.id ? 'page' : undefined}
+              onClick={event => { event.preventDefault(); selectSection(s.id); }} className={styles.navLink}>
+              <Icon aria-hidden className="h-4 w-4 shrink-0" />{s.label}
+            </a>;
+          })}
+        </nav>
       </header>
 
-      {/* === BARRE DE NAVIGATION ANCRES === */}
-      <nav aria-label="Rubriques de la compagnie" className="sticky top-14 z-20 -mx-4 sm:-mx-5 lg:-mx-6 px-4 sm:px-5 lg:px-6 py-2 bg-slate-950/95 border-y border-slate-800/60">
-        <div className="flex gap-2 overflow-x-auto scrollbar-thin">
-          {navSections.filter(s => s.show).map((s) => {
-            const Icon = s.icon;
-            return (
-              <a
-                key={s.id}
-                href={`#${s.id}`}
-                onClick={s.id === 'parametres' ? () => setShowSettings(true) : undefined}
-                className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg border border-slate-700 bg-slate-900 px-3 text-sm font-medium text-slate-300 transition-colors hover:border-slate-500 hover:text-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-sky-400"
-              >
-                <Icon className="h-3.5 w-3.5" />
-                {s.label}
-              </a>
-            );
-          })}
-        </div>
-      </nav>
+      {(error || success) && activeSection !== 'parametres' && <p role={error ? 'alert' : 'status'} className={'rounded-lg border p-3 text-sm ' + (error ? 'border-red-800 text-red-200' : 'border-emerald-800 text-emerald-200')}>{error || success}</p>}
+      <CompanyDevelopment compagnieId={compagnie.id} canManage={isLeader} section={activeSection} onBalanceChange={() => startTransition(() => router.refresh())} />
 
-      <section id="direction" aria-label="Vue d’ensemble de la compagnie" className="space-y-5 scroll-mt-28">
+      <section hidden={activeSection !== 'direction'} data-company-panel id="direction" aria-label="Vue d’ensemble de la compagnie" className="space-y-5 scroll-mt-28">
         {isLeader && <CompanyPerformance id={compagnie.id} balance={soldeCompagnie} />}
-        {/* Infos compagnie */}
-        <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
-          <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-sky-400" />
-            Informations
-          </h2>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              {logoUrl && (
-                <Image
-                  src={logoUrl}
-                  alt={`Logo ${compagnie.nom}`}
-                  width={48}
-                  height={48}
-                  className="rounded-lg border border-slate-600 object-contain bg-white p-0.5"
-                  unoptimized
-                />
-              )}
-              <div>
-                <p className="text-sm text-slate-400">Nom</p>
-                <p className="text-slate-200 font-medium">{compagnie.nom}</p>
-              </div>
-            </div>
-            {(compagnie.code_oaci || compagnie.callsign_telephonie) && (
-              <div>
-                <p className="text-sm text-slate-400">Identité radio</p>
-                <p className="text-slate-200 font-mono">
-                  {compagnie.code_oaci && <span className="bg-sky-500/20 text-sky-300 px-1.5 py-0.5 rounded text-sm mr-2">{compagnie.code_oaci}</span>}
-                  {compagnie.callsign_telephonie && <span className="text-slate-300">{compagnie.callsign_telephonie}</span>}
-                </p>
-              </div>
-            )}
-            <div>
-              <p className="text-sm text-slate-400">PDG</p>
-              <p className="text-slate-200 flex items-center gap-2">
-                <Crown className="h-4 w-4 text-amber-400" />
-                {compagnie.pdg_identifiant}
-              </p>
-            </div>
-            {compagnie.vban && (
-              <div>
-                <p className="text-sm text-slate-400">VBAN Entreprise</p>
-                <p className="text-slate-200 font-mono text-sm break-all">{compagnie.vban}</p>
-              </div>
-            )}
-            <div className="pt-2 border-t border-slate-700">
-              <p className="text-sm text-slate-400">Tarification</p>
-              <div className="flex gap-4 mt-1">
-                <span className="text-slate-300 text-sm">
-                  <span className="text-emerald-400">{compagnie.pourcentage_salaire}%</span> salaire pilotes
-                </span>
-                <span className="text-slate-300 text-sm">
-                  <span className="text-sky-400">{compagnie.prix_billet_pax} F$</span>/pax
-                </span>
-                <span className="text-slate-300 text-sm">
-                  <span className="text-amber-400">{compagnie.prix_kg_cargo} F$</span>/kg
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <details className="rounded-xl border border-slate-700/70 bg-slate-900/50 p-4" open={!isLeader}>
+          <summary className="cursor-pointer text-sm font-semibold text-slate-300">Identité et coordonnées de la compagnie</summary>
+          <dl className="mt-4 grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+            <div><dt className="text-xs text-slate-500">Identité radio</dt><dd className="mt-1 font-mono text-slate-200">{compagnie.code_oaci || 'Code non renseigné'}<span className="mt-1 block font-sans text-xs text-slate-400">{compagnie.callsign_telephonie || 'Radiophonie non renseignée'}</span></dd></div>
+            <div><dt className="text-xs text-slate-500">Présidence</dt><dd className="mt-1 text-slate-200">{compagnie.pdg_identifiant}</dd></div>
+            <div><dt className="text-xs text-slate-500">VBAN entreprise</dt><dd className="mt-1 break-all font-mono text-xs text-slate-200">{compagnie.vban || 'Non renseigné'}</dd></div>
+            <div><dt className="text-xs text-slate-500">Tarifs par défaut</dt><dd className="mt-1 text-slate-200">{compagnie.prix_billet_pax} F$/pax · {compagnie.prix_kg_cargo} F$/kg<span className="mt-1 block text-xs text-slate-400">Salaire pilotes : {compagnie.pourcentage_salaire} %</span></dd></div>
+          </dl>
+        </details>
 
       </section>
 
       {/* === SECTION : EQUIPE === */}
-      <section id="equipe" className="space-y-6 scroll-mt-28">
+      <section hidden={activeSection !== 'equipe'} data-company-panel id="equipe" className="space-y-6 scroll-mt-28">
       <div className="grid gap-6">
         {/* Liste des pilotes */}
         <div className="card transition-all duration-200 hover:border-slate-600/60 hover:shadow-lg hover:shadow-sky-500/5">
@@ -891,7 +824,7 @@ export default function MaCompagnieClient({
       </section>
       {/* === FIN SECTION EQUIPE === */}
 
-      <section id="operations" aria-labelledby="company-operations-title" className="space-y-5 scroll-mt-28">
+      <section hidden={activeSection !== 'operations'} data-company-panel id="operations" aria-labelledby="company-operations-title" className="space-y-5 scroll-mt-28">
         <div><h2 id="company-operations-title" className="text-xl font-semibold text-slate-100">Exploitation</h2><p className="mt-1 text-sm text-slate-400">Appareils, autorisations, entretien et vols de repositionnement.</p></div>
       {/* === SECTION : FLOTTE === */}
       <div id="flotte" className="space-y-6 scroll-mt-28">
@@ -918,7 +851,7 @@ export default function MaCompagnieClient({
         {isLeader && <CompagnieVolsFerryClient compagnieId={compagnie.id} />}
       </section>
 
-      {isLeader && <section id="reseau" aria-labelledby="company-network-title" className="space-y-5 scroll-mt-28">
+      {isLeader && <section hidden={activeSection !== 'reseau'} data-company-panel id="reseau" aria-labelledby="company-network-title" className="space-y-5 scroll-mt-28">
         <div><h2 id="company-network-title" className="text-xl font-semibold text-slate-100">Réseau et implantation</h2><p className="mt-1 text-sm text-slate-400">Hubs, hangars et priorités de stationnement de la compagnie.</p></div>
         <CompagnieHubsClient compagnieId={compagnie.id} />
         <div id="portes" className="card scroll-mt-28"><CompagniePrioritesPortesClient compagnieId={compagnie.id} isPdg={isLeader} /></div>
@@ -926,7 +859,7 @@ export default function MaCompagnieClient({
 
       {/* === SECTION : FINANCES === */}
       {isLeader && (
-        <section id="finances" className="space-y-6 scroll-mt-28">
+        <section hidden={activeSection !== 'finances'} data-company-panel id="finances" className="space-y-6 scroll-mt-28">
           <CompagniePretClient compagnieId={compagnie.id} />
 
           <Link
@@ -945,11 +878,11 @@ export default function MaCompagnieClient({
         </section>
       )}
 
-      {isLeader && <section id="parametres" aria-labelledby="company-settings-title" className="space-y-4 scroll-mt-28">
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-4"><div><h2 id="company-settings-title" className="text-lg font-semibold text-slate-100">Identité et paramètres</h2><p className="mt-1 text-sm text-slate-400">Réglages par défaut, identité radio et logo de la compagnie.</p></div><button type="button" aria-expanded={showSettings} aria-controls="company-settings-content" onClick={() => setShowSettings(value => !value)} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-600 px-3 text-sm font-medium text-slate-200 hover:bg-slate-800"><Settings aria-hidden className="h-4 w-4"/>{showSettings ? 'Réduire les paramètres' : 'Ouvrir les paramètres'}</button></div>
+      {isLeader && <section hidden={activeSection !== 'parametres'} data-company-panel id="parametres" aria-labelledby="company-settings-title" className="space-y-4 scroll-mt-28">
+        <div><h2 id="company-settings-title" className="text-xl font-semibold text-slate-100">Identité et paramètres</h2><p className="mt-1 text-sm text-slate-400">Réglages par défaut, identité radio et logo de la compagnie.</p></div>
         <div id="company-settings-content">
       {/* Paramètres PDG / Co-PDG */}
-      {isLeader && showSettings && (
+      {isLeader && (
         <div className="card border-sky-500/30 bg-sky-500/5 animate-slide-up">
           <h2 className="text-lg font-semibold text-slate-100 mb-4 flex items-center gap-2">
             <Settings className="h-5 w-5 text-sky-400" />
@@ -983,8 +916,9 @@ export default function MaCompagnieClient({
               <input
                 type="number"
                 value={prixBillet}
+                step="0.01"
                 onChange={(e) => setPrixBillet(e.target.value)}
-                min="1"
+                min="0"
                 className="input w-full"
               />
             </div>
@@ -996,8 +930,9 @@ export default function MaCompagnieClient({
               <input
                 type="number"
                 value={prixCargo}
+                step="0.01"
                 onChange={(e) => setPrixCargo(e.target.value)}
-                min="1"
+                min="0"
                 className="input w-full"
               />
             </div>
@@ -1113,6 +1048,7 @@ export default function MaCompagnieClient({
       )}
 
         </div>
+        {compagnie.alliance_id && <div className="rounded-xl border border-red-900/60 bg-red-950/10 p-4"><h3 className="font-semibold text-slate-200">Appartenance à l’alliance</h3><p className="mt-1 text-sm text-slate-400">Quitter l’alliance retire votre compagnie du réseau commun.</p><button type="button" onClick={handleQuitterAlliance} disabled={quittingAlliance} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded-lg border border-red-800 px-3 text-sm text-red-200 hover:bg-red-900/30 disabled:opacity-50"><LogOut aria-hidden className="h-4 w-4" />{quittingAlliance ? 'En cours…' : 'Quitter l’alliance'}</button></div>}
       </section>}
     </div>
   );

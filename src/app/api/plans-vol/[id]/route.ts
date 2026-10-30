@@ -59,7 +59,7 @@ export async function PATCH(
     const admin = createAdminClient();
 
     const { data: plan, error: planError } = await admin.from('plans_vol')
-      .select('id, pilote_id, copilote_id, copilote_vol_sans_atc, flight_submission_quote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, deroutement_at, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
+      .select('id, economy_version, pilote_id, copilote_id, copilote_vol_sans_atc, flight_submission_quote_id, statut, current_holder_user_id, current_holder_position, current_holder_aeroport, automonitoring, pending_transfer_aeroport, pending_transfer_position, pending_transfer_at, vol_commercial, compagnie_id, revenue_brut, salaire_pilote, temps_prev_min, heure_depart_estimee, accepted_at, created_at, numero_vol, aeroport_arrivee, type_vol, demande_cloture_at, vol_sans_atc, nature_transport, type_cargaison, type_cargaison_libelle, compagnie_avion_id, siavi_avion_id, aeroport_depart, nb_pax_genere, cargo_kg_genere, vol_ferry, location_loueur_compagnie_id, location_pourcentage_revenu_loueur, location_prix_journalier, location_id, strip_atd, deroutement_at, created_by_atc, current_afis_user_id, medevac_mission_id, medevac_segment_index, medevac_total_segments, medevac_next_plan_id, armee_mission_id')
       .eq('id', id)
       .single();
     if (planError) {
@@ -256,7 +256,11 @@ export async function PATCH(
             );
           }
 
-          if (plan.compagnie_avion_id) {
+          if (paiementResult.revenus?.economieVersion === 2) {
+            // Version 2 already closes, moves the aircraft and applies wear in
+            // the same transaction as its financial settlement.
+            usureAppliquee = paiementResult.revenus.usureAppliquee ?? 0;
+          } else if (plan.compagnie_avion_id) {
             const { data: avion } = await admin
               .from('compagnie_avions')
               .select('id, usure_percent')
@@ -459,7 +463,7 @@ export async function PATCH(
           await remettreAvionAuSol();
         }
         await annulerCascadeMedevac();
-        const { error } = await admin.from('plans_vol').update({
+        const { data: cancelled, error } = await admin.from('plans_vol').update({
           statut: 'annule',
           cloture_at: new Date().toISOString(),
           current_holder_user_id: null,
@@ -469,12 +473,12 @@ export async function PATCH(
           pending_transfer_aeroport: null,
           pending_transfer_position: null,
           pending_transfer_at: null,
-        }).eq('id', id);
-        if (error) return NextResponse.json({ error: 'Erreur lors de l\'annulation' }, { status: 400 });
+        }).eq('id', id).eq('statut', plan.statut).select('id');
+        if (error || !cancelled?.length) return NextResponse.json({ error: 'Le plan a changé pendant l’annulation. Actualisez la page.' }, { status: 409 });
         return NextResponse.json({ ok: true, annule: true });
       }
       if (isManualStrip && (isHolder || isAdmin)) {
-        const { error: err } = await admin.from('plans_vol').update({
+        const { data: cancelled, error: err } = await admin.from('plans_vol').update({
           statut: 'annule',
           cloture_at: new Date().toISOString(),
           current_holder_user_id: null,
@@ -484,8 +488,8 @@ export async function PATCH(
           pending_transfer_aeroport: null,
           pending_transfer_position: null,
           pending_transfer_at: null,
-        }).eq('id', id);
-        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+        }).eq('id', id).eq('statut', plan.statut).select('id');
+        if (err || !cancelled?.length) return NextResponse.json({ error: 'Le plan a changé pendant l’annulation. Actualisez la page.' }, { status: 409 });
         return NextResponse.json({ ok: true });
       }
       if (isPiloteOwner && plan.statut !== 'annule') {
@@ -495,7 +499,7 @@ export async function PATCH(
           await remettreAvionAuSol();
         }
         await annulerCascadeMedevac();
-        const { error: err } = await admin.from('plans_vol').update({
+        const { data: cancelled, error: err } = await admin.from('plans_vol').update({
           statut: 'annule',
           cloture_at: new Date().toISOString(),
           current_holder_user_id: null,
@@ -505,8 +509,8 @@ export async function PATCH(
           pending_transfer_aeroport: null,
           pending_transfer_position: null,
           pending_transfer_at: null,
-        }).eq('id', id);
-        if (err) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
+        }).eq('id', id).eq('statut', plan.statut).select('id');
+        if (err || !cancelled?.length) return NextResponse.json({ error: 'Le plan a changé pendant l’annulation. Actualisez la page.' }, { status: 409 });
 
         if (holderId) {
           await admin.from('messages').insert({
@@ -852,6 +856,12 @@ export async function PATCH(
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
       if (profile?.role !== 'admin') return NextResponse.json({ error: 'Réservé aux administrateurs.' }, { status: 403 });
       if (plan.statut === 'cloture' || plan.statut === 'annule') return NextResponse.json({ error: 'Ce plan est déjà clôturé ou annulé.' }, { status: 400 });
+
+      if (plan.economy_version === 2) {
+        const { data: result, error } = await admin.rpc('force_close_flight_economy', { p_plan: id, p_admin: user.id });
+        if (error || !result) return NextResponse.json({ error: error?.message || 'La clôture administrative a échoué. Aucun règlement partiel effectué.' }, { status: 409 });
+        return NextResponse.json(result);
+      }
 
       const now = new Date();
       const refDate = plan.accepted_at || plan.created_at;

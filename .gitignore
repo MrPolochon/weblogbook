@@ -46,6 +46,11 @@ build_output*.txt
 .analysis/
 radar-capture/output/
 
+# Conception locale, simulations et résultats privés des cartes.
+/output/
+/tmp/
+/reference-note.png
+
 # Local Blender generation runtime
 .tools/blender311/
 .tools/blender-wheels/

@@ -4,6 +4,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/company-development",
+      "schedule": "5 * * * *"
+    },
+    {
       "path": "/api/cron/support-tickets",
       "schedule": "*/15 * * * *"
     },

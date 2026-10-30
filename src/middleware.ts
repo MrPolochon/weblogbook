@@ -190,6 +190,7 @@ async function runMiddleware(request: NextRequest) {
   const isCodeConduite = pathname === '/code-de-conduite' || pathname.startsWith('/docs/');
   const isLivretProgression = pathname === '/livret-progression';
   const isManuelControleur = pathname === '/manuel-controleur';
+  const isPublicReviews = request.method === 'GET' && (pathname === '/avis-web' || pathname === '/api/avis-web');
   const isTranscript = pathname.startsWith('/support/transcript/');
   const isAeroSchool = pathname.startsWith('/aeroschool');
   const isCalendrier = pathname === '/calendrier' || pathname === '/api/calendrier';
@@ -249,7 +250,7 @@ async function runMiddleware(request: NextRequest) {
   if (
     isAuthCallback || isApiPublic || isApiDiscord || isApiSupportBot || isApiDiscordInteractions || isApiAeroSchoolPublic || isApiAuth ||
     isSetup || isLogin || isDownload || isCodeConduite || isLivretProgression || isManuelControleur || isAeroSchool || isCalendrier || isCarteAtc || isApiAtcOnline ||
-    isMaintenance || isTranscript || isPublicBulletinPath(pathname) || isPublicMajorEventPath(pathname, request.method)
+    isMaintenance || isTranscript || isPublicReviews || isPublicBulletinPath(pathname) || isPublicMajorEventPath(pathname, request.method)
   ) {
     return NextResponse.next({ request });
   }

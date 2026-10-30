@@ -1,159 +1,22 @@
-export const dynamic = 'force-dynamic';
+import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { NextResponse } from 'next/server';
-import { COUT_AFFRETER_TECHNICIENS, calculerDureeMaintenance } from '@/lib/compagnie-utils';
-import { isCoPdg } from '@/lib/co-pdg-utils';
+import { applyRateLimit } from '@/lib/rate-limit';
 
-export async function POST(
-  _request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const { id } = await params;
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return NextResponse.json({ error: 'Non autorisé' }, { status: 401 });
+export const dynamic = 'force-dynamic';
 
-    const admin = createAdminClient();
-    const { data: avion } = await admin
-      .from('compagnie_avions')
-      .select('id, compagnie_id, statut, usure_percent, aeroport_actuel, maintenance_fin_at')
-      .eq('id', id)
-      .single();
-    if (!avion) return NextResponse.json({ error: 'Avion introuvable.' }, { status: 404 });
-
-    const nowIso = new Date().toISOString();
-    const { data: locationActive } = await admin
-      .from('compagnie_locations')
-      .select('id, loueur_compagnie_id, locataire_compagnie_id, start_at, end_at, statut')
-      .eq('avion_id', id)
-      .eq('statut', 'active')
-      .lte('start_at', nowIso)
-      .gte('end_at', nowIso)
-      .maybeSingle();
-
-    // Vérifier si l'avion est déjà en maintenance
-    if (avion.statut === 'maintenance' && avion.maintenance_fin_at) {
-      const maintenanceFin = new Date(avion.maintenance_fin_at);
-      const maintenant = new Date();
-      
-      if (maintenant >= maintenanceFin) {
-        // La maintenance est terminée, réparer l'avion
-        const { error: avionErr } = await admin
-          .from('compagnie_avions')
-          .update({
-            usure_percent: 100,
-            statut: 'ground',
-            maintenance_fin_at: null,
-          })
-          .eq('id', id);
-
-        if (avionErr) {
-          return NextResponse.json({ error: 'Erreur lors de la réparation.' }, { status: 500 });
-        }
-
-        return NextResponse.json({ ok: true, repare: true, message: 'Avion réparé avec succès !' });
-      } else {
-        // Maintenance en cours, retourner le temps restant
-        const tempsRestantMs = maintenanceFin.getTime() - maintenant.getTime();
-        const tempsRestantMin = Math.ceil(tempsRestantMs / 60000);
-        return NextResponse.json({ 
-          error: `Techniciens en cours de travail. Temps restant : ${tempsRestantMin} min.`,
-          maintenance_fin_at: avion.maintenance_fin_at,
-          temps_restant_min: tempsRestantMin
-        }, { status: 400 });
-      }
-    }
-
-    if (avion.statut !== 'bloque' && avion.usure_percent !== 0) {
-      return NextResponse.json({ error: 'L\'avion n\'est pas bloqué à 0% d\'usure.' }, { status: 400 });
-    }
-
-    const compagnieCibleId = locationActive?.locataire_compagnie_id || avion.compagnie_id;
-    const { data: compagnie } = await admin
-      .from('compagnies')
-      .select('id, pdg_id')
-      .eq('id', compagnieCibleId)
-      .single();
-    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
-    
-    const isLeader =
-      compagnie?.pdg_id === user.id ||
-      (await isCoPdg(user.id, compagnieCibleId, admin));
-    if (!isLeader && profile?.role !== 'admin') {
-      if (locationActive) {
-        return NextResponse.json({ error: 'Avion en location : le PDG locataire gère la maintenance.' }, { status: 403 });
-      }
-      return NextResponse.json({ error: 'Seul le PDG peut affréter des techniciens.' }, { status: 403 });
-    }
-
-    // Vérifier le solde
-    const { data: compte } = await admin
-      .from('felitz_comptes')
-      .select('id, solde')
-      .eq('compagnie_id', compagnieCibleId)
-      .eq('type', 'entreprise')
-      .single();
-    
-    if (!compte) {
-      return NextResponse.json({ error: 'Compte entreprise introuvable.' }, { status: 500 });
-    }
-    if (compte.solde < COUT_AFFRETER_TECHNICIENS) {
-      return NextResponse.json({ 
-        error: `Solde insuffisant. Coût : ${COUT_AFFRETER_TECHNICIENS.toLocaleString('fr-FR')} F$.` 
-      }, { status: 400 });
-    }
-
-    const { debiterFelitzAvecTrace, crediterFelitzAvecTrace } = await import('@/lib/felitz/atomic');
-    const debitRes = await debiterFelitzAvecTrace(admin, {
-      compteId: compte.id,
-      montant: COUT_AFFRETER_TECHNICIENS,
-      libelle: `Affrètement techniciens pour ${avion.aeroport_actuel}`,
-    });
-    if (!debitRes.ok) {
-      return NextResponse.json({ error: 'Solde insuffisant (transaction concurrente).' }, { status: 400 });
-    }
-
-    // Calculer la durée de maintenance (aléatoire entre 30 et 90 min)
-    const dureeMaintenance = calculerDureeMaintenance();
-    
-    // Mettre l'avion en maintenance avec un délai
-    const maintenanceFinAt = new Date(Date.now() + dureeMaintenance * 60 * 1000);
-    const { error: avionErr } = await admin
-      .from('compagnie_avions')
-      .update({
-        statut: 'maintenance',
-        maintenance_fin_at: maintenanceFinAt.toISOString(),
-      })
-      .eq('id', id);
-
-    if (avionErr) {
-      // Remboursement avec trace de compensation
-      await crediterFelitzAvecTrace(admin, {
-        compteId: compte.id,
-        montant: COUT_AFFRETER_TECHNICIENS,
-        libelle: `Annulation affrètement (échec mise en maintenance)`,
-      });
-      return NextResponse.json({ error: 'Erreur lors de la mise en maintenance.' }, { status: 500 });
-    }
-
-    // Formater la durée pour l'affichage
-    const heures = Math.floor(dureeMaintenance / 60);
-    const minutes = dureeMaintenance % 60;
-    const dureeText = heures > 0 
-      ? `${heures}h${minutes > 0 ? minutes.toString().padStart(2, '0') : ''}` 
-      : `${minutes} minutes`;
-
-    return NextResponse.json({ 
-      ok: true, 
-      cout: COUT_AFFRETER_TECHNICIENS,
-      maintenance_fin_at: maintenanceFinAt.toISOString(),
-      temps_attente_min: dureeMaintenance,
-      message: `Techniciens affrétés. L'avion sera réparé dans ${dureeText}.`
-    });
-  } catch (e) {
-    console.error('POST compagnies/avions/affreter-techniciens:', e);
-    return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
+export async function POST(request: Request,{ params }: { params: Promise<{id:string}> }) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error:'Non authentifié.' },{ status:401 });
+  if (!applyRateLimit(request,'default',`maintenance:${user.id}`).allowed) return NextResponse.json({ error:'Veuillez patienter avant de réessayer.' },{ status:429 });
+  const { id } = await params;
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id)) return NextResponse.json({ error:'Avion invalide.' },{ status:400 });
+  const admin = createAdminClient();
+  const { data,error } = await admin.rpc('start_company_maintenance',{ p_actor:user.id,p_aircraft:id });
+  if (error) {
+    console.error('Maintenance technique:',error);
+    return NextResponse.json({ error: error.code==='42501'?'Accès refusé.':error.code==='22023'?error.message:'Le service de maintenance est temporairement indisponible.' },{ status:error.code==='42501'?403:error.code==='22023'?400:503 });
   }
+  return NextResponse.json(data);
 }

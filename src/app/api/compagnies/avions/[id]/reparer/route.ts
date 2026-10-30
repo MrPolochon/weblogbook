@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { calculerCoutReparationHub } from '@/lib/compagnie-utils';
 import { isCoPdg } from '@/lib/co-pdg-utils';
+import { maintenanceDevelopmentEffects } from '@/lib/maintenance-development';
 
 export async function POST(
   _request: Request,
@@ -32,7 +33,7 @@ export async function POST(
     if (avion.usure_percent == null) {
       return NextResponse.json({ error: 'État technique inconnu : faites vérifier l’appareil avant réparation.' }, { status: 400 });
     }
-    const cout = calculerCoutReparationHub(prixAvion, avion.usure_percent);
+    let cout = calculerCoutReparationHub(prixAvion, avion.usure_percent);
 
     const nowIso = new Date().toISOString();
     const { data: locationActive } = await admin
@@ -61,6 +62,9 @@ export async function POST(
       }
       return NextResponse.json({ error: 'Seul le PDG peut réparer les avions.' }, { status: 403 });
     }
+    const effects = await maintenanceDevelopmentEffects(admin, compagnieCibleId, id);
+    if (effects.inspectionRequired) return NextResponse.json({ error: 'Une inspection obligatoire est requise : ouvrez une demande auprès d’une entreprise de réparation pour effectuer le cycle technique complet.' }, { status: 400 });
+    cout = Math.max(0,Math.round(cout*effects.priceFactor));
 
     // Vérifier que l'avion est à un hub (propre ou alliance si partage activé)
     const { data: hub } = await admin

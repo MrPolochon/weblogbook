@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { AEROPORTS_VOL_CIVIL, getAeroportInfo, getPrixOptimal, PRIX_MAXIMUM_ABSOLU } from '@/lib/aeroports-ptfs';
 import { Plus, Trash2, RefreshCw, Route, ArrowLeftRight, Info } from 'lucide-react';
+import { financialInput } from '@/lib/financial-input';
 
 interface TarifLiaison {
   id: string;
@@ -82,7 +83,7 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
           compagnie_id: compagnieId,
           aeroport_depart: newDepart,
           aeroport_arrivee: newArrivee,
-          prix_billet: parseInt(newPrix) || prixBilletDefaut,
+          prix_billet: financialInput(newPrix, 'Prix du billet', 10_000_000),
           bidirectionnel: newBidirectionnel,
         }),
       });
@@ -211,7 +212,8 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
               className="input w-full text-sm"
               value={newPrix}
               onChange={(e) => setNewPrix(e.target.value)}
-              min="1"
+              min="0"
+              step="0.01"
             />
           </div>
           <div className="flex items-end gap-2">
@@ -232,7 +234,7 @@ export default function TarifsLiaisonsClient({ compagnieId, prixBilletDefaut }: 
         {newDepart && newArrivee && newDepart !== newArrivee && (
           <div className="text-sm">
             {(() => {
-              const impact = getImpactIndicator(parseInt(newPrix) || 0, newDepart, newArrivee);
+              const impact = getImpactIndicator(Number(newPrix), newDepart, newArrivee);
               return (
                 <span className={impact.color}>→ {impact.text}</span>
               );

@@ -79,6 +79,7 @@ const sections: Section[] = [
     links: [
       { href: '/admin/felitz-bank', label: 'Felitz Bank', desc: 'Comptes & transactions', icon: Landmark },
       { href: '/admin/taxes', label: 'Taxes', desc: 'Taxes aéroportuaires', icon: Receipt },
+      { href: '/admin/economie', label: 'Économie & RSE', desc: 'Ouverture et contrôle', icon: TrendingUp },
     ],
   },
   {

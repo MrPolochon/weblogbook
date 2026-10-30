@@ -17,6 +17,7 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac, autom
   const busyRef = useRef(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [clotureDirecte, setClotureDirecte] = useState(false);
+  const [bankSettlement, setBankSettlement] = useState<{ salary: number | null } | null>(null);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
@@ -33,6 +34,7 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac, autom
     if (busyRef.current) return;
     busyRef.current = true;
     setLoading(true);
+    setBankSettlement(null);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, {
         method: 'PATCH',
@@ -44,6 +46,9 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac, autom
       
       // Vérifier si clôture directe ou en attente
       if (d.statut === 'cloture') {
+        if (d.paiement?.revenus?.economieVersion === 2) {
+          setBankSettlement({ salary: Number.isFinite(d.paiement.revenus.salaire) ? d.paiement.revenus.salaire : null });
+        }
         setClotureDirecte(true);
         setShowSuccessModal(true);
       } else {
@@ -52,7 +57,9 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac, autom
       }
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
+    } finally {
       setLoading(false);
+      busyRef.current = false;
     }
   }
 
@@ -86,6 +93,10 @@ export default function PlanVolCloturerButton({ planId, statut, isMedevac, autom
                         : 'Votre vol a été clôturé. Voulez-vous l\'enregistrer dans votre logbook ?')
                     : 'La demande de clôture a été envoyée à l\'ATC.'}
                 </p>
+                {bankSettlement && <div role="status" className="mb-4 rounded-lg border border-emerald-700/50 bg-emerald-950/20 p-3 text-sm text-emerald-200">
+                  <p>Règlement crédité sur Felitz Bank.</p>
+                  {bankSettlement.salary !== null && <p className="mt-1 text-xs text-emerald-300">Salaire de l’équipage versé : {bankSettlement.salary.toLocaleString('fr-FR')} F$.</p>}
+                </div>}
                 
                 {clotureDirecte && (
                   <div className="flex flex-col gap-2">
