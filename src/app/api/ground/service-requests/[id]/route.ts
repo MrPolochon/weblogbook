@@ -113,15 +113,11 @@ export async function PATCH(
   if (body.pilote_confirme !== undefined && existingRequest.pilote_id !== user.id) return NextResponse.json({ error: 'Seul le pilote peut confirmer son service.' }, { status: 403 });
   if (body.pilote_confirme !== undefined) updates.pilote_confirme = body.pilote_confirme;
 
-  const { data: updated, error } = await admin
-    .from('ground_service_requests')
-    .update(updates)
-    .eq('id', id)
-    .eq('statut', existingRequest.statut)
-    .select()
-    .maybeSingle();
+  const { data: updated, error } = body.statut === 'completed'
+    ? await admin.rpc('complete_flight_ground_service', { p_actor: user.id, p_request: id, p_expected: existingRequest.statut, p_result: updates })
+    : await admin.from('ground_service_requests').update(updates).eq('id', id).eq('statut', existingRequest.statut).select().maybeSingle();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) return NextResponse.json({ error: error.code === 'PGRST202' ? 'La validation sécurisée des services au sol est temporairement indisponible.' : error.message }, { status: ['23514','40P01'].includes(error.code || '') ? 409 : error.code === 'PGRST202' ? 503 : 500 });
 
   if (!updated) return NextResponse.json({ error: 'Cette demande vient d’être prise en charge ou modifiée. Actualisez.' }, { status: 409 });
 

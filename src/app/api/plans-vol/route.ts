@@ -10,6 +10,8 @@ import { rateLimitShared } from '@/lib/rate-limit-shared';
 import { STATUTS_PLAN_OCCUPES, hasOccupiedPlan, isCompanyMember } from '@/lib/plans-vol/crew';
 import { notifyUser } from '@/lib/notifications';
 import { checkMajorFlight, reservedDeparture, validateBookingFlight, bookingLinkedToPlan } from '@/lib/events/server';
+import { itineraryDetail } from '@/lib/company-itineraries/server';
+import { itineraryUuid } from '@/lib/company-itineraries/input';
 
 // Ordre de priorité pour recevoir un nouveau plan de vol (uniquement à l’aéroport de départ)
 // Delivery → Clairance → Ground → Tower → DEP → APP → Center
@@ -83,6 +85,15 @@ export async function POST(request: Request) {
     const isMilitaryPlan = armeeAvionRaw != null && String(armeeAvionRaw).trim() !== '';
 
     const admin = createAdminClient();
+    if (body.itinerary_id || body.itinerary_leg_id) {
+      if (!itineraryUuid.test(String(body.itinerary_id || '')) || !itineraryUuid.test(String(body.itinerary_leg_id || ''))) throw new FlightSubmissionError('Itinéraire ou tronçon invalide.');
+      const detail = await itineraryDetail(user.id, body.itinerary_id);
+      if (detail.itinerary.pilot_id !== user.id) throw new FlightSubmissionError('Seul le pilote affecté peut reprendre cet itinéraire.', 403);
+      const leg = detail.legs.find(leg => leg.id === body.itinerary_leg_id);
+      if (!leg || compagnie_id !== detail.itinerary.company_id || compagnie_avion_id !== detail.itinerary.aircraft_id || ad !== leg.origin || aa !== leg.destination || !vol_commercial || vol_ferry || isMilitaryPlan || nature_transport !== detail.itinerary.nature_transport) throw new FlightSubmissionError('Le plan ne correspond pas au tronçon prévu.');
+      if (leg.plan_id) return NextResponse.json({ ok: true, id: leg.plan_id, itinerary_id: detail.itinerary.id, replayed: true });
+      if (!detail.itinerary.can_resume || detail.next_leg?.id !== leg.id) throw new FlightSubmissionError(detail.itinerary.status === 'diverted' ? 'Après une déroute, annulez les tronçons restants et replanifiez depuis l’arrivée réelle.' : 'Clôturez le tronçon en cours avant de reprendre.', 409);
+    }
     if (body.event_reservation_id) {
       heureDepartIso = await reservedDeparture(user.id, body.event_reservation_id, heure_depart);
       if (!heureDepartIso) return NextResponse.json({ error: 'Réservation pilote introuvable ou horaire invalide.' }, { status: 400 });
@@ -194,9 +205,12 @@ export async function POST(request: Request) {
     const typeCargaisonLibelleFinal = flightQuote?.type_cargaison_libelle ?? null;
     const persistPlan = async (plan: Record<string, unknown>) => {
       if (isMilitaryPlan) return admin.from('plans_vol').insert(plan).select('id').single();
-      const { data, error } = await admin.rpc('submit_flight_plan_integrity', {
-        p_actor: user.id, p_plan: plan, p_quote: flightQuote!.quote_id,
-      });
+      const itinerary = body.itinerary_id;
+      const leg = body.itinerary_leg_id;
+      if ((itinerary || leg) && (!itineraryUuid.test(String(itinerary || '')) || !itineraryUuid.test(String(leg || '')))) throw new FlightSubmissionError('Itinéraire ou tronçon invalide.');
+      const { data, error } = itinerary
+        ? await admin.rpc('submit_company_itinerary_leg', { p_actor: user.id, p_itinerary: itinerary, p_leg: leg, p_plan: plan, p_quote: flightQuote!.quote_id })
+        : await admin.rpc('submit_flight_plan_integrity', { p_actor: user.id, p_plan: plan, p_quote: flightQuote!.quote_id });
       if (error || !data?.id) throw submissionError(error);
       return { data: { id: data.id as string }, error: null };
     };

@@ -42,3 +42,26 @@ test('expiration at click blocks both normal and no-controller confirmation befo
   const c=mount();try{c.commercial();const expiry=Date.now()+60000;await c.resolve(0,{expires_at:new Date(expiry).toISOString()});c.details();c.step(3);await c.submit();assert.equal(c.deposits.length,1);c.now(expiry+1);const confirm=c.button('Oui, voler sans ATC');assert.ok(confirm);await confirm.props.onClick();await c.flush();assert.equal(c.deposits.length,1);assert.match(c.text,/expiré|confirmation/);}finally{c.cleanup();}
   const regular=mount();try{regular.commercial();const expiry=Date.now()+60000;await regular.resolve(0,{expires_at:new Date(expiry).toISOString()});regular.details();regular.step(3);regular.now(expiry+1);await regular.submit();assert.equal(regular.deposits.length,0);assert.match(regular.text,/expiré/);}finally{regular.cleanup();}
 });
+
+test('itinerary prefill uses the normal quote and deposit, preserves the explicit leg and asks for flight details',async()=>{
+  const c=mount({initialItineraryId:'itinerary-a'});try{
+    assert.match(c.text,/Chargement du prochain tronçon/);assert.equal(c.deposits.length,0);
+    const next={id:'leg-b',itinerary_id:'itinerary-a',leg_index:2,origin:'IRFD',destination:'ITKO',preparation:{type_vol:'VFR',temps_prev_min:35},status:'planned',plan_id:null};
+    const itinerary={id:'itinerary-a',company_id:'company-a',aircraft_id:'aircraft-a',flight_number:'AFR777',nature_transport:'passagers',origin:'ILAR',destination:'IPPH',status:'paused',can_resume:true,legs:[{...next,id:'leg-a',leg_index:1,origin:'ILAR',destination:'IRFD',status:'completed'},next]};
+    assert.equal(c.requests[0].url,'/api/itineraires/itinerary-a');c.requests[0].resolve({itinerary,legs:itinerary.legs,next_leg:next,current_plan_id:null});await c.flush();
+    assert.match(c.text,/Destination finale : IPPH/);assert.equal(c.requests[1].url,'/api/plans-vol/devis');
+    assert.equal(c.field('Arrivée').props.disabled,true);assert.equal(c.field('Pour quelle compagnie ?').props.disabled,true);
+    await c.resolve(1,{quote_id:'quote-leg-b'});c.step(2);
+    assert.equal(c.field('Numéro de vol').props.value,'AFR777');assert.equal(c.field('Numéro de vol').props.readOnly,true);assert.equal(c.field('Temps de vol prévu').props.value,'35');
+    assert.equal(c.field('Heure de départ (UTC)').props.value,'');assert.equal(c.field('Intentions de vol').props.value,'');
+    c.change('Heure de départ (UTC)','18:30');c.change('Intentions de vol','Transit VFR vers ITKO');c.step(3);await c.submit();
+    assert.equal(c.deposits.length,1);assert.equal(c.deposits[0].itinerary_id,'itinerary-a');assert.equal(c.deposits[0].itinerary_leg_id,'leg-b');assert.equal(c.deposits[0].quote_id,'quote-leg-b');assert.equal(c.deposits[0].vol_commercial,true);assert.equal(c.deposits[0].numero_vol,'AFR777');
+  }finally{c.cleanup();}
+});
+
+test('an unavailable or another pilot itinerary never falls back to an unrelated flight deposit',async()=>{
+  for(const unavailable of [true,false]){const c=mount({initialItineraryId:'itinerary-a'});try{
+    if(unavailable)c.requests[0].reject(Error('Itinéraire introuvable'));else c.requests[0].resolve({itinerary:{can_resume:false},next_leg:null,current_plan_id:null});
+    await c.flush();assert.equal(c.find(node=>node.type==='form'),undefined);assert.equal(c.deposits.length,0);assert.match(c.text,unavailable?/introuvable/:/ne peut pas être repris/);assert.ok(c.button('Réessayer le chargement de l’itinéraire'));
+  }finally{c.cleanup();}}
+});

@@ -188,6 +188,13 @@ export async function PATCH(
       const closDirect = enAutoSurveillanceActive || (pasAtcAssigne && planAccepte);
       
       const demandeClotureAt = new Date();
+      if (closDirect && plan.economy_version === 2) {
+        // The settlement owns the only terminal transition. Marking the plan
+        // closed first would advance connected legs before money is durable.
+        const paiement = await envoyerChequesVol(admin, plan, demandeClotureAt);
+        if (!paiement.success) return NextResponse.json({ ok: false, error: paiement.message || 'Règlement impossible. Réessayez la clôture.', paiement }, { status: 409 });
+        return NextResponse.json({ ok: true, statut: 'cloture', direct: true, paiement, usure_appliquee: paiement.revenus?.usureAppliquee ?? 0 });
+      }
       // Pour un segment MEDEVAC intermédiaire (medevac_next_plan_id défini),
       // la clôture directe doit aboutir à 'en_pause' et non 'cloture'.
       const estSegmentIntermediaireMedevac = closDirect && Boolean(plan.medevac_next_plan_id);
@@ -318,6 +325,12 @@ export async function PATCH(
       const canAtc = isAdmin || isHolder || (isAtc && !holderEnLigne);
       if (!canAtc) return NextResponse.json({ error: 'Seul l\'ATC qui detient le plan ou un admin peut confirmer la cloture.' }, { status: 403 });
       if (plan.statut !== 'en_attente_cloture') return NextResponse.json({ error: 'Aucune demande de cloture en attente.' }, { status: 400 });
+
+      if (plan.economy_version === 2) {
+        const result = await finaliserCloturePlan(admin, plan, new Date());
+        if (!result.success) return NextResponse.json({ error: result.error || 'Règlement impossible. La demande de clôture reste en attente.' }, { status: 409 });
+        return NextResponse.json({ ok: true, paiement: result.paiementResult, usure_appliquee: result.usureAppliquee });
+      }
 
       // Verrouillage atomique : passer directement à 'cloture' pour éviter les doubles clôtures
       const { data: locked, error: lockErr } = await admin.from('plans_vol')
