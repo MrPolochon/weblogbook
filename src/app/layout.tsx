@@ -32,7 +32,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="fr" className={inter.variable} data-theme="halloween">
+    <html lang="fr" className={inter.variable}>
       <body className="antialiased font-sans">
         <MotionLifecycle />
         <Suspense fallback={null}>

@@ -10,8 +10,6 @@ import { fetchWithTimeout } from '@/lib/fetch-with-timeout';
 import { Plane, Radio, Shield, Flame, Download, GraduationCap, AlertTriangle, Mail, Sun, Clock, User, Lock, Wrench, Fingerprint, ScrollText, CalendarDays, Eye, EyeOff } from 'lucide-react';
 import { authenticateWithPasskey, registerPasskeyOnDevice } from '@/components/PasskeysSection';
 import PasswordlessLogin from '@/components/PasswordlessLogin';
-import HalloweenAmbience from '@/components/HalloweenAmbience';
-import HalloweenScene from '@/components/HalloweenScene';
 import JoinCompanion from '@/components/JoinCompanion';
 
 const PENDING_VERIFICATION_COOKIE = 'pending_login_verification';
@@ -432,10 +430,8 @@ function LoginPageContent() {
   return (
     <div className="login-shell min-h-dvh relative flex items-center justify-center px-4 py-3 overflow-x-hidden bg-slate-950">
       <MajorEventBanner login />
-      <HalloweenAmbience />
       {fond}
       {overlay}
-      <HalloweenScene />
       
 
       
@@ -466,7 +462,7 @@ function LoginPageContent() {
             )}
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight animate-init animate-slide-up delay-200">PTFS Logbook</h1>
-          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Saison Halloween · Votre réseau aérien</p>
+          <p className="text-cyan-100/80 text-xs sm:text-sm mt-1.5 sm:mt-2 animate-init animate-slide-up delay-300">Votre réseau aérien</p>
         </div>
 
         {/* Sélecteur de mode (masqué lors de l'étape email/code) */}
