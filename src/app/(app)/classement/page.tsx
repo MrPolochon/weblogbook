@@ -68,7 +68,7 @@ export default async function ClassementPage() {
       unavailable = false;
     }
   }
-  let rank = 0;
+
   if (error) {
     console.error('get_classement_pilotes', error);
   }
@@ -98,27 +98,15 @@ export default async function ClassementPage() {
     photoUrl: photosByUser.get(p.id) ?? null,
   }));
 
-  const researchPanel = (
-      <section aria-labelledby="classement-recherches" className="card mx-auto my-6 max-w-6xl p-5">
-        <h2 id="classement-recherches" className="text-lg font-semibold">Recherche technologique des compagnies</h2>
-        <p className="mb-4 text-sm opacity-75">Classement par nombre de recherches débloquées.</p>
-        {unavailable ? <p>Classement temporairement indisponible.</p> : companies.length === 0 ? (
-          <p>Aucune recherche débloquée pour le moment.</p>
-        ) : (
-          <ol className="divide-y divide-slate-500/25">
-            {companies.map((company, index) => {
-              if (company.recherches !== companies[index - 1]?.recherches) rank = index + 1;
-              return (
-                <li key={index} className="flex items-center gap-3 py-2">
-                  <span className="w-8 tabular-nums">#{rank}</span>
-                  <span className="flex-1 font-medium">{company.nom}</span>
-                  <span className="tabular-nums">{company.recherches}</span>
-                </li>
-              );
-            })}
-          </ol>
-        )}
-      </section>
+  const { data: logos } = await admin.from('compagnies').select('id, nom, logo_url');
+  const companiesByName = new Map<string, { id: string; logo_url: string | null }>(
+    ((logos ?? []) as { id: string; nom: string; logo_url: string | null }[]).map(company => [company.nom, company])
   );
-  return <ClassementClient pilotes={pilotes} currentUserId={user.id} researchPanel={researchPanel} />;
+  const researchEntries = companies.map((company, index) => ({
+    id: companiesByName.get(company.nom)?.id ?? String(index),
+    identifiant: company.nom,
+    photoUrl: companiesByName.get(company.nom)?.logo_url ?? null,
+    recherches: company.recherches,
+  }));
+  return <ClassementClient pilotes={pilotes} currentUserId={user.id} researchEntries={researchEntries} researchUnavailable={unavailable} />;
 }

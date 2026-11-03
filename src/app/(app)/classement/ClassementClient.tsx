@@ -31,7 +31,8 @@ type PiloteStat = {
 interface Props {
   pilotes: PiloteStat[];
   currentUserId: string;
-  researchPanel: React.ReactNode;
+  researchEntries: { id: string; identifiant: string; photoUrl: string | null; recherches: number }[];
+  researchUnavailable: boolean;
 }
 
 type CategoryId =
@@ -108,19 +109,22 @@ function medalBg(rank: number): string {
   return 'border-transparent';
 }
 
-export default function ClassementClient({ pilotes, currentUserId, researchPanel }: Props) {
+export default function ClassementClient({ pilotes, currentUserId, researchEntries, researchUnavailable }: Props) {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('heures');
 
+  const isResearch = activeCategory === "research";
   const sorted = useMemo(() => {
+    if (isResearch) return researchEntries.map(entry => ({ ...entry, value: entry.recherches }));
     return [...pilotes]
       .filter(p => activeCategory === 'veteran' ? !!p.memberSince : getValue(p, activeCategory) > 0)
-      .sort((a, b) => getValue(b, activeCategory) - getValue(a, activeCategory));
-  }, [pilotes, activeCategory]);
+      .sort((a, b) => getValue(b, activeCategory) - getValue(a, activeCategory))
+      .map(pilot => ({ ...pilot, value: getValue(pilot, activeCategory) }));
+  }, [pilotes, activeCategory, isResearch, researchEntries]);
 
   const activeCat = CATEGORIES.find(c => c.id === activeCategory)!;
   const ActiveIcon = activeCat.icon;
 
-  const myRank = sorted.findIndex(p => p.id === currentUserId);
+  const myRank = isResearch ? -1 : sorted.findIndex(p => p.id === currentUserId);
   const myStats = pilotes.find(p => p.id === currentUserId);
 
   return (
@@ -130,7 +134,7 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
         <Trophy className="h-6 w-6 text-amber-400" />
         <div>
           <h1 className="text-xl font-semibold text-slate-100">Classement</h1>
-          <p className="text-sm text-slate-500">Comparez-vous aux autres pilotes</p>
+          <p className="text-sm text-slate-500">{isResearch ? "Comparez les compagnies" : "Comparez-vous aux autres pilotes"}</p>
         </div>
         {myRank >= 0 && (
           <div className="ml-auto px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
@@ -172,7 +176,6 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
         })}
       </div>
 
-      {activeCategory === "research" ? researchPanel : <>
       {/* Active category description */}
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800/40 border border-slate-800/60">
         <ActiveIcon className={`h-5 w-5 ${activeCat.color}`} />
@@ -180,7 +183,7 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
           <p className="text-sm font-medium text-slate-200">{activeCat.label}</p>
           <p className="text-xs text-slate-500">{activeCat.description}</p>
         </div>
-        <p className="ml-auto text-xs text-slate-600">{sorted.length} pilote{sorted.length > 1 ? 's' : ''}</p>
+        <p className="ml-auto text-xs text-slate-600">{sorted.length} {isResearch ? 'compagnie' : 'pilote'}{sorted.length > 1 ? 's' : ''}</p>
       </div>
 
       {/* Podium (top 3) */}
@@ -204,7 +207,7 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
                 <p className="text-[10px] text-slate-500 font-mono">#{rank + 1}</p>
                 <p className={`text-sm font-semibold truncate max-w-full ${isMe ? 'text-violet-300' : 'text-slate-200'}`}>{p.identifiant}</p>
                 <p className={`text-lg font-bold mt-1 ${activeCat.color}`}>
-                  {formatValue(getValue(p, activeCategory), activeCategory)}
+                  {formatValue(p.value, activeCategory)}
                 </p>
               </div>
             );
@@ -216,17 +219,17 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
       <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 overflow-hidden">
         <div className="grid grid-cols-[3rem_1fr_auto] px-4 py-2 text-[10px] font-medium text-slate-600 uppercase tracking-wider border-b border-slate-800/40">
           <span>#</span>
-          <span>Pilote</span>
+          <span>{isResearch ? 'Compagnie' : 'Pilote'}</span>
           <span>{activeCat.label}</span>
         </div>
         <div className="max-h-[500px] overflow-y-auto">
           {sorted.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-600">Aucune donnée</p>
+            <p className="px-4 py-8 text-center text-sm text-slate-600">{isResearch && researchUnavailable ? "Classement temporairement indisponible." : "Aucune donnée"}</p>
           ) : (
             sorted.map((p, i) => {
               const isMe = p.id === currentUserId;
-              const val = getValue(p, activeCategory);
-              const maxVal = getValue(sorted[0], activeCategory);
+              const val = p.value;
+              const maxVal = sorted[0].value;
               const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
               return (
                 <div
@@ -263,7 +266,7 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
       </div>
 
       {/* My stats summary */}
-      {myStats && (
+      {!isResearch && myStats && (
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-5">
           <h2 className="text-sm font-semibold text-slate-200 mb-3">Mes statistiques</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
@@ -293,7 +296,6 @@ export default function ClassementClient({ pilotes, currentUserId, researchPanel
           </div>
         </div>
       )}
-      </>}
     </div>
   );
 }
