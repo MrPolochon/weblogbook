@@ -60,7 +60,7 @@ export default async function ClassementPage() {
   }
 
   const { data: badgeCounts } = await admin.rpc("get_badge_counts");
-  const badgesByUser = new Map((badgeCounts ?? []).map((row: { user_id: string; total: number }) => [row.user_id, Number(row.total)]));
+  const badgesByUser = new Map<string, number>((badgeCounts ?? []).map((row: { user_id: string; total: number }): [string, number] => [row.user_id, Number(row.total)]));
   const raw = (rows ?? []) as ClassementRow[];
   const photosByUser = await getUserPhotosMap(admin, raw.map((p) => p.id));
 
