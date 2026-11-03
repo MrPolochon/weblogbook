@@ -1211,7 +1211,6 @@ html[data-theme="halloween"] :is(a, button, input, select, textarea):focus-visib
 .login-heading > div { width: 44px; height: 44px; margin-bottom: 6px; }
 .login-heading h1 { font-size: 24px; }
 .login-heading p { margin-top: 3px; }
-.login-heading::after { content: '🎃'; position: absolute; top: 8px; right: 12px; font-size: 24px; pointer-events: none; }
 .login-modes button { padding-top: 8px; padding-bottom: 8px; }
 .login-card {
   --login-float-distance: -6px;
@@ -1276,8 +1275,6 @@ html[data-theme="halloween"] :is(a, button, input, select, textarea):focus-visib
   .login-links { margin-top: 8px; }
 }
 .login-shell::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at 12% 20%, #f9731629, transparent 60%), radial-gradient(ellipse at 90% 70%, #9333ea33, transparent 60%); pointer-events: none; }
-.login-heading::after { content: none; }
-.login-heading h1::after { content: ' 🎃'; font-size: .8em; }
 html[data-theme="halloween"] .login-card form > button { background: linear-gradient(100deg, #b94a11, #923c7f) !important; }
 
 /* The audio clock controls the scene's phase; only decorative layers pulse. */
