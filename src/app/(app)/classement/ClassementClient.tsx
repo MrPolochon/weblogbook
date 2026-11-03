@@ -31,12 +31,13 @@ type PiloteStat = {
 interface Props {
   pilotes: PiloteStat[];
   currentUserId: string;
+  researchPanel: React.ReactNode;
 }
 
 type CategoryId =
   | 'heures' | 'vols' | 'licences' | 'aeroports' | 'types_avion'
   | 'ifr' | 'vfr' | 'instruction' | 'militaire' | 'longest'
-  | 'fortune' | 'flotte' | 'veteran' | 'badges';
+  | 'fortune' | 'flotte' | 'veteran' | 'badges' | 'research';
 
 const CATEGORIES: { id: CategoryId; label: string; icon: typeof Trophy; color: string; description: string }[] = [
   { id: 'heures', label: 'Heures de vol', icon: Clock, color: 'text-amber-400', description: 'Total des heures de vol cumulées' },
@@ -50,6 +51,7 @@ const CATEGORIES: { id: CategoryId; label: string; icon: typeof Trophy; color: s
   { id: 'militaire', label: 'As militaire', icon: Shield, color: 'text-orange-400', description: 'Vols militaires effectués' },
   { id: 'longest', label: 'Endurance', icon: Timer, color: 'text-red-400', description: 'Vol le plus long en minutes' },
   { id: 'fortune', label: 'Fortune', icon: Banknote, color: 'text-yellow-400', description: 'Solde du compte Felitz' },
+  { id: 'research', label: 'Technologie', icon: Layers, color: 'text-cyan-400', description: 'Recherches débloquées par compagnie' },
   { id: 'badges', label: 'Badges', icon: Warehouse, color: 'text-amber-400', description: 'Badges obtenus' },
   { id: 'flotte', label: 'Collectionneur', icon: Warehouse, color: 'text-lime-400', description: 'Avions possédés' },
   { id: 'veteran', label: 'Vétéran', icon: CalendarDays, color: 'text-slate-300', description: 'Membre depuis le plus longtemps' },
@@ -106,7 +108,7 @@ function medalBg(rank: number): string {
   return 'border-transparent';
 }
 
-export default function ClassementClient({ pilotes, currentUserId }: Props) {
+export default function ClassementClient({ pilotes, currentUserId, researchPanel }: Props) {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('heures');
 
   const sorted = useMemo(() => {
@@ -170,6 +172,7 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
         })}
       </div>
 
+      {activeCategory === "research" ? researchPanel : <>
       {/* Active category description */}
       <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-slate-800/40 border border-slate-800/60">
         <ActiveIcon className={`h-5 w-5 ${activeCat.color}`} />
@@ -290,6 +293,7 @@ export default function ClassementClient({ pilotes, currentUserId }: Props) {
           </div>
         </div>
       )}
+      </>}
     </div>
   );
 }

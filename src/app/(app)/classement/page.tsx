@@ -53,7 +53,21 @@ export default async function ClassementPage() {
     admin.rpc('get_classement_recherches'),
   ]);
   if (researchError) console.error('get_classement_recherches', researchError);
-  const companies = (research ?? []) as { nom: string; recherches: number }[];
+  let companies = (research ?? []) as { nom: string; recherches: number }[];
+  let unavailable = Boolean(researchError);
+  if (researchError) {
+    const { data, error } = await admin.from('company_research_projects')
+      .select('company_id, compagnies!inner(nom)').lte('ready_at', new Date().toISOString()).limit(1000);
+    if (!error && data && data.length < 1000) {
+      const counts = new Map<string, { nom: string; recherches: number }>();
+      for (const row of data as unknown as { company_id: string; compagnies: { nom: string } }[]) {
+        const previous = counts.get(row.company_id);
+        counts.set(row.company_id, { nom: row.compagnies.nom, recherches: (previous?.recherches ?? 0) + 1 });
+      }
+      companies = [...counts.values()].sort((a, b) => b.recherches - a.recherches || a.nom.localeCompare(b.nom));
+      unavailable = false;
+    }
+  }
   let rank = 0;
   if (error) {
     console.error('get_classement_pilotes', error);
@@ -84,12 +98,11 @@ export default async function ClassementPage() {
     photoUrl: photosByUser.get(p.id) ?? null,
   }));
 
-  return (
-    <>
+  const researchPanel = (
       <section aria-labelledby="classement-recherches" className="card mx-auto my-6 max-w-6xl p-5">
         <h2 id="classement-recherches" className="text-lg font-semibold">Recherche technologique des compagnies</h2>
         <p className="mb-4 text-sm opacity-75">Classement par nombre de recherches débloquées.</p>
-        {researchError ? <p>Classement temporairement indisponible.</p> : companies.length === 0 ? (
+        {unavailable ? <p>Classement temporairement indisponible.</p> : companies.length === 0 ? (
           <p>Aucune recherche débloquée pour le moment.</p>
         ) : (
           <ol className="divide-y divide-slate-500/25">
@@ -106,7 +119,6 @@ export default async function ClassementPage() {
           </ol>
         )}
       </section>
-      <ClassementClient pilotes={pilotes} currentUserId={user.id} />
-    </>
   );
+  return <ClassementClient pilotes={pilotes} currentUserId={user.id} researchPanel={researchPanel} />;
 }
