@@ -22,13 +22,14 @@ type CarteData = {
 };
 
 type Props = {
+  halloweenBadge?: boolean;
   initialCarte: CarteData | null;
   identifiant: string;
   /** Si true (defaut), affiche le selecteur de logo sous la carte. */
   embedLogoSelector?: boolean;
 };
 
-export default function MaCartePhoto({ initialCarte, identifiant, embedLogoSelector = true }: Props) {
+export default function MaCartePhoto({ initialCarte, identifiant, embedLogoSelector = true, halloweenBadge }: Props) {
   const [carte, setCarte] = useState<CarteData | null>(initialCarte);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -109,7 +110,10 @@ export default function MaCartePhoto({ initialCarte, identifiant, embedLogoSelec
   return (
     <div className="flex flex-col gap-3 items-center md:items-stretch">
       <div className="flex justify-center">
-        <CarteIdentite carte={carte} identifiant={identifiant} size="md" interactive />
+        <div className="relative">
+          <CarteIdentite carte={carte} identifiant={identifiant} size="md" interactive />
+          {halloweenBadge && <img src="/badges/halloween-2026.png" alt="Badge Halloween 2026" width={64} height={64} className="pointer-events-none absolute bottom-4 right-4" />}
+        </div>
       </div>
 
       <input

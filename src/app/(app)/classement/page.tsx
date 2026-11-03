@@ -19,6 +19,7 @@ type PiloteStat = {
   longestFlight: number;
   solde: number;
   nbAvions: number;
+  nbBadges: number;
   memberSince: string;
   photoUrl: string | null;
 };
@@ -58,6 +59,8 @@ export default async function ClassementPage() {
     console.error('get_classement_pilotes', error);
   }
 
+  const { data: badgeCounts } = await admin.rpc("get_badge_counts");
+  const badgesByUser = new Map((badgeCounts ?? []).map((row: { user_id: string; total: number }) => [row.user_id, Number(row.total)]));
   const raw = (rows ?? []) as ClassementRow[];
   const photosByUser = await getUserPhotosMap(admin, raw.map((p) => p.id));
 
@@ -75,6 +78,7 @@ export default async function ClassementPage() {
     nbVolsMilitaires: Number(p.nb_vols_militaires) || 0,
     longestFlight: Number(p.longest_flight) || 0,
     solde: Number(p.solde) || 0,
+    nbBadges: badgesByUser.get(p.id) ?? 0,
     nbAvions: Number(p.nb_avions) || 0,
     memberSince: p.member_since,
     photoUrl: photosByUser.get(p.id) ?? null,

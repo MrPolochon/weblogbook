@@ -22,6 +22,7 @@ type PiloteStat = {
   longestFlight: number;
   solde: number;
   nbAvions: number;
+  nbBadges: number;
   memberSince: string;
   /** Photo de la carte d'identite (cartes_identite.photo_url). */
   photoUrl: string | null;
@@ -35,7 +36,7 @@ interface Props {
 type CategoryId =
   | 'heures' | 'vols' | 'licences' | 'aeroports' | 'types_avion'
   | 'ifr' | 'vfr' | 'instruction' | 'militaire' | 'longest'
-  | 'fortune' | 'flotte' | 'veteran';
+  | 'fortune' | 'flotte' | 'veteran' | 'badges';
 
 const CATEGORIES: { id: CategoryId; label: string; icon: typeof Trophy; color: string; description: string }[] = [
   { id: 'heures', label: 'Heures de vol', icon: Clock, color: 'text-amber-400', description: 'Total des heures de vol cumulées' },
@@ -49,6 +50,7 @@ const CATEGORIES: { id: CategoryId; label: string; icon: typeof Trophy; color: s
   { id: 'militaire', label: 'As militaire', icon: Shield, color: 'text-orange-400', description: 'Vols militaires effectués' },
   { id: 'longest', label: 'Endurance', icon: Timer, color: 'text-red-400', description: 'Vol le plus long en minutes' },
   { id: 'fortune', label: 'Fortune', icon: Banknote, color: 'text-yellow-400', description: 'Solde du compte Felitz' },
+  { id: 'badges', label: 'Badges', icon: Warehouse, color: 'text-amber-400', description: 'Badges obtenus' },
   { id: 'flotte', label: 'Collectionneur', icon: Warehouse, color: 'text-lime-400', description: 'Avions possédés' },
   { id: 'veteran', label: 'Vétéran', icon: CalendarDays, color: 'text-slate-300', description: 'Membre depuis le plus longtemps' },
 ];
@@ -66,6 +68,7 @@ function getValue(p: PiloteStat, cat: CategoryId): number {
     case 'militaire': return p.nbVolsMilitaires;
     case 'longest': return p.longestFlight;
     case 'fortune': return p.solde;
+    case 'badges': return p.nbBadges;
     case 'flotte': return p.nbAvions;
     case 'veteran': return -new Date(p.memberSince).getTime();
     default: return 0;

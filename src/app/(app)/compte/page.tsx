@@ -22,6 +22,8 @@ export default async function ComptePage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
+  const { data: badges } = await admin.from("account_badges").select("badge").eq("user_id", user.id);
+  const halloweenBadge = badges?.some(({ badge }) => badge === "halloween-2026");
 
   type Profile = {
     identifiant: string | null;
@@ -154,6 +156,7 @@ export default async function ComptePage() {
           </div>
           <MaCartePhoto
             initialCarte={carte}
+            halloweenBadge={halloweenBadge}
             identifiant={profile?.identifiant ?? '—'}
             embedLogoSelector={false}
           />
@@ -161,6 +164,10 @@ export default async function ComptePage() {
 
         {/* Colonne gauche */}
         <div className="space-y-8 min-w-0 lg:order-1">
+          <Section title="Mes badges" Icon={IdCard} description="Les badges obtenus sur votre compte.">
+            {halloweenBadge ? <p>Halloween 2026</p> : <p>Aucun badge obtenu.</p>}
+          </Section>
+
           <Section title="Identité & connexions" Icon={Link2} description="Adresse email, liaison Discord et pseudo Roblox utilisés pour vous identifier sur le site et le radar.">
             <CompteForm
               armee={Boolean(profile?.armee)}
