@@ -47,7 +47,13 @@ export default async function ClassementPage() {
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const { data: rows, error } = await admin.rpc('get_classement_pilotes');
+  const [{ data: rows, error }, { data: research, error: researchError }] = await Promise.all([
+    admin.rpc('get_classement_pilotes'),
+    admin.rpc('get_classement_recherches'),
+  ]);
+  if (researchError) console.error('get_classement_recherches', researchError);
+  const companies = (research ?? []) as { nom: string; recherches: number }[];
+  let rank = 0;
   if (error) {
     console.error('get_classement_pilotes', error);
   }
@@ -74,5 +80,29 @@ export default async function ClassementPage() {
     photoUrl: photosByUser.get(p.id) ?? null,
   }));
 
-  return <ClassementClient pilotes={pilotes} currentUserId={user.id} />;
+  return (
+    <>
+      <section aria-labelledby="classement-recherches" className="card mx-auto my-6 max-w-6xl p-5">
+        <h2 id="classement-recherches" className="text-lg font-semibold">Recherche technologique des compagnies</h2>
+        <p className="mb-4 text-sm opacity-75">Classement par nombre de recherches débloquées.</p>
+        {researchError ? <p>Classement temporairement indisponible.</p> : companies.length === 0 ? (
+          <p>Aucune recherche débloquée pour le moment.</p>
+        ) : (
+          <ol className="divide-y divide-slate-500/25">
+            {companies.map((company, index) => {
+              if (company.recherches !== companies[index - 1]?.recherches) rank = index + 1;
+              return (
+                <li key={index} className="flex items-center gap-3 py-2">
+                  <span className="w-8 tabular-nums">#{rank}</span>
+                  <span className="flex-1 font-medium">{company.nom}</span>
+                  <span className="tabular-nums">{company.recherches}</span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </section>
+      <ClassementClient pilotes={pilotes} currentUserId={user.id} />
+    </>
+  );
 }
