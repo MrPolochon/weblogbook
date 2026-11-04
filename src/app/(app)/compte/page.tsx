@@ -15,6 +15,15 @@ import PasskeysSection from '@/components/PasskeysSection';
 import RobloxUsernameSection from '@/components/RobloxUsernameSection';
 import CompteHeader from './CompteHeader';
 import Link from 'next/link';
+import Image from 'next/image';
+
+const badgeDetails: Record<string, { title: string; reason: string; image: string }> = {
+  'halloween-2026': {
+    title: 'Halloween 2026',
+    reason: 'Pour avoir participé à Halloween sur le serveur.',
+    image: '/badges/halloween-2026.png',
+  },
+};
 
 export default async function ComptePage() {
   const supabase = await createClient();
@@ -164,10 +173,6 @@ export default async function ComptePage() {
 
         {/* Colonne gauche */}
         <div className="space-y-8 min-w-0 lg:order-1">
-          <Section title="Mes badges" Icon={IdCard} description="Les badges obtenus sur votre compte.">
-            {halloweenBadge ? <p>Halloween 2026</p> : <p>Aucun badge obtenu.</p>}
-          </Section>
-
           <Section title="Identité & connexions" Icon={Link2} description="Adresse email, liaison Discord et pseudo Roblox utilisés pour vous identifier sur le site et le radar.">
             <CompteForm
               armee={Boolean(profile?.armee)}
@@ -181,6 +186,25 @@ export default async function ComptePage() {
 
           <Section title="Personnalisation de la carte" Icon={IdCard} description="Choisis le logo de la compagnie affiché sur ta carte d'identité (parmi celles auxquelles tu es rattaché).">
             <MonLogoSelector />
+          </Section>
+
+          <Section title="Mes badges" Icon={IdCard} description="Les badges obtenus et leur motif d’attribution.">
+            {badges?.length ? (
+              <ul className="space-y-3">
+                {badges.map(({ badge }) => {
+                  const details = Object.hasOwn(badgeDetails, badge) ? badgeDetails[badge] : undefined;
+                  return (
+                    <li key={badge} className="flex items-center gap-4 rounded-lg border border-slate-700 bg-slate-900/50 p-3">
+                      {details && <Image src={details.image} alt="" width={48} height={48} className="shrink-0" />}
+                      <div>
+                        <p className="font-medium text-slate-100">{details?.title ?? badge}</p>
+                        <p className="text-sm text-slate-400">{details?.reason ?? 'Motif d’attribution non renseigné.'}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : <p className="text-sm text-slate-400">Aucun badge obtenu.</p>}
           </Section>
 
           <Section title="Sécurité" Icon={Lock} description="Mot de passe, passkeys biométriques et accès privilégiés liés à votre compte.">
