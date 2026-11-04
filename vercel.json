@@ -4,6 +4,10 @@
   ],
   "crons": [
     {
+      "path": "/api/cron/flight-review-ai",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/company-development",
       "schedule": "5 * * * *"
     },
