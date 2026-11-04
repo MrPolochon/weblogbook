@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { loadUnrecordedClosedPlans } from '@/lib/logbook-registration';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -31,10 +32,11 @@ export async function GET() {
 
     const admin = createAdminClient();
     const uid = user.id;
+    const MAX_INDIVIDUAL = 5;
 
     const [
       { data: plansRefuses },
-      { data: plansClotures },
+      { data: plansClotures, count: plansCloturesCount, error: plansCloturesError },
       { data: attenteConfPilote },
       { data: attenteConfCopilote },
       { data: attenteConfInstructeur },
@@ -42,7 +44,7 @@ export async function GET() {
       { data: plansAttenteCopilote },
     ] = await Promise.all([
       admin.from('plans_vol').select('id').eq('pilote_id', uid).eq('statut', 'refuse'),
-      admin.from('plans_vol').select('id, numero_vol').eq('pilote_id', uid).eq('statut', 'cloture').is('siavi_avion_id', null).not('accepted_at', 'is', null).not('cloture_at', 'is', null),
+      loadUnrecordedClosedPlans(admin, uid, MAX_INDIVIDUAL),
       supabase.from('vols').select('id').eq('copilote_id', uid).eq('statut', 'en_attente_confirmation_pilote'),
       supabase.from('vols').select('id').eq('pilote_id', uid).eq('statut', 'en_attente_confirmation_copilote'),
       admin.from('vols').select('id').eq('pilote_id', uid).eq('statut', 'en_attente_confirmation_instructeur'),
@@ -63,8 +65,8 @@ export async function GET() {
     });
 
     // Un item par plan clôturé (max 5 affichés individuellement)
-    const MAX_INDIVIDUAL = 5;
-    for (const plan of (plansClotures ?? []).slice(0, MAX_INDIVIDUAL)) {
+    if (plansCloturesError) console.error('GET /api/user/actions: plans clôturés', plansCloturesError);
+    for (const plan of plansClotures) {
       actions.push({
         id: `plan_cloture_${plan.id}`,
         kind: 'plan_cloture',
@@ -76,7 +78,7 @@ export async function GET() {
       });
     }
     // Si plus de 5, une ligne groupée pour le reste
-    const extra = (plansClotures?.length ?? 0) - MAX_INDIVIDUAL;
+    const extra = (plansCloturesCount ?? 0) - plansClotures.length;
     if (extra > 0) {
       actions.push({
         id: 'plan_cloture_more',
