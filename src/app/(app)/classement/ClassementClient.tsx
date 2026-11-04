@@ -20,7 +20,7 @@ type PiloteStat = {
   nbVolsInstruction: number;
   nbVolsMilitaires: number;
   longestFlight: number;
-  solde: number;
+  fortune: number | null;
   nbAvions: number;
   nbBadges: number;
   memberSince: string;
@@ -33,6 +33,7 @@ interface Props {
   currentUserId: string;
   researchEntries: { id: string; identifiant: string; photoUrl: string | null; recherches: number }[];
   researchUnavailable: boolean;
+  fortuneUnavailable: boolean;
 }
 
 type CategoryId =
@@ -51,7 +52,7 @@ const CATEGORIES: { id: CategoryId; label: string; icon: typeof Trophy; color: s
   { id: 'instruction', label: 'Formateur', icon: GraduationCap, color: 'text-rose-400', description: 'Vols d\'instruction dispensés' },
   { id: 'militaire', label: 'As militaire', icon: Shield, color: 'text-orange-400', description: 'Vols militaires effectués' },
   { id: 'longest', label: 'Endurance', icon: Timer, color: 'text-red-400', description: 'Vol le plus long en minutes' },
-  { id: 'fortune', label: 'Fortune', icon: Banknote, color: 'text-yellow-400', description: 'Solde du compte Felitz' },
+  { id: 'fortune', label: 'Fortune', icon: Banknote, color: 'text-yellow-400', description: 'Solde Felitz personnel + prix catalogue des avions personnels' },
   { id: 'research', label: 'Technologie', icon: Layers, color: 'text-cyan-400', description: 'Recherches débloquées par compagnie' },
   { id: 'badges', label: 'Badges', icon: Warehouse, color: 'text-amber-400', description: 'Badges obtenus' },
   { id: 'flotte', label: 'Collectionneur', icon: Warehouse, color: 'text-lime-400', description: 'Avions possédés' },
@@ -70,7 +71,7 @@ function getValue(p: PiloteStat, cat: CategoryId): number {
     case 'instruction': return p.nbVolsInstruction;
     case 'militaire': return p.nbVolsMilitaires;
     case 'longest': return p.longestFlight;
-    case 'fortune': return p.solde;
+    case 'fortune': return p.fortune ?? 0;
     case 'badges': return p.nbBadges;
     case 'flotte': return p.nbAvions;
     case 'veteran': return -new Date(p.memberSince).getTime();
@@ -109,10 +110,11 @@ function medalBg(rank: number): string {
   return 'border-transparent';
 }
 
-export default function ClassementClient({ pilotes, currentUserId, researchEntries, researchUnavailable }: Props) {
+export default function ClassementClient({ pilotes, currentUserId, researchEntries, researchUnavailable, fortuneUnavailable }: Props) {
   const [activeCategory, setActiveCategory] = useState<CategoryId>('heures');
 
   const isResearch = activeCategory === "research";
+  const categoryUnavailable = (isResearch && researchUnavailable) || (activeCategory === 'fortune' && fortuneUnavailable);
   const sorted = useMemo(() => {
     if (isResearch) return researchEntries.map(entry => ({ ...entry, value: entry.recherches }));
     return [...pilotes]
@@ -224,7 +226,7 @@ export default function ClassementClient({ pilotes, currentUserId, researchEntri
         </div>
         <div className="max-h-[500px] overflow-y-auto">
           {sorted.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-600">{isResearch && researchUnavailable ? "Classement temporairement indisponible." : "Aucune donnée"}</p>
+            <p className="px-4 py-8 text-center text-sm text-slate-600">{categoryUnavailable ? "Classement temporairement indisponible." : "Aucune donnée"}</p>
           ) : (
             sorted.map((p, i) => {
               const isMe = p.id === currentUserId;
@@ -278,7 +280,7 @@ export default function ClassementClient({ pilotes, currentUserId, researchEntri
               { label: 'Types avion', value: myStats.nbTypesAvion.toString(), icon: Layers, color: 'text-cyan-400' },
               { label: 'Vols IFR', value: myStats.nbVolsIFR.toString(), icon: Navigation, color: 'text-indigo-400' },
               { label: 'Vols VFR', value: myStats.nbVolsVFR.toString(), icon: Cloud, color: 'text-teal-400' },
-              { label: 'Fortune', value: `${myStats.solde.toLocaleString('fr-FR')} F$`, icon: Banknote, color: 'text-yellow-400' },
+              { label: 'Fortune', value: myStats.fortune === null ? 'Indisponible' : formatValue(myStats.fortune, 'fortune'), icon: Banknote, color: 'text-yellow-400' },
               { label: 'Flotte', value: `${myStats.nbAvions} avion${myStats.nbAvions > 1 ? 's' : ''}`, icon: Warehouse, color: 'text-lime-400' },
               { label: 'Vol le plus long', value: `${myStats.longestFlight} min`, icon: Timer, color: 'text-red-400' },
             ].map(stat => {
