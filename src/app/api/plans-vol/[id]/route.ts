@@ -1220,14 +1220,18 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: 'Non autorise' }, { status: 401 });
 
     const admin = createAdminClient();
-    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut').eq('id', id).single();
+    const { data: plan } = await admin.from('plans_vol').select('id, pilote_id, statut, logbook_processed_at').eq('id', id).single();
     if (!plan) return NextResponse.json({ error: 'Plan de vol introuvable.' }, { status: 404 });
     if (plan.pilote_id !== user.id) return NextResponse.json({ error: 'Ce plan ne vous appartient pas.' }, { status: 403 });
-    if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul un plan cloture peut etre supprime ainsi (ne pas enregistrer).' }, { status: 400 });
+    if (plan.statut !== 'cloture') return NextResponse.json({ error: 'Seul le rappel d’un plan clôturé peut être masqué.' }, { status: 400 });
+    if (plan.logbook_processed_at) return NextResponse.json({ ok: true });
 
     // Retirer de la liste à enregistrer sans effacer l’historique administratif.
-    const { error } = await admin.from('plans_vol').update({ logbook_processed_at: new Date().toISOString() }).eq('id', id).eq('pilote_id', user.id).eq('statut', 'cloture');
-    if (error) return NextResponse.json({ error: 'Erreur lors de la suppression' }, { status: 400 });
+    const { data: saved, error } = await admin.from('plans_vol')
+      .update({ logbook_processed_at: new Date().toISOString() })
+      .eq('id', id).eq('pilote_id', user.id).eq('statut', 'cloture')
+      .select('id').maybeSingle();
+    if (error || !saved) return NextResponse.json({ error: 'Le rappel n’a pas pu être masqué.' }, { status: error ? 500 : 409 });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error('plans-vol DELETE:', e);
