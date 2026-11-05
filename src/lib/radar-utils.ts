@@ -75,6 +75,13 @@ for (const [code, pos] of Object.entries(DEFAULT_POSITIONS)) {
   waypointIndex.set(code.toUpperCase(), toSVG(pos));
 }
 
+// IRFD procedures use fixes outside the AeroNav en-route layer.
+const procedureWaypointIndex = new Map<string, Point>([
+  ['DAALE', toSVG({ x: 42.4, y: 68.28 })],
+  ['DLREY', toSVG({ x: 46.85, y: 68.35 })],
+  ['SKYDV', toSVG({ x: 38.65, y: 50.2 })],
+]);
+
 function resolveWaypoint(code: string): Point | null {
   return waypointIndex.get(code.toUpperCase()) ?? null;
 }
@@ -360,7 +367,7 @@ export function buildRouteInfo(
   const addToken = (token: string, source: 'sid' | 'route' | 'star') => {
     if (ROUTE_NOISE_TOKENS.has(token)) return;
     if (token === depUp || token === arrUp) return;
-    const wp = resolveWaypoint(token);
+    const wp = resolveWaypoint(token) ?? (source === 'route' ? null : procedureWaypointIndex.get(token));
     if (!wp) return;
     if (calculateDistance(wp, lastPoint) < 1) return;
     const prevPrev = path.length >= 2 ? path[path.length - 2] : null;
