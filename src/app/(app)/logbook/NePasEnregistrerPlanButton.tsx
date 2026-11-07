@@ -9,7 +9,7 @@ export default function NePasEnregistrerPlanButton({ planId }: { planId: string 
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
-    if (!confirm('Ne pas enregistrer ce vol et supprimer définitivement le plan de vol ?')) return;
+    if (!confirm('Masquer ce rappel ? Le plan et les vols déjà enregistrés restent dans l’historique.')) return;
     setLoading(true);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, { method: 'DELETE' });
@@ -30,7 +30,7 @@ export default function NePasEnregistrerPlanButton({ planId }: { planId: string 
       disabled={loading}
       className="rounded-lg border border-slate-500/60 bg-slate-700/50 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-600/50 hover:text-slate-200 disabled:opacity-50"
     >
-      {loading ? '…' : 'Ne pas enregistrer ce vol'}
+      {loading ? '…' : 'Masquer ce rappel'}
     </button>
   );
 }

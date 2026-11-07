@@ -17,7 +17,7 @@ type PiloteStat = {
   nbVolsInstruction: number;
   nbVolsMilitaires: number;
   longestFlight: number;
-  solde: number;
+  fortune: number | null;
   nbAvions: number;
   nbBadges: number;
   memberSince: string;
@@ -42,15 +42,45 @@ type ClassementRow = {
   member_since: string;
 };
 
+async function getPatrimoineByUser(admin: ReturnType<typeof createAdminClient>) {
+  const totals = new Map<string, number>();
+  const pageSize = 500;
+
+  for (let offset = 0; ; offset += pageSize) {
+    const { data, error } = await admin.from('inventaire_avions')
+      .select('proprietaire_id, modele:type_avion_id(prix)')
+      .order('id')
+      .range(offset, offset + pageSize - 1);
+    if (error) {
+      console.error('classement patrimoine', error);
+      return null;
+    }
+
+    for (const avion of data) {
+      const modele = Array.isArray(avion.modele) ? avion.modele[0] : avion.modele;
+      const prix = Number(modele?.prix);
+      if (avion.proprietaire_id && prix > 0) {
+        totals.set(avion.proprietaire_id, (totals.get(avion.proprietaire_id) ?? 0) + prix);
+      }
+    }
+    if (data.length < pageSize) return totals;
+  }
+}
+
 export default async function ClassementPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
   const admin = createAdminClient();
-  const [{ data: rows, error }, { data: research, error: researchError }] = await Promise.all([
+  const [
+    { data: rows, error },
+    { data: research, error: researchError },
+    patrimoineByUser,
+  ] = await Promise.all([
     admin.rpc('get_classement_pilotes'),
     admin.rpc('get_classement_recherches'),
+    getPatrimoineByUser(admin),
   ]);
   if (researchError) console.error('get_classement_recherches', researchError);
   let companies = (research ?? []) as { nom: string; recherches: number }[];
@@ -91,7 +121,7 @@ export default async function ClassementPage() {
     nbVolsInstruction: Number(p.nb_vols_instruction) || 0,
     nbVolsMilitaires: Number(p.nb_vols_militaires) || 0,
     longestFlight: Number(p.longest_flight) || 0,
-    solde: Number(p.solde) || 0,
+    fortune: patrimoineByUser === null ? null : (Number(p.solde) || 0) + (patrimoineByUser.get(p.id) ?? 0),
     nbBadges: badgesByUser.get(p.id) ?? 0,
     nbAvions: Number(p.nb_avions) || 0,
     memberSince: p.member_since,
@@ -108,5 +138,5 @@ export default async function ClassementPage() {
     photoUrl: companiesByName.get(company.nom)?.logo_url ?? null,
     recherches: company.recherches,
   }));
-  return <ClassementClient pilotes={pilotes} currentUserId={user.id} researchEntries={researchEntries} researchUnavailable={unavailable} />;
+  return <ClassementClient pilotes={pilotes} currentUserId={user.id} researchEntries={researchEntries} researchUnavailable={unavailable} fortuneUnavailable={Boolean(error) || patrimoineByUser === null} />;
 }

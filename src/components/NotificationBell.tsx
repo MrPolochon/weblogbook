@@ -60,10 +60,12 @@ export default function NotificationBell({ className }: { className?: string }) 
   const [mounted, setMounted] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const actionsRequest = useRef(0);
 
   useEffect(() => { setMounted(true); }, []);
 
   const fetchNotifs = useCallback(async (silent = false) => {
+    const request = ++actionsRequest.current;
     if (!silent) setLoading(true);
     try {
       const [notifRes, actionsRes] = await Promise.all([
@@ -77,7 +79,9 @@ export default function NotificationBell({ className }: { className?: string }) 
       }
       if (actionsRes.ok) {
         const json = await actionsRes.json();
-        setActions((json.actions as ActionItem[]) || []);
+        if (request === actionsRequest.current) {
+          setActions((json.actions as ActionItem[]) || []);
+        }
       }
     } catch { /* silencieux */ } finally {
       if (!silent) setLoading(false);
@@ -168,7 +172,7 @@ export default function NotificationBell({ className }: { className?: string }) 
   }
 
   async function dismissPlan(planId: string) {
-    if (!confirm('Ne pas enregistrer ce vol et supprimer définitivement le plan de vol ?')) return;
+    if (!confirm('Masquer ce rappel ? Le plan et les vols déjà enregistrés restent dans l’historique.')) return;
     setDismissingPlanId(planId);
     try {
       const res = await fetch(`/api/plans-vol/${planId}`, { method: 'DELETE' });
@@ -176,8 +180,10 @@ export default function NotificationBell({ className }: { className?: string }) 
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || 'Erreur');
       }
-      // Retirer l'action de la liste localement
+      // Invalide un chargement commencé avant la confirmation du serveur.
+      actionsRequest.current++;
       setActions(prev => prev.filter(a => a.planId !== planId));
+      void fetchNotifs(true);
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Erreur');
     } finally {
@@ -185,8 +191,9 @@ export default function NotificationBell({ className }: { className?: string }) 
     }
   }
 
-  const totalBadge = unread + actions.length;
-  const hasActions = actions.length > 0;
+  const actionCount = actions.reduce((sum, action) => sum + action.count, 0);
+  const totalBadge = unread + actionCount;
+  const hasActions = actionCount > 0;
   const hasNotifs = items.length > 0;
   const isEmpty = !hasActions && !hasNotifs;
 
@@ -261,7 +268,7 @@ export default function NotificationBell({ className }: { className?: string }) 
                       <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0" />
                       <span className="text-[11px] font-bold uppercase tracking-wider text-amber-300/80">À faire</span>
                       <span className="ml-auto flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-bold text-white">
-                        {actions.length}
+                        {actionCount}
                       </span>
                     </div>
                     <ul className="divide-y divide-slate-800/50">
@@ -289,7 +296,7 @@ export default function NotificationBell({ className }: { className?: string }) 
                                 disabled={dismissingPlanId === a.planId}
                                 className="mt-2 w-full text-xs font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 border border-slate-700/50 hover:border-red-500/30 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50"
                               >
-                                {dismissingPlanId === a.planId ? '…' : '✕ Ne pas enregistrer ce vol'}
+                                {dismissingPlanId === a.planId ? '…' : '✕ Masquer ce rappel'}
                               </button>
                             )}
                           </div>

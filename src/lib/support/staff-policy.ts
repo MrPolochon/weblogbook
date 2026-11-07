@@ -9,10 +9,16 @@ function normalize(text: string): string {
 export function explicitlyRequestsStaff(text: string): boolean {
   const t = normalize(text.replace(/«[^»]*»|"[^"]*"|`[^`]*`/g, ''));
   return t.split(/[.!?;\n]/).some((part) => {
+    if (/^(?:mais )?je (?:ne )?(?:veux|souhaite) (?:plus|pas) (?:parler|discuter) (?:a|avec) (?:un |le |ce )?(?:bot|bote|robot|ia)\b/.test(part.trim())) return true;
+    // Le refus du robot n'est pas un refus d'aide humaine (tickets 9kpt/u801).
+    // Retirer seulement cette comparaison, sans effacer « pas de staff ».
+    part = part.replace(/\b(?:et |mais )?(?:pas|plutot qu[e]?) (?:avec |a |a un |un |une |le |la )*(?:bot|bote|robot|ia)\b/g, '').trim();
     if (/\b(pas|jamais|sans|si|quand|comment|pourquoi|devenir|deja|hier|exemple|citation)\b/.test(part)) return false;
     const person = '(?:un |une |le |la |l |les |des |au |aux |a un |a une |a l )?(?:staff|admin(?:istrateur)?s?|moderateur|humain|instructeur|responsable|personne humaine)';
-    return new RegExp(`\\b(?:appelle|appelez|appeler|contacte|contactez|contacter|ping|previens|prevenez|passe la main a)\\s+(?:moi )?${person}\\b`).test(part) ||
-      new RegExp(`\\b(?:je (?:veux|voudrais|souhaite|prefere|demande)|j ai besoin d[e]?)\\s+(?:(?:parler|discuter) (?:a|avec) )?${person}\\b`).test(part);
+    return new RegExp(`\\b(?:ap{1,2}el{1,2}(?:e|ez|er)|contacte|contactez|contacter|ping|previens|prevenez|passe la main a)\\s+(?:moi )?${person}\\b`).test(part) ||
+      new RegExp(`\\b(?:je (?:veux|voudrais|souhaite|prefere|demande)|j aimerais|j ai besoin d[e]?)\\s+(?:(?:parler|discuter) (?:a|avec) )?${person}\\b`).test(part) ||
+      new RegExp(`\\b(?:possible|possibilite|puis je|peux je|pourrais je)\\s+(?:de )?(?:parler|discuter) (?:a|avec) ${person}\\b`).test(part) ||
+      new RegExp(`^(?:parler|discuter) (?:a|avec) ${person}\\s*(?:svp|stp|s il te plait|s il vous plait)?$`).test(part);
   });
 }
 

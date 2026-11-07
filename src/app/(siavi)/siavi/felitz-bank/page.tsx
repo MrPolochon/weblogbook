@@ -5,6 +5,7 @@ import { Landmark, ArrowLeft, Shield } from 'lucide-react';
 import Link from 'next/link';
 import ChequesAEncaisserBanner from '@/components/ChequesAEncaisserBanner';
 import { countChequesAEncaisser } from '@/lib/felitz/cheques-count';
+import { enrichTransactionsWithVban } from '@/lib/felitz/utils';
 import FelitzBankSiaviClient from './FelitzBankSiaviClient';
 
 export default async function FelitzBankSiaviPage() {
@@ -42,7 +43,7 @@ export default async function FelitzBankSiaviPage() {
       ? admin.from('felitz_comptes').select('id, solde, vban').eq('type', 'siavi').maybeSingle()
       : Promise.resolve({ data: null }),
   ]);
-  const transactionsPerso = (persoTxRes.data || []) as Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }>;
+  const transactionsPerso = await enrichTransactionsWithVban(admin, persoTxRes.data || []);
   const compteSiavi = compteSiaviRes.data as { id: string; solde: number; vban: string } | null;
 
   let transactionsSiavi: Array<{ id: string; type: string; montant: number; libelle: string; description?: string | null; created_at: string }> = [];
@@ -52,7 +53,7 @@ export default async function FelitzBankSiaviPage() {
       .eq('compte_id', compteSiavi.id)
       .order('created_at', { ascending: false })
       .limit(100);
-    transactionsSiavi = ts || [];
+    transactionsSiavi = await enrichTransactionsWithVban(admin, ts || []);
   }
 
   const chequesAEncaisser = await countChequesAEncaisser(admin, user.id);

@@ -1,5 +1,5 @@
 import type { TicketTurn } from '@/lib/support/ticket-memory';
-import { OFFICIAL_SITE_URL } from '@/lib/site-url';
+import { COMPANIES_DISCORD_INVITE, OFFICIAL_SITE_URL } from '@/lib/site-url';
 
 export { OFFICIAL_SITE_URL } from '@/lib/site-url';
 
@@ -43,6 +43,15 @@ export function authoritativeSupportReply(message: string, turns: TicketTurn[] =
   const previousAnswers = turns.filter((turn) => turn.role === 'assistant').slice(-4);
   if (/\b(deja|toujours|encore|reessaye|ne marche pas|ne fonctionne pas)\b/.test(t) && previousAnswers.length) return null;
   const fresh = (reply: string) => previousAnswers.some((turn) => turn.content === reply) ? null : reply;
+  // Demandes récurrentes t0ee/l5y1 : ne jamais fabriquer d'annuaire de recrutement.
+  if (/\bcompagnies?\b/.test(t) &&
+      /\b(rejoindre|postuler|recrutement|candidater|publicites?|pubs?|annonces?|salon)\b/.test(t) &&
+      !/\b(plan|vol|virement|solde|erreur|bug|licence|cat\s*\d|personnel|effectifs?)\b/.test(t)) {
+    return fresh(`Pour les annonces et candidatures des compagnies, rejoins le serveur Discord des entreprises : ${COMPANIES_DISCORD_INVITE}. Contacte les responsables de la compagnie qui t'intéresse ; ces démarches ne se font pas dans un onglet du logbook.`);
+  }
+  if (/\blivret (?:de )?progression\b/.test(t) && /\b(ou|lien|trouver|acceder|consulter)\b/.test(t)) {
+    return fresh(`Le livret de progression pilote est accessible sans connexion : ${OFFICIAL_SITE_URL}livret-progression.`);
+  }
   if (/\bmot de passe\b.{0,20}\b(?:oublie|perdu)\b|\b(?:oublie|perdu)\b.{0,20}\bmot de passe\b/.test(t)) {
     return fresh(
       'Sur la page de connexion, ouvre **Mot de passe oublié**, puis saisis ton identifiant ou ton e-mail. ' +
@@ -79,14 +88,28 @@ export function sanitizeOfficialSiteUrl(reply: string): string {
 
 export function isVagueClarificationAnswer(message: string): boolean {
   const t = normalize(message).replace(/[.!?]+$/g, '').trim();
-  return /^(tout|tous|toute|toutes|je (?:ne )?comprends (?:rien|pas)|j ai rien compris|aucune idee|je sais pas|jsp|aide moi)$/.test(
+  return /^(tout|tous|toute|toutes|je (?:ne )?(?:comprends?|comprent) (?:rien|pas)|j ai rien compris|j ai pas compris|je suis perdu[e]?|aucune idee|je (?:ne )?sais pas|jsp|aide moi)$/.test(
     t,
   );
 }
 
+/** Un numéro n'est un choix que juste après notre menu, jamais après un autre diagnostic. */
+export function clarificationChoice(message: string, turns: TicketTurn[]): string | null {
+  const last = turns.at(-1);
+  if (last?.role !== 'assistant' || last.content !== CLARIFICATION_ONBOARDING) return null;
+  const choice = normalize(message).match(/^(?:choix |option |numero )?([1-4])[.!]?$/)?.[1];
+  const topics: Record<string, string> = {
+    '1': 'Compte / connexion : mot de passe, code e-mail ou passkey',
+    '2': 'Pilote / plan de vol : logbook, dépôt ou suivi',
+    '3': 'ATC / formation : accès, grade, training ou examen',
+    '4': 'Autre demande : demander au membre le problème précis sans supposer un parcours',
+  };
+  return choice ? topics[choice] : null;
+}
+
 /**
- * Compteur léger stocké dans memory_notes, sans migration. Une demande précise
- * retire immédiatement la note afin qu'un nouveau sujet reparte de zéro.
+ * Deux incompréhensions donnent le menu ; la troisième déclenche le relais
+ * humain dans le gestionnaire. Une demande précise retire immédiatement la note.
  */
 export function updateClarificationMemory(
   memory: string,
@@ -104,9 +127,9 @@ export function updateClarificationMemory(
   if (!isVagueClarificationAnswer(message)) {
     return { memory: kept.join('\n'), count: 0, showOnboarding: false };
   }
-  const count = Math.min(previous + 1, 2);
+  const count = Math.min(previous + 1, 3);
   kept.push(`clarification_failures=${count}`);
-  return { memory: kept.join('\n'), count, showOnboarding: count >= 2 };
+  return { memory: kept.join('\n'), count, showOnboarding: count === 2 };
 }
 
 const AUTH_TOPIC =

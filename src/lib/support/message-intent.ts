@@ -36,7 +36,7 @@ const NEED_MARKERS =
 
 /** Panne, blocage : ça mérite toujours une réponse. */
 const TROUBLE_MARKERS =
-  /\b(probleme|souci|bug|erreur|bloque|bloquee|marche pas|fonctionne pas|impossible|refuse|perdu|oublie|plante|introuvable)\b/;
+  /\b(probleme|soucis?|bug|erreur|bloque|bloquee|marche pas|fonctionne pas|impossible|refuse|perdu|perdue|oublie|plante|introuvable)\b|\b(?:je|j|j ai) (?:ne )?(?:comprends?|comprent|arrive|arive|sais|sait) (?:rien|pas)\b|\b(?:ca|cela|sa) (?:ne )?(?:marche|fonctionne) (?:toujours )?pas\b/;
 
 /** Vocabulaire du site : même sans verbe, le sujet est sérieux. */
 const TOPIC_MARKERS =

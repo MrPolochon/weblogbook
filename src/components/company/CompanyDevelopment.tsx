@@ -12,11 +12,13 @@ type Research = CompanyResearch;
 type Card = { id: string; catalog_id: string; title: string; description: string; cost: number; delay_seconds: number; research_id: string | null; target_label?: string; expires_month: string };
 type Commitment = { id: string; title: string; cost: number; committed_at: string; active_at: string; status: 'installing' | 'active'; revenue_percent: number; signature: string; target_label?: string };
 type ServiceSettings = { wifi_enabled: boolean; wifi_price: number; seat_ratio: number; ife_level: number; service_flags?: { restauration?: boolean; bagages?: boolean; correspondance?: boolean } };
+type ReviewPreferences = { voice: string; focus: string };
 type Agreement = { id: string; partner_id: string; partner_name: string; share_percent: number; status: 'proposed' | 'active' | 'rejected' | 'cancelled'; proposer_company_id: string; created_at: string };
 type Dossier = { id: string; research_id: string; title: string; body: string; created_at: string };
 type GlobalEvent = { title: string; description: string; starts_at: string; ends_at: string; effects: { revenue_percent?: number; fuel_percent?: number; repair_percent?: number; repair_delay_percent?: number; airport_tax_percent?: number; grounded?: boolean; inspection_required?: boolean; selector?: unknown } };
 type Development = {
   can_manage: boolean;
+  review_preferences?: ReviewPreferences;
   research?: Research[]; hand?: Card[]; commitments?: Commitment[];
   monthly?: { month: string; used: number; remaining: number; next_refill_at: string };
   global_event: GlobalEvent | null;
@@ -44,6 +46,7 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [settings, setSettings] = useState<ServiceSettings>({ wifi_enabled: false, wifi_price: 0, seat_ratio: 1, ife_level: 0 });
+  const [reviewEdit, setReviewEdit] = useState<{ companyId: string; preferences: ReviewPreferences } | null>(null);
   const settingsInitialized = useRef(false);
   const confirmationRef = useRef<HTMLElement>(null);
   const refreshGeneration = useRef(0);
@@ -89,6 +92,9 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
   const commitments = data?.commitments ?? [];
   const unlocks = data?.services?.unlocks ?? [];
   const manages = canManage && data?.can_manage === true;
+  const reviewDraft = reviewEdit?.companyId === compagnieId ? reviewEdit.preferences : null;
+  const reviewPreferences = reviewDraft ?? data?.review_preferences;
+  const editReviews = (preferences: ReviewPreferences) => setReviewEdit({ companyId: compagnieId, preferences });
   const has = (key: string) => unlocks.includes(key);
   const hasCodeshare = unlocks.includes('codeshare');
   const relevant = section === 'direction' || (canManage && ['recherche', 'rse', 'services'].includes(section));
@@ -186,7 +192,23 @@ export default function CompanyDevelopment({ compagnieId, canManage, section, on
           <fieldset disabled={busy}><legend>Services complémentaires</legend>{(['restauration', 'bagages', 'correspondance'] as const).map(key => <label key={key} className={styles.checkbox}><input type="checkbox" disabled={!has(key)} checked={settings.service_flags?.[key] ?? false} onChange={event => setSettings({ ...settings, service_flags: { ...settings.service_flags, [key]: event.target.checked } })} />{key === 'restauration' ? 'Restauration à bord' : key === 'bagages' ? 'Gestion des bagages' : 'Correspondances accompagnées'}{!has(key) && <LockKeyhole aria-label="Recherche requise" className="h-3.5 w-3.5 shrink-0 text-slate-500" />}</label>)}</fieldset>
         </div><button type="submit" disabled={busy || !['wifi', 'seats', 'ife', 'restauration', 'bagages', 'correspondance'].some(key => has(key))} className={styles.primary}>{busy ? 'Enregistrement…' : 'Enregistrer les services'}</button>
       </form>
-      <section className={styles.card}><div className={styles.sectionTitle}><Globe2 aria-hidden className="h-5 w-5" /><h3>Accords de partage de code</h3></div>{!hasCodeshare ? <Locked text="La recherche d’agrément codeshare ouvre les contrats avec d’autres compagnies." /> : <>
+      {reviewPreferences && <form className={styles.card} onSubmit={event => {
+        event.preventDefault();
+        void mutate({ action: 'review_preferences', ...reviewPreferences }, 'Préférences des prochains avis enregistrées.');
+      }}>
+        <div className={styles.sectionTitle}><Sparkles aria-hidden className="h-5 w-5" /><h3>Avis des voyageurs</h3></div>
+        <p>Choisissez le style et le sujet à faire ressortir dans les prochains avis simulés. Les notes suivent l’expérience du vol.</p>
+        <div className={styles.formGrid}>
+          <label>Style des avis<select disabled={busy} value={reviewPreferences.voice} onChange={event => editReviews({ ...reviewPreferences, voice: event.target.value })}>
+            <option value="mixed">Voix variées</option><option value="short">Avis courts</option><option value="story">Récits personnels</option>
+          </select></label>
+          <label>Sujet à privilégier<select disabled={busy} value={reviewPreferences.focus} onChange={event => editReviews({ ...reviewPreferences, focus: event.target.value })}>
+            <option value="balanced">Équilibré</option><option value="cabin">Cabine et services</option><option value="network">Réseau et partenaires</option><option value="timing">Ponctualité</option>
+          </select></label>
+        </div>
+        <button type="submit" disabled={busy || !reviewDraft} className={styles.primary}>Enregistrer les préférences</button>
+      </form>}
+      <section className={styles.card}><div className={styles.sectionTitle}><Globe2 aria-hidden className="h-5 w-5" /><h3>Accords de partage de code</h3></div>{!hasCodeshare ? <Locked text="La recherche d'agrément codeshare ouvre les contrats avec d'autres compagnies." /> : <>
         <p>La compagnie partenaire doit accepter l’accord pour qu’il devienne actif.</p>
         <form onSubmit={event => { event.preventDefault(); if (partner) void mutate({ action: 'codeshare_propose', partner_id: partner, share_percent: Number(share) }, 'Proposition de contrat transmise à la compagnie partenaire.'); }}>
           <div className={styles.formGrid}><label>Rechercher une compagnie<input type="search" value={partnerQuery} onChange={e => { setPartnerQuery(e.target.value); setPartner(''); }} placeholder="Nom de la compagnie" /></label><label>Compagnie partenaire<select required value={partner} onChange={e => setPartner(e.target.value)}><option value="">Choisir une compagnie</option>{partners.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><label>Part contractuelle (%)<input required type="number" min="0" max="10" step="0.01" value={share} onChange={e => setShare(e.target.value)} /></label></div>

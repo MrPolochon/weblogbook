@@ -66,6 +66,110 @@ const { buildSiteContext } = load('src/lib/support/site-context.ts');
 const { buildRequesterContext, resolveRequesterAccount } = load('src/lib/support/requester-context.ts');
 const { authoritativeSupportReply } = load('src/lib/support/guardrails.ts');
 
+// Cas anonymisés de l'export support : aucun message privé ni secret en fixture.
+test('audit tickets : demandes humaines naturelles sans confusion avec un refus', async () => {
+  for (const text of [
+    'Possible de discuter avec un staff pas avec un bote ?',
+    "J'aimerais parler à un humain",
+    'Je préfère parler à un humain plutôt que le bot',
+    'Parler avec un staff svp',
+    'Tu peut apeler un staff ?',
+    'Mais je veux pas parler à un robot',
+  ]) {
+    assert.equal(policy.explicitlyRequestsStaff(text), true, text);
+    const s = messageScenario();
+    const result = await s.send(text);
+    assert.equal(result.body.escalate, true, text);
+    assert.equal(s.prompts.length, 0, text);
+    assert.equal(s.messages.filter((m) => m.content.includes('<@&staff-role>')).length, 1);
+  }
+  for (const text of [
+    'Je ne veux pas parler à un humain',
+    'Pas de staff, je veux le bot',
+    'Si besoin je voudrais parler à un humain',
+    'Comment parler avec un staff ?',
+    'Je ne veux plus parler avec un staff',
+    'On devrait éviter de parler avec un staff',
+    'Si je ne veux pas parler à un robot que dois-je faire ?',
+  ]) assert.equal(policy.explicitlyRequestsStaff(text), false, text);
+});
+
+test('audit tickets : incompréhension et échecs courts ne sont pas du bavardage', async () => {
+  const intent = load('src/lib/support/message-intent.ts');
+  for (const text of ['je ne comprent pas', 'je comprend pas', 'je sais pas', 'sa marche pas', 'j’arrive pas', 'un soucis']) {
+    assert.equal(intent.looksLikeRequest(text), true, text);
+  }
+  for (const text of ['merci', 'mdr', 'toujours là ?']) assert.equal(intent.looksLikeRequest(text), false, text);
+  const s = messageScenario();
+  await s.send('je ne comprent pas');
+  assert.equal(s.prompts.length, 1);
+});
+
+test('audit tickets : recrutement compagnie et livret public donnent les destinations réelles', async () => {
+  const { COMPANIES_DISCORD_INVITE, OFFICIAL_SITE_URL } = load('src/lib/site-url.ts');
+  for (const text of ['Où se trouve le salon pour rejoindre une compagnie', 'Où voir les annonces des compagnies ?']) {
+    const s = messageScenario();
+    await s.send(text);
+    assert.equal(s.prompts.length, 0);
+    assert.ok(s.messages.some((m) => m.content.includes(COMPANIES_DISCORD_INVITE)));
+    assert.ok(s.messages.every((m) => !/Toutes les annonces|Demande d’adhésion/.test(m.content)));
+  }
+  assert.equal(authoritativeSupportReply('Comment déposer un plan de vol en compagnie ?'), null);
+  assert.equal(authoritativeSupportReply('Comment rejoindre une compagnie avec ma licence CAT 3 ?'), null);
+  const reply = authoritativeSupportReply('Où trouver le livret de progression ?');
+  assert.ok(reply.includes(`${OFFICIAL_SITE_URL}livret-progression`));
+  assert.match(reply, /sans connexion/);
+  assert.equal(authoritativeSupportReply('Où trouver le livret de progression ?', [{ role: 'assistant', content: reply }]), null);
+});
+
+test('un numéro après le menu de clarification est traité dans le bon parcours', async () => {
+  const guards = load('src/lib/support/guardrails.ts');
+  for (const [choice, topic] of [['1', 'Compte / connexion'], ['2', 'Pilote / plan'], ['option 3', 'ATC / formation'], ['4', 'Autre demande']]) {
+    const s = messageScenario({ conversation: [{ role: 'assistant', content: guards.CLARIFICATION_ONBOARDING }], memory_notes: 'clarification_failures=2' });
+    await s.send(choice);
+    assert.equal(s.prompts.length, 1, choice);
+    assert.ok(s.messages.length > 0, choice);
+    assert.equal(s.row.memory_notes.includes('clarification_failures='), false);
+    assert.ok(guards.clarificationChoice(choice, [{ role: 'assistant', content: guards.CLARIFICATION_ONBOARDING }]).includes(topic));
+  }
+  assert.equal(guards.clarificationChoice('1', [{ role: 'assistant', content: 'Quel numéro de vol ?' }]), null);
+  assert.equal(guards.clarificationChoice('5', [{ role: 'assistant', content: guards.CLARIFICATION_ONBOARDING }]), null);
+});
+
+test('clarifications infructueuses : choix concrets puis humain, sans boucle ni double ping', async () => {
+  const guards = load('src/lib/support/guardrails.ts');
+  const s = messageScenario();
+  await s.send('je ne comprent pas');
+  assert.equal(s.prompts.length, 1);
+  await s.send('je suis perdue');
+  assert.equal(s.messages.at(-1).content, guards.CLARIFICATION_ONBOARDING);
+  assert.equal(s.prompts.length, 1);
+  await s.send('jsp');
+  assert.equal(s.row.statut, 'staff_needed');
+  assert.equal(s.prompts.length, 1);
+  assert.equal(s.row.resolution_offered, false);
+  await s.send('je comprends rien');
+  assert.equal(s.messages.filter((m) => m.content.includes('<@&staff-role>')).length, 1);
+  assert.equal(guards.updateClarificationMemory('clarification_failures=2', 'Le bouton Valider affiche une erreur').count, 0);
+});
+
+test('aucune proposition de fermeture tant que le bot pose une question de diagnostic', async () => {
+  const actions = load('src/lib/support/ticket-actions.ts');
+  const ctx = { escalate: false, memberMessages: 5, memberAsked: false, alreadyOffered: false };
+  assert.equal(actions.shouldOfferResolution('Quel message apparaît ? [[RESOLU]]', ctx), false);
+  assert.equal(actions.shouldOfferResolution("Tu confirmes que tu peux te connecter ?\n[[RESOLU]]", ctx), false);
+  assert.equal(actions.shouldOfferResolution('Le problème est bien réglé. [[RESOLU]]', ctx), true);
+  const s = messageScenario({ conversation: [
+    { role: 'user', content: 'Mon plan de vol est bloqué' },
+    { role: 'assistant', content: 'Vois-tu le plan ?' },
+    { role: 'user', content: 'Oui' },
+    { role: 'assistant', content: 'Quelle est la page ?' },
+  ] });
+  s.reply({ ok: true, text: 'Quel message apparaît ? [[RESOLU]]' });
+  await s.send('Je suis sur la page du plan');
+  assert.equal(s.row.resolution_offered, false);
+});
+
 test('suite existante de garde-fous du support', () => {
   loader({ '@/lib/supabase/admin': { createAdminClient: () => { throw new Error('network forbidden'); } } })('scripts/test-support-guardrails.ts');
 });
