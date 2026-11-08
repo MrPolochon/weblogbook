@@ -42,15 +42,6 @@ export default async function SpectatorPage({ params }: Props) {
     .eq('id', targetUserId)
     .single();
 
-  // Récupérer les plans de vol sous contrôle de l'ATC cible
-  const { data: plansChezLui } = await admin
-    .from('plans_vol')
-    .select('*')
-    .eq('current_holder_user_id', targetUserId)
-    .is('pending_transfer_aeroport', null)
-    .in('statut', ['en_cours', 'accepte', 'en_attente_cloture', 'depose', 'en_attente'])
-    .order('created_at', { ascending: false });
-
   // Récupérer les transferts entrants vers la position de l'ATC cible
   const { data: transfertsEntrants } = await admin
     .from('plans_vol')
@@ -58,28 +49,6 @@ export default async function SpectatorPage({ params }: Props) {
     .eq('pending_transfer_aeroport', targetSession.aeroport)
     .eq('pending_transfer_position', targetSession.position);
 
-
-  // Enrichir les plans avec pilote, compagnie, avion
-  const enrichedPlans = await Promise.all((plansChezLui || []).map(async (plan) => {
-    let pilote = null;
-    let compagnie = null;
-    let avion = null;
-
-    if (plan.pilote_id) {
-      const { data } = await admin.from('profiles').select('identifiant').eq('id', plan.pilote_id).single();
-      pilote = data;
-    }
-    if (plan.compagnie_id) {
-      const { data } = await admin.from('compagnies').select('nom').eq('id', plan.compagnie_id).single();
-      compagnie = data;
-    }
-    if (plan.compagnie_avion_id) {
-      const { data } = await admin.from('compagnie_avions').select('immatriculation, nom_bapteme').eq('id', plan.compagnie_avion_id).single();
-      avion = data;
-    }
-
-    return { ...plan, pilote, compagnie, avion };
-  }));
 
   return (
     <SpectatorView
@@ -90,7 +59,6 @@ export default async function SpectatorPage({ params }: Props) {
         position: targetSession.position,
         started_at: targetSession.started_at
       }}
-      initialPlans={enrichedPlans}
       transfertsEntrants={transfertsEntrants || []}
     />
   );
