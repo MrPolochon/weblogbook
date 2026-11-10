@@ -787,6 +787,7 @@ export async function envoyerChequesVol(
     .select('id, montant_total_du, montant_rembourse')
     .eq('compagnie_id', plan.compagnie_id)
     .eq('statut', 'actif')
+    .eq('mode_remboursement', 'vols')
     .maybeSingle();
 
   if (pretActif && revenuCompagnie > 0) {

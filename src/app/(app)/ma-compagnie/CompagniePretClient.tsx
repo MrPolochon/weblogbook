@@ -1,474 +1,219 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Landmark, DollarSign, Percent, Clock, CheckCircle2, AlertTriangle, TrendingDown } from 'lucide-react';
+import { Landmark, CalendarDays, Wallet, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  calculerOffrePret, echeancierPret, parseMontantPret, PRETS_STANDARDS,
+  MIN_PRET_PERSONNALISE, MAX_PRET, MAX_DUREE_PRET,
+  type ModeRemboursement, type OffrePret, type PretBancaire,
+} from '@/lib/company-loans';
 
-type OptionPret = {
-  montant: number;
-  tauxInteret: number;
+type Dashboard = {
+  pretActif: PretBancaire | null;
+  historique: PretBancaire[];
+  capacite: { tresorerie: number; avions: number; dettes: number; capital: number; plafond: number };
+  serverTime: string;
 };
+const money = (n: number) => Number(n).toLocaleString('fr-FR') + ' F$';
+const date = (s: string) => new Date(s).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+const inputClass = 'w-full rounded-lg border border-slate-600 bg-slate-900 px-3 py-2.5 text-slate-100 focus:outline-none focus:border-sky-400';
+const actionClass = 'rounded-lg bg-sky-600 px-4 py-2.5 font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-40';
 
-type Pret = {
-  id: string;
-  montant_emprunte: number;
-  taux_interet: number;
-  montant_total_du: number;
-  montant_rembourse: number;
-  statut: string;
-  created_at: string;
-  rembourse_at: string | null;
-  echeance_at: string | null;
-};
-
-interface Props {
-  compagnieId: string;
-}
-
-/** Montant saisi par l’utilisateur (F$ entiers) : accepte espaces, F$, séparateurs . , */
-function parseMontantSaisiePret(raw: string): number | null {
-  const cleaned = raw
-    .trim()
-    .replace(/[Ff]\$/g, '')
-    .replace(/\$/g, '')
-    .replace(/[\s\u00A0\u202F]/g, '');
-  const digits = cleaned.replace(/\D/g, '');
-  if (!digits) return null;
-  const n = Number.parseInt(digits, 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-
-/** Montants API parfois sérialisés en string : toujours ramener à un entier F$ cohérent. */
-function restePretF$(totalDu: unknown, dejaRembourse: unknown): number {
-  const t = Number(totalDu);
-  const r = Number(dejaRembourse);
-  if (!Number.isFinite(t) || !Number.isFinite(r)) return 0;
-  return Math.max(0, Math.round(t - r));
-}
-
-export default function CompagniePretClient({ compagnieId }: Props) {
+export default function CompagniePretClient({ compagnieId }: { compagnieId: string }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+  const [data, setData] = useState<Dashboard | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [pretActif, setPretActif] = useState<Pret | null>(null);
-  const [historique, setHistorique] = useState<Pret[]>([]);
-  const [optionsPrets, setOptionsPrets] = useState<OptionPret[]>([]);
-  const [tauxPrelevement, setTauxPrelevement] = useState(30);
-  const [selectedMontant, setSelectedMontant] = useState<number | null>(null);
-  const [demandingPret, setDemandingPret] = useState(false);
-  const [montantRemboursement, setMontantRemboursement] = useState('');
-  const [remboursementEnCours, setRemboursementEnCours] = useState(false);
+  const [amount, setAmount] = useState('1000000');
+  const [days, setDays] = useState('30');
+  const [offerType, setOfferType] = useState<OffrePret>('personnalise');
+  const [mode, setMode] = useState<ModeRemboursement>('quotidien');
+  const [repayment, setRepayment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const inFlight = useRef(false);
+  const pending = useRef<{ payload: string; id: string } | null>(null);
 
-  const loadPret = useCallback(async (opts?: { silent?: boolean }) => {
-    if (!opts?.silent) setLoading(true);
+  const load = useCallback(async () => {
+    setLoading(true);
     try {
-      const res = await fetch(`/api/compagnies/${compagnieId}/pret`);
-      const data = await res.json();
-      if (res.ok) {
-        const raw = data.pretActif;
-        setPretActif(raw && typeof raw === 'object' ? (raw as Pret) : null);
-        setHistorique(Array.isArray(data.historique) ? data.historique : []);
-        setOptionsPrets(Array.isArray(data.optionsPrets) ? data.optionsPrets : []);
-        setTauxPrelevement(typeof data.tauxPrelevement === 'number' ? data.tauxPrelevement : 30);
-      } else {
-        setError(data.error || 'Erreur');
-      }
-    } catch {
-      setError('Erreur de chargement');
-    } finally {
-      if (!opts?.silent) setLoading(false);
-    }
+      const response = await fetch('/api/compagnies/' + compagnieId + '/pret', { cache: 'no-store' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Service bancaire indisponible.');
+      setData(body);
+      setError(null);
+    } catch (err) {
+      setData(null);
+      setError(err instanceof Error ? err.message : 'Impossible de charger les prêts.');
+    } finally { setLoading(false); }
   }, [compagnieId]);
+  useEffect(() => { void load(); }, [load]);
 
-  useEffect(() => {
-    loadPret();
-  }, [loadPret]);
+  const selected = calculerOffrePret(parseMontantPret(amount) ?? NaN, Number(days), offerType);
+  const limit = data ? Math.min(MAX_PRET, Number(data.capacite.plafond)) : 0;
+  const active = data?.pretActif ?? null;
+  const schedule = active ? echeancierPret(active, data ? Date.parse(data.serverTime) : Date.now()) : null;
+  const canBorrow = !!selected && !!data && !active && selected.montant <= limit && Number(data.capacite.tresorerie) >= 0;
+  const parsedRepayment = parseMontantPret(repayment);
+  const canRepay = !!parsedRepayment && !!schedule && !!data &&
+    parsedRepayment <= schedule.reste && parsedRepayment <= Number(data.capacite.tresorerie);
 
-  async function handleDemanderPret() {
-    if (!selectedMontant) return;
-    
-    const option = optionsPrets.find(o => o.montant === selectedMontant);
-    if (!option) return;
-
-    const interets = Math.round(selectedMontant * option.tauxInteret / 100);
-    const total = selectedMontant + interets;
-    
-    if (!confirm(`Demander un prêt de ${selectedMontant.toLocaleString('fr-FR')} F$ ?\n\n• Taux d'intérêt: ${option.tauxInteret}%\n• Intérêts: ${interets.toLocaleString('fr-FR')} F$\n• Total à rembourser: ${total.toLocaleString('fr-FR')} F$\n• Prélèvement: ${tauxPrelevement}% des revenus de chaque vol\n\nLe montant sera crédité immédiatement sur le compte de la compagnie.`)) {
-      return;
-    }
-
-    setDemandingPret(true);
+  async function send(method: 'POST' | 'PATCH', payload: Record<string, unknown>) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    setBusy(true);
     setError(null);
-
+    const signature = JSON.stringify({ compagnieId, method, payload });
+    if (pending.current?.payload !== signature) pending.current = { payload: signature, id: crypto.randomUUID() };
     try {
-      const res = await fetch(`/api/compagnies/${compagnieId}/pret`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ montant: selectedMontant }),
+      const response = await fetch('/api/compagnies/' + compagnieId + '/pret', {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...payload, request_id: pending.current.id }),
       });
-      const data = await res.json();
-      
-      if (!res.ok) throw new Error(data.error || 'Erreur');
-      
-      toast.success(data.message);
-      setSelectedMontant(null);
-      loadPret();
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Opération non confirmée.');
+      pending.current = null;
+      toast.success(result.message);
+      setRepayment('');
+      await load();
       startTransition(() => router.refresh());
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Erreur');
-    } finally {
-      setDemandingPret(false);
-    }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Opération non confirmée. Réessayez.';
+      setError(message);
+      toast.error(message);
+    } finally { inFlight.current = false; setBusy(false); }
   }
 
-  async function executeRemboursementPret(montant: number) {
-    if (!Number.isFinite(montant) || montant <= 0) {
-      setError('Montant invalide (entier positif requis).');
-      return;
-    }
-
-    if (pretActif) {
-      const reste = restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse);
-      if (!Number.isFinite(reste) || reste <= 0) {
-        setError('Ce prêt est déjà entièrement remboursé. Actualisez la page si ce message est inattendu.');
-        return;
-      }
-      if (montant > reste) {
-        setError(`Montant trop élevé. Maximum autorisé: ${reste.toLocaleString('fr-FR')} F$.`);
-        return;
-      }
-    }
-
-    if (!confirm(`Rembourser ${montant.toLocaleString('fr-FR')} F$ sur le prêt ?\n\nCe montant sera débité du compte de la compagnie.`)) {
-      return;
-    }
-
-    setRemboursementEnCours(true);
-    setError(null);
-
-    try {
-      const res = await fetch(`/api/compagnies/${compagnieId}/pret`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ montant }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) throw new Error(data.error || 'Erreur');
-
-      toast.success(data.message);
-      setMontantRemboursement('');
-      loadPret({ silent: true });
-      startTransition(() => router.refresh());
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Erreur';
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setRemboursementEnCours(false);
-    }
+  function borrow() {
+    if (!canBorrow || !selected || busy) return;
+    const details = [
+      'Emprunter ' + money(selected.montant) + ' sur ' + selected.dureeJours + ' jours ?',
+      'Intérêts fixes : ' + money(selected.interets) + ' (' + selected.tauxInteret.toLocaleString('fr-FR') + ' %).',
+      'Total : ' + money(selected.total) + '.',
+      mode === 'quotidien' ? 'Prélèvements quotidiens dès le lendemain.' : 'Prélèvement unique à la date limite.',
+      'Tout solde restant sera prélevé à l’échéance, même en cas de découvert.',
+    ];
+    if (!window.confirm(details.join('\n\n'))) return;
+    void send('POST', { montant: selected.montant, duree_jours: selected.dureeJours, offre: offerType, mode_remboursement: mode });
   }
 
-  async function handleRembourserPret() {
-    const parsed = parseMontantSaisiePret(montantRemboursement);
-    await executeRemboursementPret(parsed ?? NaN);
+  function repay(value: number) {
+    if (!active || !schedule || !data || busy || value <= 0 || value > schedule.reste || value > Number(data.capacite.tresorerie)) return;
+    if (!window.confirm('Rembourser ' + money(value) + ' depuis le compte de la compagnie ?')) return;
+    void send('PATCH', { montant: value, pret_id: active.id });
   }
-
-  /** Toujours calculer le reliquat depuis le prêt affiché (ne pas passer par un argument optionnel ambigu). */
-  async function handleRembourserToutLeReste() {
-    if (!pretActif) return;
-    const montant = restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse);
-    await executeRemboursementPret(montant);
-  }
-
-  if (loading) {
-    return (
-      <div className="card">
-        <p className="text-slate-400">Chargement...</p>
-      </div>
-    );
-  }
-
-  const resteARembourser = pretActif ? restePretF$(pretActif.montant_total_du, pretActif.montant_rembourse) : 0;
-  const resteRemboursable = Number.isFinite(resteARembourser) && resteARembourser > 0;
-  const totalDuNum = pretActif ? Number(pretActif.montant_total_du) : 0;
-  const rembourseNum = pretActif ? Number(pretActif.montant_rembourse) : 0;
-  const progressPct =
-    pretActif && Number.isFinite(totalDuNum) && totalDuNum > 0 && Number.isFinite(rembourseNum)
-      ? Math.round((rembourseNum / totalDuNum) * 100)
-      : 0;
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-          {error}
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="flex items-center gap-2 text-xl font-semibold text-slate-100"><Landmark className="h-5 w-5 text-sky-400" />Financement bancaire</h3>
+        <button type="button" onClick={() => void load()} disabled={loading || busy} className="text-sm text-slate-400 hover:text-slate-100 disabled:opacity-40" aria-label="Actualiser les prêts"><RefreshCw className="h-4 w-4" /></button>
+      </div>
+      {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+      {loading && <p className="text-sm text-slate-400" role="status">Chargement des prêts…</p>}
+      {data && !loading && <>
+        <div className="card border-slate-700">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <Metric label="Trésorerie disponible" value={money(data.capacite.tresorerie)} />
+            <Metric label="Capital net retenu" value={money(data.capacite.capital)} />
+            <Metric label="Plafond d’emprunt" value={money(limit)} accent />
+          </div>
+          <p className="mt-3 text-xs text-slate-400">Capital retenu : trésorerie + valeur catalogue des avions possédés non détruits − dettes bancaires restantes. Les avions dont une autre compagnie est propriétaire sont exclus.</p>
         </div>
-      )}
 
-      {/* Prêt actif */}
-      {pretActif ? (
-        <div className="card border-amber-500/30 bg-amber-500/5">
-          <div className="flex items-start justify-between mb-4">
-            <h3 className="text-lg font-semibold text-amber-200 flex items-center gap-2">
-              <Landmark className="h-5 w-5" />
-              Prêt en cours
-            </h3>
-            <span className="px-2 py-1 rounded-full bg-amber-500/20 text-amber-400 text-xs font-medium">
-              Actif
-            </span>
+        {active && schedule ? <div className="card space-y-5 border-amber-500/30">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="font-semibold text-amber-200">Prêt en cours</h4>
+            <span className="rounded-full bg-amber-500/10 px-3 py-1 text-xs text-amber-300">{active.mode_remboursement === 'quotidien' ? 'Remboursement quotidien' : active.mode_remboursement === 'echeance' ? 'En une fois à l’échéance' : 'Ancien prêt · prélèvements sur les vols'}</span>
           </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-4">
-            <div className="p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 mb-1">Montant emprunté</p>
-              <p className="text-lg font-bold text-slate-200">
-                {pretActif.montant_emprunte.toLocaleString('fr-FR')} F$
-              </p>
-            </div>
-            <div className="p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 mb-1">Taux d&apos;intérêt</p>
-              <p className="text-lg font-bold text-amber-400">
-                {pretActif.taux_interet}%
-              </p>
-            </div>
-            <div className="p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 mb-1">Total à rembourser</p>
-              <p className="text-lg font-bold text-slate-200">
-                {pretActif.montant_total_du.toLocaleString('fr-FR')} F$
-              </p>
-            </div>
-            <div className="p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 mb-1">Reste à payer</p>
-              <p className="text-lg font-bold text-red-400">
-                {resteARembourser.toLocaleString('fr-FR')} F$
-              </p>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Capital emprunté" value={money(active.montant_emprunte)} />
+            <Metric label="Intérêts fixes" value={money(active.montant_total_du - active.montant_emprunte)} />
+            <Metric label="Déjà remboursé" value={money(active.montant_rembourse)} />
+            <Metric label="Reste à payer" value={money(schedule.reste)} accent />
+          </div>
+          <div>
+            <label className="mb-2 block text-xs text-slate-400" htmlFor="loan-progress">Remboursement du total de {money(active.montant_total_du)}</label>
+            <progress id="loan-progress" className="h-3 w-full accent-sky-500" max={active.montant_total_du} value={active.montant_rembourse} />
+          </div>
+          <div className="rounded-lg bg-slate-800/50 p-4 text-sm text-slate-300">
+            <p className="flex items-center gap-2"><CalendarDays className="h-4 w-4" />Date limite : {active.echeance_at ? date(active.echeance_at) : 'non définie'}</p>
+            {schedule.prochaine && <p className="mt-2">{schedule.exigible > 0 ? 'Prélèvement à régulariser' : 'Prochain prélèvement prévu'} : {money(schedule.prochaine.montant)}, le {date(schedule.prochaine.date)}.</p>}
+            {active.mode_remboursement === 'vols' && <p className="mt-2">Ce prêt conserve ses conditions initiales : 30 % du revenu compagnie de chaque vol sont affectés au remboursement.</p>}
+            {schedule.exigible > 0 && <p className="mt-2 text-amber-300">Montant actuellement exigible : {money(schedule.exigible)}. Approvisionnez le compte pour permettre le prélèvement.</p>}
+          </div>
+          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-4">
+            <h5 className="mb-2 flex items-center gap-2 font-medium text-emerald-200"><Wallet className="h-4 w-4" />Remboursement anticipé</h5>
+            <p className="mb-3 text-xs text-slate-400">Partiel ou total, sans frais supplémentaires. Les intérêts fixés à la souscription restent dus. Un versement anticipé couvre les prochaines échéances.</p>
+            <label htmlFor="loan-repayment" className="sr-only">Montant à rembourser en F$</label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input id="loan-repayment" type="text" inputMode="numeric" value={repayment} onChange={e => setRepayment(e.target.value)} className={inputClass} placeholder="Montant en F$" disabled={busy} />
+              <button type="button" onClick={() => canRepay && repay(parsedRepayment!)} disabled={!canRepay || busy} className={actionClass}>Rembourser</button>
+              <button type="button" onClick={() => repay(schedule.reste)} disabled={busy || schedule.reste <= 0 || schedule.reste > Number(data.capacite.tresorerie)} className={actionClass + ' whitespace-nowrap'}>Solder le prêt</button>
             </div>
           </div>
-
-          {/* Barre de progression */}
-          <div className="mb-2">
-            <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-              <span>Progression du remboursement</span>
-              <span>{progressPct}%</span>
-            </div>
-            <div className="h-3 bg-slate-700 rounded-full overflow-hidden">
-              <div 
-                className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-            <p className="text-xs text-slate-500 mt-1">
-              {pretActif.montant_rembourse.toLocaleString('fr-FR')} F$ remboursés sur {pretActif.montant_total_du.toLocaleString('fr-FR')} F$
-            </p>
+        </div> : <div className="card space-y-5 border-sky-500/20">
+          <div>
+            <h4 className="text-lg font-semibold text-slate-100">Composer mon prêt</h4>
+            <p className="mt-1 text-sm text-slate-400">De 1 à 10 millions de F$, dans la limite de votre capital. Les petites offres standard restent disponibles.</p>
           </div>
-
-          {/* Echeance */}
-          {(() => {
-            if (!pretActif.echeance_at) {
-              return (
-                <div className="mt-4 p-3 bg-slate-800/30 rounded-lg flex items-start gap-2">
-                  <Clock className="h-4 w-4 mt-0.5 shrink-0 text-slate-400" />
-                  <p className="text-sm text-slate-400">Date limite de remboursement : <span className="text-slate-300 font-semibold">non definie</span></p>
-                </div>
-              );
-            }
-            const echeance = new Date(pretActif.echeance_at);
-            const now = new Date();
-            const msRestants = echeance.getTime() - now.getTime();
-            const joursRestants = Math.max(0, Math.ceil(msRestants / 86_400_000));
-            const isDepasse = msRestants < 0;
-            const isUrgent = !isDepasse && joursRestants <= 3;
-            return (
-              <div className={`mt-4 p-3 rounded-lg flex items-start gap-2 ${
-                isDepasse ? 'bg-red-500/15 border border-red-500/40' :
-                isUrgent ? 'bg-orange-500/15 border border-orange-500/30' :
-                'bg-slate-800/30'
-              }`}>
-                <Clock className={`h-4 w-4 mt-0.5 shrink-0 ${isDepasse ? 'text-red-400' : isUrgent ? 'text-orange-400' : 'text-slate-400'}`} />
-                <div>
-                  <p className={`text-sm font-semibold ${isDepasse ? 'text-red-300' : isUrgent ? 'text-orange-300' : 'text-slate-300'}`}>
-                    {isDepasse
-                      ? 'Echeance depassee — remboursement force imminent'
-                      : `Date limite : ${echeance.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`
-                    }
-                  </p>
-                  <p className={`text-xs mt-0.5 ${isDepasse ? 'text-red-400' : isUrgent ? 'text-orange-400' : 'text-slate-500'}`}>
-                    {isDepasse
-                      ? 'Le solde du compte sera debite du montant restant. En cas de decouvert, vos actifs pourront etre vendus automatiquement.'
-                      : joursRestants <= 1
-                      ? 'Dernier jour pour rembourser !'
-                      : `${joursRestants} jours restants`
-                    }
-                  </p>
-                </div>
+          <div className="flex flex-wrap gap-2" aria-label="Montants standard">
+            {PRETS_STANDARDS.map(n => <button key={n} type="button" disabled={busy || n > limit} onClick={() => { setAmount(String(n)); setOfferType('standard'); }} aria-pressed={offerType === 'standard' && Number(amount) === n}
+              className={'rounded-lg border px-3 py-2 text-sm disabled:opacity-30 ' + (offerType === 'standard' && Number(amount) === n ? 'border-sky-400 bg-sky-500/15 text-sky-200' : 'border-slate-700 text-slate-300 hover:border-slate-500')}>{money(n)}</button>)}
+          </div>
+          <div className="grid gap-5 md:grid-cols-2">
+            <div>
+              <label htmlFor="loan-amount" className="mb-2 block text-sm text-slate-300">{offerType === 'standard' ? 'Montant standard sélectionné' : 'Montant personnalisé (F$)'}</label>
+              <input id="loan-amount" type="text" inputMode="numeric" value={amount} onChange={e => { setAmount(e.target.value); setOfferType('personnalise'); }} disabled={busy} className={inputClass} aria-describedby="loan-limits" />
+              <p id="loan-limits" className="mt-2 text-xs text-slate-400">Personnalisé : minimum {money(MIN_PRET_PERSONNALISE)}, maximum {money(limit)}.</p>
+            </div>
+            <div>
+              <label htmlFor="loan-days" className="mb-2 block text-sm text-slate-300">Durée en jours (3 mois maximum)</label>
+              <input id="loan-days" type="number" min={1} max={MAX_DUREE_PRET} step={1} value={days} onChange={e => setDays(e.target.value)} disabled={busy} className={inputClass} />
+              <div className="mt-2 flex gap-2">{[30, 60, 90].map(n => <button key={n} type="button" disabled={busy} onClick={() => setDays(String(n))} className="rounded border border-slate-700 px-2 py-1 text-xs text-slate-300">{n} jours</button>)}</div>
+            </div>
+          </div>
+          <fieldset disabled={busy} className="grid gap-3 sm:grid-cols-2">
+            <legend className="mb-2 text-sm text-slate-300">Mode de remboursement</legend>
+            <label className={'cursor-pointer rounded-xl border p-4 ' + (mode === 'quotidien' ? 'border-sky-400 bg-sky-500/10' : 'border-slate-700')}>
+              <input type="radio" name="loan-mode" value="quotidien" checked={mode === 'quotidien'} onChange={() => setMode('quotidien')} className="mr-2 accent-sky-500" />
+              <span className="font-medium text-slate-100">Chaque jour</span>
+              <span className="mt-2 block text-xs text-slate-400">Capital et intérêts répartis sur la durée choisie. Premier prélèvement après 24 heures.</span>
+            </label>
+            <label className={'cursor-pointer rounded-xl border p-4 ' + (mode === 'echeance' ? 'border-sky-400 bg-sky-500/10' : 'border-slate-700')}>
+              <input type="radio" name="loan-mode" value="echeance" checked={mode === 'echeance'} onChange={() => setMode('echeance')} className="mr-2 accent-sky-500" />
+              <span className="font-medium text-slate-100">À l’échéance</span>
+              <span className="mt-2 block text-xs text-slate-400">Un seul prélèvement automatique du capital et des intérêts à la date limite.</span>
+            </label>
+          </fieldset>
+          <div className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4" aria-live="polite">
+            {selected ? <>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Metric label={'Intérêts sur ' + selected.dureeJours + ' jours (' + selected.tauxInteret.toLocaleString('fr-FR') + ' %)'} value={money(selected.interets)} />
+                <Metric label="Total à rembourser" value={money(selected.total)} accent />
+                <Metric label={mode === 'quotidien' ? 'Prélèvement par jour' : 'Prélèvement à l’échéance'} value={mode === 'echeance' ? money(selected.total) : selected.quotidienMin === selected.quotidienMax ? money(selected.quotidienMin) : money(selected.quotidienMin) + ' à ' + money(selected.quotidienMax)} />
               </div>
-            );
-          })()}
-
-          <div className="mt-4 p-3 bg-slate-800/30 rounded-lg flex items-start gap-2">
-            <TrendingDown className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-slate-400">
-              <strong className="text-amber-400">{tauxPrelevement}%</strong> des revenus bruts de chaque vol commercial sont automatiquement prélevés pour rembourser le prêt.
-            </p>
+              <p className="mt-3 text-xs text-slate-400">Taux fixe pour la durée totale, calculé selon le montant et au prorata des jours. En quotidien, les arrondis sont répartis pour rembourser exactement le total.</p>
+              {selected.montant > limit && <p className="mt-3 text-sm text-red-300">Ce montant dépasse votre capital disponible pour emprunter.</p>}
+            </> : <p className="text-sm text-amber-300">Saisissez un montant personnalisé de 1 à 10 millions de F$ et une durée entière de 1 à 90 jours.</p>}
           </div>
+          <p className="text-xs leading-relaxed text-amber-200/80">Un seul prêt actif par compagnie. Les nouveaux prêts ne prélèvent rien sur les recettes des vols. À la date limite, tout montant restant est débité du compte, même si cela crée un découvert. La procédure existante prévoit alors 7 jours pour régulariser avant une éventuelle vente d’actifs.</p>
+          <button type="button" onClick={borrow} disabled={!canBorrow || busy} className={actionClass}>{busy ? 'Traitement…' : 'Confirmer ce prêt'}</button>
+        </div>}
 
-          {/* Remboursement manuel */}
-          <div className="mt-4 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-            <h4 className="text-sm font-semibold text-emerald-200 mb-2 flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Remboursement anticipé
-            </h4>
-            <p className="text-xs text-slate-400 mb-3">
-              Vous pouvez contribuer au remboursement du prêt à tout moment depuis le compte de la compagnie.
-            </p>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                min="1"
-                max={resteRemboursable ? resteARembourser : undefined}
-                value={montantRemboursement}
-                onChange={(e) => setMontantRemboursement(e.target.value)}
-                placeholder={`Max: ${resteARembourser.toLocaleString('fr-FR')} F$`}
-                className="flex-1 px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-200 text-sm focus:outline-none focus:border-emerald-500"
-              />
-              <button
-                type="button"
-                onClick={() => handleRembourserPret()}
-                disabled={remboursementEnCours || !montantRemboursement}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm whitespace-nowrap"
-              >
-                {remboursementEnCours ? 'En cours...' : 'Rembourser'}
-              </button>
-              <button
-                type="button"
-                onClick={handleRembourserToutLeReste}
-                disabled={remboursementEnCours || !resteRemboursable}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium text-sm whitespace-nowrap"
-              >
-                Rembourser le reste
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Demander un prêt */
-        <div className="card">
-          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-            <Landmark className="h-5 w-5 text-sky-400" />
-            Demander un prêt bancaire
-          </h3>
-
-          <p className="text-sm text-slate-400 mb-4">
-            Sélectionnez le montant souhaité. Le prêt sera remboursé automatiquement par prélèvement de {tauxPrelevement}% sur les revenus de chaque vol commercial.
-          </p>
-
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-4">
-            {optionsPrets.map((option) => {
-              const interets = Math.round(option.montant * option.tauxInteret / 100);
-              const total = option.montant + interets;
-              const isSelected = selectedMontant === option.montant;
-              
-              return (
-                <button
-                  key={option.montant}
-                  type="button"
-                  onClick={() => setSelectedMontant(isSelected ? null : option.montant)}
-                  className={`p-4 rounded-xl border-2 text-left transition-all ${
-                    isSelected 
-                      ? 'border-sky-500 bg-sky-500/10' 
-                      : 'border-slate-700 hover:border-slate-600 bg-slate-800/30'
-                  }`}
-                >
-                  <p className="text-xl font-bold text-slate-100 mb-1">
-                    {option.montant.toLocaleString('fr-FR')} F$
-                  </p>
-                  <div className="flex items-center gap-1 text-sm mb-2">
-                    <Percent className="h-3 w-3 text-amber-400" />
-                    <span className={option.tauxInteret >= 10 ? 'text-red-400' : option.tauxInteret >= 5 ? 'text-amber-400' : 'text-emerald-400'}>
-                      {option.tauxInteret}% d&apos;intérêts
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-500">
-                    À rembourser: {total.toLocaleString('fr-FR')} F$
-                  </p>
-                  <p className="text-xs text-slate-600">
-                    (dont {interets.toLocaleString('fr-FR')} F$ d&apos;intérêts)
-                  </p>
-                </button>
-              );
-            })}
-          </div>
-
-          {selectedMontant && (
-            <div className="flex items-center justify-between p-4 bg-sky-500/10 border border-sky-500/30 rounded-lg mb-4">
-              <div>
-                <p className="text-sm text-slate-300">
-                  Prêt sélectionné: <strong className="text-sky-400">{selectedMontant.toLocaleString('fr-FR')} F$</strong>
-                </p>
-                <p className="text-xs text-slate-500">
-                  Le montant sera crédité immédiatement sur le compte de la compagnie.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleDemanderPret}
-                disabled={demandingPret}
-                className="px-4 py-2 bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white rounded-lg font-medium flex items-center gap-2"
-              >
-                {demandingPret ? (
-                  <>Traitement...</>
-                ) : (
-                  <>
-                    <DollarSign className="h-4 w-4" />
-                    Confirmer
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-            <p className="text-xs text-amber-200">
-              <strong>Attention :</strong> Vous ne pouvez avoir qu&apos;un seul prêt actif à la fois. Les taux d&apos;intérêt augmentent avec le montant emprunté. Assurez-vous de pouvoir rembourser !
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Historique des prêts */}
-      {historique.length > 0 && (
-        <div className="card">
-          <h3 className="text-lg font-semibold text-slate-100 flex items-center gap-2 mb-4">
-            <Clock className="h-5 w-5 text-slate-400" />
-            Historique des prêts remboursés
-          </h3>
-          
-          <div className="space-y-2">
-            {historique.map((pret) => (
-              <div key={pret.id} className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  <div>
-                    <p className="text-sm text-slate-200">
-                      {pret.montant_emprunte.toLocaleString('fr-FR')} F$ à {pret.taux_interet}%
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      Remboursé le {new Date(pret.rembourse_at!).toLocaleDateString('fr-FR')}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm text-emerald-400">
-                  {pret.montant_total_du.toLocaleString('fr-FR')} F$ payés
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+        {data.historique.length > 0 && <div className="card">
+          <h4 className="mb-4 font-semibold text-slate-200">Prêts remboursés</h4>
+          <div className="space-y-3">{data.historique.map(loan => <div key={loan.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-800/40 p-3 text-sm">
+            <div className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-400" /><span className="text-slate-200">{money(loan.montant_emprunte)} empruntés</span></div>
+            <div className="text-right"><p className="text-emerald-300">{money(loan.montant_total_du)} remboursés</p><p className="text-xs text-slate-500">{loan.rembourse_at ? date(loan.rembourse_at) : 'Soldé'}</p></div>
+          </div>)}</div>
+        </div>}
+      </>}
     </div>
   );
+}
+function Metric({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+  return <div><p className="text-xs text-slate-400">{label}</p><p className={'mt-1 text-lg font-semibold ' + (accent ? 'text-sky-300' : 'text-slate-100')}>{value}</p></div>;
 }
