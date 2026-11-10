@@ -15,64 +15,15 @@ export async function POST(request: NextRequest) {
     const now = new Date();
     const logs: string[] = [];
 
-    // ================================================================
-    // ETAPE 1 : Prets actifs dont l'echeance est depassee
-    // ================================================================
-    const { data: pretsExpires } = await admin
-      .from('prets_bancaires')
-      .select('id, compagnie_id, demandeur_id, montant_total_du, montant_rembourse, montant_emprunte, taux_interet')
-      .eq('statut', 'actif')
-      .lt('echeance_at', now.toISOString());
-
-    for (const pret of pretsExpires ?? []) {
-      const resteDu = pret.montant_total_du - pret.montant_rembourse;
-      if (resteDu <= 0) {
-        await admin.from('prets_bancaires').update({ statut: 'rembourse', rembourse_at: now.toISOString() }).eq('id', pret.id);
-        logs.push(`Pret ${pret.id} deja solde, marque rembourse`);
-        continue;
-      }
-
-      const { data: compte } = await admin.from('felitz_comptes')
-        .select('id, solde')
-        .eq('compagnie_id', pret.compagnie_id)
-        .eq('type', 'entreprise')
-        .single();
-
-      if (!compte) { logs.push(`Pret ${pret.id}: compte introuvable`); continue; }
-
-      await admin.from('felitz_comptes')
-        .update({ solde: compte.solde - resteDu })
-        .eq('id', compte.id);
-
-      await admin.from('felitz_transactions').insert({
-        compte_id: compte.id,
-        type: 'debit',
-        montant: resteDu,
-        libelle: `Remboursement force pret echeance depassee — ${resteDu.toLocaleString('fr-FR')} F$`,
-      });
-
-      const nouveauSolde = compte.solde - resteDu;
-
-      await admin.from('prets_bancaires').update({
-        statut: 'rembourse',
-        montant_rembourse: pret.montant_total_du,
-        rembourse_at: now.toISOString(),
-        ...(nouveauSolde < 0 ? { decouvert_depuis: now.toISOString() } : {}),
-      }).eq('id', pret.id);
-
-      if (pret.demandeur_id) {
-        const { data: comp } = await admin.from('compagnies').select('nom').eq('id', pret.compagnie_id).single();
-        await admin.from('messages').insert({
-          destinataire_id: pret.demandeur_id,
-          titre: nouveauSolde < 0
-            ? `Pret rembourse automatiquement — Compte en decouvert`
-            : `Pret rembourse automatiquement`,
-          contenu: `Le pret de ${pret.montant_emprunte.toLocaleString('fr-FR')} F$ de ${comp?.nom || 'votre compagnie'} a ete rembourse automatiquement (echeance depassee).\n\nMontant preleve : ${resteDu.toLocaleString('fr-FR')} F$.\nNouveau solde : ${nouveauSolde.toLocaleString('fr-FR')} F$.${nouveauSolde < 0 ? `\n\nVotre compte est en decouvert. Vous avez ${DELAI_DECOUVERT_JOURS} jours pour le renflouer.` : ''}`,
-          type_message: 'systeme',
-        });
-      }
-
-      logs.push(`Pret ${pret.id}: ${resteDu} F$ debite, solde=${nouveauSolde}`);
+    // The database collects cumulative daily amounts and final balances atomically.
+    const { data: collections, error: collectionError } = await admin.rpc('collect_due_company_loans');
+    if (collectionError || !collections) {
+      console.error('Loan collection unavailable:', collectionError);
+      return NextResponse.json({ error: 'Prélèvements bancaires indisponibles.' }, { status: 503 });
+    }
+    for (const result of collections.results ?? []) logs.push(JSON.stringify(result));
+    if (Number(collections.failures) > 0) {
+      return NextResponse.json({ error: 'Certains prélèvements ont échoué et seront réessayés.', logs }, { status: 503 });
     }
 
     // ================================================================
@@ -191,7 +142,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, logs, pretsTraites: pretsExpires?.length ?? 0, compagniesTraitees: compagniesTraitees.size });
+    return NextResponse.json({ ok: true, logs, pretsTraites: Number(collections.processed), compagniesTraitees: compagniesTraitees.size });
   } catch (err) {
     console.error('CRON prets error:', err);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
