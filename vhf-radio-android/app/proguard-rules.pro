@@ -1,6 +1,5 @@
-# LiveKit
--keep class io.livekit.** { *; }
--keep class livekit.** { *; }
+# WebRTC
+-keep class org.webrtc.** { *; }
 
 # OkHttp
 -dontwarn okhttp3.**

@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
     // ------------------------------------------------------------------
     // Branche speciale : appel ATIS (numero <code_aero>9999).
-    // Pas de creation de row dans atc_calls, pas de LiveKit. On retourne
+    // Pas de creation de row dans atc_calls, pas de Cloudflare. On retourne
     // juste le texte ATIS courant pour que le client le lise via TTS.
     // ------------------------------------------------------------------
     if (body?.atis === true) {

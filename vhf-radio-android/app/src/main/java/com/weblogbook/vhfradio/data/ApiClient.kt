@@ -119,7 +119,7 @@ object ApiClient {
         val siavi: Boolean
     )
 
-    data class LiveKitTokenResponse(
+    data class CloudflareTokenResponse(
         val token: String?,
         val url: String?,
         val error: String?
@@ -225,15 +225,15 @@ object ApiClient {
     /* ══════════ API WebLogbook ══════════ */
 
     /**
-     * Récupère un token LiveKit pour se connecter à une room VHF.
-     * POST /api/livekit/token
+     * Récupère un token Cloudflare pour se connecter à une room VHF.
+     * POST /api/realtime/join
      * Auto-retry on 401 by refreshing the access token.
      */
-    suspend fun getLiveKitToken(
+    suspend fun getCloudflareToken(
         roomName: String,
         participantName: String,
         accessToken: String
-    ): Result<LiveKitTokenResponse> = withContext(Dispatchers.IO) {
+    ): Result<CloudflareTokenResponse> = withContext(Dispatchers.IO) {
         try {
             val body = gson.toJson(
                 mapOf(
@@ -246,7 +246,7 @@ object ApiClient {
             var token = storedAccessToken ?: accessToken
 
             fun buildRequest(t: String) = Request.Builder()
-                .url("${Config.API_BASE_URL}/api/livekit/token")
+                .url("${Config.API_BASE_URL}/api/realtime/join")
                 .addHeader("Content-Type", "application/json")
                 .addHeader("Authorization", "Bearer $t")
                 .post(body.toRequestBody(JSON))
@@ -257,7 +257,7 @@ object ApiClient {
 
             // Retry on 401 with refreshed token
             if (response.code == 401) {
-                Log.w(TAG, "LiveKit token 401 — tentative de refresh...")
+                Log.w(TAG, "Cloudflare token 401 — tentative de refresh...")
                 val newToken = refreshAccessToken()
                 if (newToken != null) {
                     token = newToken
@@ -270,15 +270,15 @@ object ApiClient {
                 val errMsg = try {
                     val j = gson.fromJson(responseBody, JsonObject::class.java)
                     j?.get("error")?.asString ?: j?.get("details")?.asString ?: "Erreur ${response.code}"
-                } catch (_: Exception) { "Erreur API LiveKit: ${response.code}" }
-                Log.e(TAG, "getLiveKitToken failed: ${response.code} $responseBody")
+                } catch (_: Exception) { "Erreur API Cloudflare: ${response.code}" }
+                Log.e(TAG, "getCloudflareToken failed: ${response.code} $responseBody")
                 return@withContext Result.failure(Exception(errMsg))
             }
 
-            val tokenResponse = gson.fromJson(responseBody, LiveKitTokenResponse::class.java)
+            val tokenResponse = gson.fromJson(responseBody, CloudflareTokenResponse::class.java)
             Result.success(tokenResponse)
         } catch (e: Exception) {
-            Log.e(TAG, "getLiveKitToken error: ${e.message}")
+            Log.e(TAG, "getCloudflareToken error: ${e.message}")
             Result.failure(Exception("Erreur réseau: ${e.message}"))
         }
     }

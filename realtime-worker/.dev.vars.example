@@ -1,0 +1,6 @@
+SFU_APP_ID=
+SFU_APP_SECRET=
+TURN_KEY_ID=
+TURN_API_TOKEN=
+REALTIME_TICKET_SECRET=
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,null,file://

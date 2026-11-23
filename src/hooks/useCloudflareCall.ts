@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Room, RoomEvent, Track, ConnectionState } from 'livekit-client';
+import { Room, RoomEvent, Track, ConnectionState } from '@/lib/cloudflare/client';
 
 type SoundType = 'ring' | 'dial' | 'end' | 'beep' | 'connected';
 
@@ -11,7 +11,7 @@ export interface JoinCallCallbacks {
   onParticipantDisconnected: () => void;
 }
 
-export interface UseLiveKitCallOptions {
+export interface UseCloudflareCallOptions {
   selectedInputId: string;
   selectedOutputId: string;
   playSound: (type: SoundType) => void;
@@ -20,15 +20,17 @@ export interface UseLiveKitCallOptions {
   onExtraCleanup?: () => void;
 }
 
-export function useLiveKitCall({
+export function useCloudflareCall({
   selectedInputId,
   selectedOutputId,
   playSound,
   playMessage,
   onConnectionStatusChange,
   onExtraCleanup,
-}: UseLiveKitCallOptions) {
+}: UseCloudflareCallOptions) {
   const roomRef = useRef<Room | null>(null);
+  const generation = useRef(0);
+  const joinAbort = useRef<AbortController | null>(null);
   const audioContainerRef = useRef<HTMLDivElement | null>(null);
   const audioLevelIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const attachedAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
@@ -51,12 +53,12 @@ export function useLiveKitCall({
       try {
         await maybeSetSink.setSinkId(selectedOutputId);
       } catch (e) {
-        console.warn('[LiveKit] setSinkId failed:', e);
+        console.warn('[Cloudflare] setSinkId failed:', e);
       }
     }
     const playPromise = audioElement.play();
     if (playPromise) {
-      playPromise.catch((e) => console.warn('[LiveKit] audio play blocked:', e));
+      playPromise.catch((e) => console.warn('[Cloudflare] audio play blocked:', e));
     }
   }, [selectedOutputId]);
 
@@ -82,7 +84,10 @@ export function useLiveKitCall({
     [applyOutputDevice],
   );
 
-  const cleanupLiveKit = useCallback(async () => {
+  const cleanupCloudflare = useCallback(async () => {
+    generation.current++;
+    joinAbort.current?.abort();
+    joinAbort.current = null;
     if (audioLevelIntervalRef.current) {
       clearInterval(audioLevelIntervalRef.current);
       audioLevelIntervalRef.current = null;
@@ -92,8 +97,10 @@ export function useLiveKitCall({
     });
     attachedAudioElementsRef.current.clear();
     if (roomRef.current) {
-      await roomRef.current.disconnect();
+      const room = roomRef.current;
       roomRef.current = null;
+      room.removeAllListeners();
+      await room.disconnect();
     }
     onExtraCleanup?.();
     setAudioLevel(0);
@@ -101,32 +108,38 @@ export function useLiveKitCall({
     onConnectionStatusChange('');
   }, [onExtraCleanup, onConnectionStatusChange]);
 
-  const joinLiveKitCall = useCallback(
+  const joinCloudflareCall = useCallback(
     async (
       callId: string,
       participantName: string,
       callbacks: JoinCallCallbacks,
     ): Promise<boolean> => {
+      const attempt = ++generation.current;
+      joinAbort.current?.abort();
+      const abort = new AbortController();
+      joinAbort.current = abort;
       onConnectionStatusChange('Connexion...');
 
       try {
-        const response = await fetch('/api/livekit/token', {
+        const response = await fetch('/api/realtime/join', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ roomName: `call-${callId}`, participantName }),
+          signal: abort.signal,
         });
 
         const data = await response.json();
+        if (attempt !== generation.current) return false;
 
         if (!response.ok) {
-          console.error('[LiveKit] Token error:', data);
-          throw new Error(data.details || data.error || 'Erreur token LiveKit');
+          console.error('[Cloudflare] Token error:', data);
+          throw new Error(data.details || data.error || 'Erreur token Cloudflare');
         }
 
         const { token, url } = data;
         if (!url) {
-          console.error('[LiveKit] URL manquante dans la réponse');
-          throw new Error('URL LiveKit non configurée');
+          console.error('[Cloudflare] URL manquante dans la réponse');
+          throw new Error('URL Cloudflare non configurée');
         }
 
         const room = new Room({
@@ -145,13 +158,14 @@ export function useLiveKitCall({
         });
 
         room.on(RoomEvent.Disconnected, () => {
-          void cleanupLiveKit();
+          void cleanupCloudflare();
           callbacks.onDisconnected();
           playSound('end');
           playMessage('Appel terminé');
         });
 
         room.on(RoomEvent.ParticipantConnected, (participant) => {
+          if (room.state !== ConnectionState.Connected) return;
           callbacks.onConnected();
           onConnectionStatusChange('Connecté');
           playSound('connected');
@@ -164,7 +178,7 @@ export function useLiveKitCall({
         });
 
         room.on(RoomEvent.ParticipantDisconnected, () => {
-          void cleanupLiveKit();
+          void cleanupCloudflare();
           callbacks.onParticipantDisconnected();
           playSound('end');
           playMessage('Correspondant a raccroché');
@@ -191,6 +205,7 @@ export function useLiveKitCall({
         });
 
         room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+          if (state === ConnectionState.Reconnecting) setIsMuted(true);
           if (state === ConnectionState.Connected) onConnectionStatusChange('Connecté');
           else if (state === ConnectionState.Reconnecting) onConnectionStatusChange('Reconnexion...');
           else if (state === ConnectionState.Disconnected) onConnectionStatusChange('Déconnecté');
@@ -198,15 +213,12 @@ export function useLiveKitCall({
         });
 
         room.on(RoomEvent.MediaDevicesError, (error) => {
-          console.error('[LiveKit] Media devices error:', error);
+          console.error('[Cloudflare] Media devices error:', error);
           playMessage('Erreur microphone');
         });
 
-        const connectPromise = room.connect(url, token, { autoSubscribe: true });
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout connexion')), 15000),
-        );
-        await Promise.race([connectPromise, timeoutPromise]);
+        await room.connect(url, token, { autoSubscribe: true });
+        if (attempt !== generation.current) { await room.disconnect(); return false; }
 
         const roomWithSwitch = room as unknown as {
           switchActiveDevice?: (kind: string, deviceId: string) => Promise<void>;
@@ -215,17 +227,18 @@ export function useLiveKitCall({
           try {
             await roomWithSwitch.switchActiveDevice?.('audioinput', selectedInputId);
           } catch (e) {
-            console.warn('[LiveKit] switchActiveDevice(audioinput) failed:', e);
+            console.warn('[Cloudflare] switchActiveDevice(audioinput) failed:', e);
           }
         }
         if (selectedOutputId) {
           try {
             await roomWithSwitch.switchActiveDevice?.('audiooutput', selectedOutputId);
           } catch (e) {
-            console.warn('[LiveKit] switchActiveDevice(audiooutput) failed:', e);
+            console.warn('[Cloudflare] switchActiveDevice(audiooutput) failed:', e);
           }
         }
         await room.localParticipant.setMicrophoneEnabled(true);
+        if (attempt !== generation.current) { await room.disconnect(); return false; }
 
         // Si l'autre participant est déjà dans la room (rejoint avant nous)
         const existingParticipants = Array.from(room.remoteParticipants.values());
@@ -244,11 +257,12 @@ export function useLiveKitCall({
         }
         return true;
       } catch (err) {
-        console.error('[LiveKit] Error:', err);
+        if (attempt !== generation.current) return false;
+        console.error('[Cloudflare] Error:', err);
         const errorMessage = err instanceof Error ? err.message : 'Erreur inconnue';
         onConnectionStatusChange(`Erreur: ${errorMessage}`);
         playMessage("Impossible d'établir la communication");
-        await cleanupLiveKit();
+        await cleanupCloudflare();
         return false;
       }
     },
@@ -256,7 +270,7 @@ export function useLiveKitCall({
       selectedInputId,
       selectedOutputId,
       onConnectionStatusChange,
-      cleanupLiveKit,
+      cleanupCloudflare,
       playSound,
       playMessage,
       attachRemoteAudioTrack,
@@ -281,12 +295,16 @@ export function useLiveKitCall({
     attachedAudioElementsRef.current.forEach((el) => { void applyOutputDevice(el); });
   }, [selectedOutputId, applyOutputDevice]);
 
+  const cleanupRef = useRef(cleanupCloudflare);
+  cleanupRef.current = cleanupCloudflare;
+  useEffect(() => () => { void cleanupRef.current(); }, []);
+
   return {
     audioContainerRef,
     audioLevel,
     isMuted,
-    cleanupLiveKit,
-    joinLiveKitCall,
+    cleanupCloudflare,
+    joinCloudflareCall,
     toggleMute,
   };
 }

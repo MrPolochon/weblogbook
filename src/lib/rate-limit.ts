@@ -48,7 +48,7 @@ export function rateLimit(
 const RATE_LIMIT_PRESETS = {
   auth: { requests: 5, windowMs: 60_000 },
   messages: { requests: 20, windowMs: 60_000 },
-  'livekit-token': { requests: 3, windowMs: 60_000 },
+  'realtime-join': { requests: 3, windowMs: 60_000 },
   notifications: { requests: 30, windowMs: 60_000 },
   notams: { requests: 30, windowMs: 60_000 },
   default: { requests: 60, windowMs: 60_000 },

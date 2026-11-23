@@ -226,13 +226,13 @@ async function runMiddleware(request: NextRequest) {
 
   const authHeader = request.headers.get('authorization');
   // Whitelist stricte des routes API qui peuvent être appelées avec un Bearer JWT
-  // (apps externes type radio VHF, LiveKit token, sondes ATC).
+  // (apps externes type radio VHF, accès Cloudflare, sondes ATC).
   // Toute autre route avec Bearer doit passer par le flux session classique :
   // sinon n'importe quel header "Authorization: Bearer xxx" bypassait toute la sécurité
   // (security_logout, login_admin_only, blocage Discord, etc.).
   const BEARER_BYPASS_PREFIXES = [
+    '/api/realtime/join',
     '/api/livekit/token',
-    '/api/livekit/status',
     '/api/vhf/frequencies',
     '/api/atc/online',
   ];

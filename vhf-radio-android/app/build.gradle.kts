@@ -11,8 +11,8 @@ android {
         applicationId = "com.weblogbook.vhfradio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         // Config values
         buildConfigField("String", "SUPABASE_URL", "\"https://iajcynzzybkomaouxwji.supabase.co\"")
@@ -63,8 +63,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
-    // LiveKit
-    implementation("io.livekit:livekit-android:2.23.3")
+    // Native WebRTC transport for Cloudflare SFU
+    implementation("io.github.webrtc-sdk:android:150.7871.01")
 
     // Networking (OkHttp + Gson)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")

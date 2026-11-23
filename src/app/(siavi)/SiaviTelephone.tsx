@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { unlockAudioForIOS } from '@/lib/phone-sounds';
 import { speakNow } from '@/lib/tts';
 import { Phone, PhoneOff, PhoneCall, Mic, MicOff, X, Volume2, VolumeX, AlertTriangle } from 'lucide-react';
-import { useLiveKitCall } from '@/hooks/useLiveKitCall';
+import { useCloudflareCall } from '@/hooks/useCloudflareCall';
 import { usePhoneAudioDevices } from '@/hooks/usePhoneAudioDevices';
 import { CODE_TO_POSITION, CODE_TO_AEROPORT } from '@/lib/atc-phone-codes';
 import { toast } from 'sonner';
@@ -129,7 +129,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
     setShowEmergencyOverlay(false);
   }, []);
 
-  const { audioContainerRef, audioLevel, isMuted, cleanupLiveKit, joinLiveKitCall, toggleMute } = useLiveKitCall({
+  const { audioContainerRef, audioLevel, isMuted, cleanupCloudflare, joinCloudflareCall, toggleMute } = useCloudflareCall({
     selectedInputId,
     selectedOutputId,
     playSound,
@@ -210,7 +210,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       const timeout = setTimeout(async () => {
         stopEmergencyAlarm();
         playMessage('Délai dépassé');
-        await cleanupLiveKit();
+        await cleanupCloudflare();
         const callId = currentCall?.callId || incomingCall?.callId;
         if (callId) {
           await fetch('/api/siavi/telephone/hangup', {
@@ -226,7 +226,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       }, 30000);
       return () => clearTimeout(timeout);
     }
-  }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage, stopEmergencyAlarm]);
+  }, [callState, currentCall, incomingCall, cleanupCloudflare, playMessage, stopEmergencyAlarm]);
 
 
   useEffect(() => {
@@ -300,7 +300,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
           const statusData = await statusRes.json();
           if (statusData.status === 'connected') {
             setCallState('connecting');
-            const ok = await joinLiveKitCall(data.call.id, `${aeroport}-AFIS`, {
+            const ok = await joinCloudflareCall(data.call.id, `${aeroport}-AFIS`, {
               onConnected: () => { stopEmergencyAlarm(); setCallState('connected'); },
               onDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
               onParticipantDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
@@ -349,7 +349,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
       });
       if (res.ok) {
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
-        const ok = await joinLiveKitCall(incomingCall.callId, `${aeroport}-AFIS`, {
+        const ok = await joinCloudflareCall(incomingCall.callId, `${aeroport}-AFIS`, {
           onConnected: () => { stopEmergencyAlarm(); setCallState('connected'); },
           onDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
           onParticipantDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
@@ -390,7 +390,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const handleHangup = async () => {
     const callId = currentCall?.callId || incomingCall?.callId;
     const wasConnected = callState === 'connected';
-    await cleanupLiveKit();
+    await cleanupCloudflare();
     if (callId) { await fetch('/api/siavi/telephone/hangup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ callId }) }).catch(console.error); }
     playSound('end');
     if (wasConnected) playMessage('Appel terminé');
@@ -403,7 +403,7 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
   const resetPhone = async () => {
     stopEmergencyAlarm();
     try { await fetch('/api/siavi/telephone/hangup', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reset: true }) }); } catch (err) { console.error('Reset error:', err); }
-    await cleanupLiveKit();
+    await cleanupCloudflare();
     setCallState('idle');
     setNumber('');
     setIncomingCall(null);
@@ -412,8 +412,8 @@ export default function SiaviTelephone({ aeroport, estAfis, userId }: SiaviTelep
 
   useEffect(() => () => {
     stopLocalMicTest();
-    void cleanupLiveKit();
-  }, [cleanupLiveKit, stopLocalMicTest]);
+    void cleanupCloudflare();
+  }, [cleanupCloudflare, stopLocalMicTest]);
 
   const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
 

@@ -19,7 +19,7 @@ import androidx.core.app.NotificationCompat
 import com.weblogbook.vhfradio.MainActivity
 import com.weblogbook.vhfradio.R
 import com.weblogbook.vhfradio.data.VhfFrequencies
-import com.weblogbook.vhfradio.livekit.LiveKitManager
+import com.weblogbook.vhfradio.cloudflare.CloudflareManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.*
  * Foreground service qui gère :
  * 1. La bulle PTT flottante (overlay SYSTEM_ALERT_WINDOW)
  * 2. Les contrôles MediaSession dans la notification
- * 3. L'observation de l'état du LiveKitManager
+ * 3. L'observation de l'état du CloudflareManager
  */
 class VhfOverlayService : Service() {
 
@@ -41,8 +41,8 @@ class VhfOverlayService : Service() {
         const val ACTION_FREQ_UP = "com.weblogbook.vhfradio.FREQ_UP"
         const val ACTION_FREQ_DOWN = "com.weblogbook.vhfradio.FREQ_DOWN"
 
-        // Shared reference to LiveKitManager (set by MainActivity before starting service)
-        var sharedLiveKitManager: LiveKitManager? = null
+        // Shared reference to CloudflareManager (set by MainActivity before starting service)
+        var sharedCloudflareManager: CloudflareManager? = null
         var sharedIsLocked: Boolean = false
         var sharedStbyDecIndex: Int = 0
         var sharedStbyMhz: Int = 118
@@ -79,11 +79,11 @@ class VhfOverlayService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_PTT_ON -> {
-                scope.launch { sharedLiveKitManager?.startTransmit() }
+                scope.launch { sharedCloudflareManager?.startTransmit() }
                 return START_STICKY
             }
             ACTION_PTT_OFF -> {
-                scope.launch { sharedLiveKitManager?.stopTransmit() }
+                scope.launch { sharedCloudflareManager?.stopTransmit() }
                 return START_STICKY
             }
             ACTION_FREQ_UP -> {
@@ -111,7 +111,7 @@ class VhfOverlayService : Service() {
         // Create overlay
         createOverlay()
 
-        // Observe LiveKit state
+        // Observe Cloudflare state
         observeState()
 
         return START_STICKY
@@ -156,16 +156,16 @@ class VhfOverlayService : Service() {
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() {
                     // Play = PTT ON
-                    scope.launch { sharedLiveKitManager?.startTransmit() }
+                    scope.launch { sharedCloudflareManager?.startTransmit() }
                 }
 
                 override fun onPause() {
                     // Pause = PTT OFF
-                    scope.launch { sharedLiveKitManager?.stopTransmit() }
+                    scope.launch { sharedCloudflareManager?.stopTransmit() }
                 }
 
                 override fun onStop() {
-                    scope.launch { sharedLiveKitManager?.stopTransmit() }
+                    scope.launch { sharedCloudflareManager?.stopTransmit() }
                 }
 
                 override fun onSkipToNext() {
@@ -322,11 +322,11 @@ class VhfOverlayService : Service() {
             btnPtt?.setOnTouchListener { _, event ->
                 when (event.action) {
                     MotionEvent.ACTION_DOWN -> {
-                        scope.launch { sharedLiveKitManager?.startTransmit() }
+                        scope.launch { sharedCloudflareManager?.startTransmit() }
                         true
                     }
                     MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        scope.launch { sharedLiveKitManager?.stopTransmit() }
+                        scope.launch { sharedCloudflareManager?.stopTransmit() }
                         true
                     }
                     else -> false
@@ -426,7 +426,7 @@ class VhfOverlayService : Service() {
        ══════════════════════════════════════════════════ */
 
     private fun observeState() {
-        val lkm = sharedLiveKitManager ?: return
+        val lkm = sharedCloudflareManager ?: return
 
         // Observe connection + transmitting + frequency
         scope.launch {
@@ -442,7 +442,7 @@ class VhfOverlayService : Service() {
                 updateNotification(
                     freq = snapshot.frequency.ifEmpty { "---" },
                     transmitting = snapshot.transmitting,
-                    connected = snapshot.connection == LiveKitManager.ConnectionStatus.CONNECTED
+                    connected = snapshot.connection == CloudflareManager.ConnectionStatus.CONNECTED
                 )
                 updateMediaSession(
                     freq = snapshot.frequency.ifEmpty { "---" },
@@ -454,7 +454,7 @@ class VhfOverlayService : Service() {
     }
 
     private data class StateSnapshot(
-        val connection: LiveKitManager.ConnectionStatus,
+        val connection: CloudflareManager.ConnectionStatus,
         val transmitting: Boolean,
         val frequency: String,
         val collision: Boolean
@@ -462,7 +462,7 @@ class VhfOverlayService : Service() {
 
     @SuppressLint("SetTextI18n")
     private fun updateOverlayUI(state: StateSnapshot) {
-        val isConnected = state.connection == LiveKitManager.ConnectionStatus.CONNECTED
+        val isConnected = state.connection == CloudflareManager.ConnectionStatus.CONNECTED
 
         tvFrequency?.text = state.frequency.ifEmpty { "---" }
         tvFrequency?.setTextColor(

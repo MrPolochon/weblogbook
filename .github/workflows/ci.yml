@@ -26,6 +26,9 @@ jobs:
       - name: Regression tests
         run: npm test
 
+      - name: Cloudflare room tests
+        run: npm --prefix realtime-worker test
+
       - name: Lint
         run: npm run lint
 
@@ -38,4 +41,4 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'placeholder' }}
-          NEXT_PUBLIC_LIVEKIT_URL: ${{ secrets.NEXT_PUBLIC_LIVEKIT_URL || 'wss://placeholder.livekit.cloud' }}
+          CLOUDFLARE_REALTIME_URL: ${{ secrets.CLOUDFLARE_REALTIME_URL || 'wss://placeholder.workers.dev/connect' }}
