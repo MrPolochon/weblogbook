@@ -139,13 +139,13 @@ export default function ComBox({ participantName, station, placement = 'floating
           <div className="mb-3 grid grid-cols-2 gap-3" aria-label="Réglage de la fréquence">
             {(['mhz', 'decimal'] as const).map(part => <div key={part} className="flex items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900 p-2">
               <div className="text-xs text-slate-400">{part === 'mhz' ? 'MHz' : 'Décimales'}<div className="font-mono text-lg text-sky-200">{isValidVhfFrequency(selected) ? (part === 'mhz' ? selected.slice(0, 3) : selected.slice(4)) : '---'}</div></div>
-              <div role="spinbutton" tabIndex={busy ? -1 : 0} aria-label={part === 'mhz' ? 'Molette MHz' : 'Molette décimales'}
-                aria-valuemin={0} aria-valuemax={999} aria-valuenow={isValidVhfFrequency(selected) ? Number(part === 'mhz' ? selected.slice(0, 3) : selected.slice(4)) : 0} aria-disabled={busy}
-                onWheel={e => { if (busy || document.activeElement !== e.currentTarget || !e.deltaY) return; setStandby(value => stepFrequency(value, part, e.deltaY < 0 ? 1 : -1)); }}
-                onKeyDown={e => { if (busy || !['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return; e.preventDefault(); setStandby(value => stepFrequency(value, part, ['ArrowUp', 'ArrowRight'].includes(e.key) ? 1 : -1)); }}
+              <div role="spinbutton" tabIndex={0} aria-label={part === 'mhz' ? 'Molette MHz' : 'Molette décimales'}
+                aria-valuemin={0} aria-valuemax={999} aria-valuenow={isValidVhfFrequency(selected) ? Number(part === 'mhz' ? selected.slice(0, 3) : selected.slice(4)) : 0}
+                onWheel={e => { if (!e.currentTarget.contains(document.activeElement) || !e.deltaY) return; setStandby(value => stepFrequency(value, part, e.deltaY < 0 ? 1 : -1)); }}
+                onKeyDown={e => { if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return; e.preventDefault(); setStandby(value => stepFrequency(value, part, ['ArrowUp', 'ArrowRight'].includes(e.key) ? 1 : -1)); }}
                 className="flex h-14 w-14 flex-col items-center justify-center rounded-full border-4 border-double border-slate-500 bg-gradient-to-br from-slate-500 to-slate-900 shadow-inner outline-none focus:ring-2 focus:ring-sky-400">
-                <button type="button" disabled={busy} aria-label={part === 'mhz' ? 'Augmenter les MHz' : 'Augmenter les décimales'} onClick={() => setStandby(value => stepFrequency(value, part, 1))} className="w-full rounded-t-full text-sm leading-5 hover:text-sky-300">+</button>
-                <button type="button" disabled={busy} aria-label={part === 'mhz' ? 'Diminuer les MHz' : 'Diminuer les décimales'} onClick={() => setStandby(value => stepFrequency(value, part, -1))} className="w-full rounded-b-full text-sm leading-5 hover:text-sky-300">−</button>
+                <button type="button" aria-label={part === 'mhz' ? 'Augmenter les MHz' : 'Augmenter les décimales'} onClick={() => setStandby(value => stepFrequency(value, part, 1))} className="w-full rounded-t-full text-sm leading-5 hover:text-sky-300">+</button>
+                <button type="button" aria-label={part === 'mhz' ? 'Diminuer les MHz' : 'Diminuer les décimales'} onClick={() => setStandby(value => stepFrequency(value, part, -1))} className="w-full rounded-b-full text-sm leading-5 hover:text-sky-300">−</button>
               </div>
             </div>)}
           </div>

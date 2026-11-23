@@ -15,7 +15,7 @@ export function getMhzRange(): number[] { return Array.from({ length: 1000 }, (_
 export function getMaxDecimalForMhz(_mhz: number): string { return '999'; }
 export function getDecimalsForMhz(_mhz: number): string[] { return ALL_VHF_DECIMALS; }
 export function stepFrequency(freq: string, part: 'mhz' | 'decimal', direction: number): string {
-  const parsed = parseFrequency(freq) || { mhz: 118, decimal: '000' };
+  const parsed = parseFrequency(freq.trim().replace(',', '.')) || { mhz: 118, decimal: '000' };
   const wrap = (value: number) => ((value + direction) % 1000 + 1000) % 1000;
   return formatFrequency(part === 'mhz' ? wrap(parsed.mhz) : parsed.mhz,
     part === 'decimal' ? String(wrap(Number(parsed.decimal))) : parsed.decimal);
