@@ -27,3 +27,7 @@ files:
   - dist/**/*
   - dist-electron/**/*
   - package.json
+
+extraResources:
+  - from: native-bin
+    to: native-bin

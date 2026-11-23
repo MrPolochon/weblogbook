@@ -1,11 +1,11 @@
 {
   "name": "vhf-radio",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "WebLogbook VHF Radio — Application radio standalone",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && tsc -p tsconfig.electron.json",
+    "build": "node scripts/build-ptt.cjs && tsc && vite build && tsc -p tsconfig.electron.json",
     "preview": "vite preview",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
     "electron:build": "npm run build && electron-builder",
