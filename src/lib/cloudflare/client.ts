@@ -38,7 +38,7 @@ export type RemoteParticipant = {
   audioTrackPublications: Map<string, { track: RemoteAudioTrack }>;
 };
 type Peer = { id: string; identity: string; name: string; published: boolean };
-type Result = { id?: string; iceServers?: RTCIceServer[]; peers?: Peer[];
+type Result = { canPublish?: boolean; id?: string; iceServers?: RTCIceServer[]; peers?: Peer[];
   sessionDescription?: RTCSessionDescriptionInit; tracks?: { mid: string; peerId: string }[] };
 type Events = {
   connected: () => void; disconnected: () => void; state: (state: ConnectionState) => void;
@@ -73,6 +73,7 @@ async function description(pc: RTCPeerConnection, offer: boolean) {
 export class Room {
   state = ConnectionState.Disconnected;
   canPlaybackAudio = true;
+  canPublish = false;
   remoteParticipants = new Map<string, RemoteParticipant>();
   private listeners = new Map<keyof Events, Set<Function>>();
   private ws?: WebSocket;
@@ -101,11 +102,12 @@ export class Room {
   private publication = {
     mute: async () => { this.microphone?.getAudioTracks().forEach(t => { t.enabled = false; }); },
     unmute: async () => {
-      if (this.state === ConnectionState.Connected) this.microphone?.getAudioTracks().forEach(t => { t.enabled = true; });
+      if (this.canPublish && this.state === ConnectionState.Connected) this.microphone?.getAudioTracks().forEach(t => { t.enabled = true; });
     },
   };
   readonly localParticipant = {
     publishTrack: async (track: LocalAudioTrack, _options?: unknown) => {
+      if (!this.canPublish) throw new Error('OBS : écoute uniquement.');
       if (!this.sender || this.closed) throw new Error('Radio déconnectée.');
       await this.sender.replaceTrack(track.mediaStreamTrack);
     },
@@ -145,7 +147,7 @@ export class Room {
       this.ws!.send(JSON.stringify({ id, action, payload }));
     });
   }
-  async connect(url: string, token: string, _options?: unknown) {
+  async connect(url: string, token: string, options?: { canPublish?: boolean; autoSubscribe?: boolean }) {
     if (this.ws || this.closed) throw new Error('Créer une nouvelle connexion radio.');
     const endpoint = new URL(url);
     if (endpoint.protocol !== 'wss:' && !(endpoint.protocol === 'ws:' && ['localhost', '127.0.0.1'].includes(endpoint.hostname))) throw new Error('URL radio non sécurisée.');
@@ -176,13 +178,15 @@ export class Room {
       });
       const hello = await this.rpc('hello');
       this.assertOpen();
+      this.canPublish = options?.canPublish !== false && hello.canPublish !== false;
       this.desired = hello.peers || [];
       const configuration = { iceServers: hello.iceServers };
-      this.publisher = new RTCPeerConnection(configuration);
       this.subscriber = new RTCPeerConnection(configuration);
-      this.publisher.onconnectionstatechange = () => this.checkConnection();
       this.subscriber.onconnectionstatechange = () => this.checkConnection();
       this.subscriber.ontrack = event => this.receiveTrack(event);
+      if (this.canPublish) {
+      this.publisher = new RTCPeerConnection(configuration);
+      this.publisher.onconnectionstatechange = () => this.checkConnection();
       const transceiver = this.publisher.addTransceiver(this.silence!, { direction: 'sendonly' });
       this.sender = transceiver.sender;
       const offer = await description(this.publisher, true);
@@ -191,6 +195,7 @@ export class Room {
       await this.publisher.setRemoteDescription(answer.sessionDescription);
       await waitFor(this.publisher, 'connectionstatechange', () => this.publisher?.connectionState === 'connected', 15_000);
       await this.rpc('published');
+      }
       this.assertOpen();
       this.heartbeat = setInterval(() => { void this.rpc('ping').catch(() => this.disconnect()); }, 25_000);
       this.meterTimer = setInterval(() => this.measure(), 150);
@@ -279,6 +284,7 @@ export class Room {
   }
   /** Acquires hardware disabled. A PTT client must call unmute only while held. */
   async prepareMicrophone() {
+    if (!this.canPublish) throw new Error('OBS : écoute uniquement.');
     if (this.microphone) return;
     const request = ++this.captureRequest;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: {

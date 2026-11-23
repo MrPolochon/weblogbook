@@ -10,7 +10,7 @@ function client() {
   new Function('module','exports',code)(module,module.exports);
   return module.exports;
 }
-async function harness(run) {
+async function harness(run, canPublish=true) {
   const keys = ['AudioContext','WebSocket','RTCPeerConnection','navigator','MediaStream'];
   const originals = Object.fromEntries(keys.map(key => [key,Object.getOwnPropertyDescriptor(global,key)]));
   const calls = [], pcs = [], contexts = [];
@@ -33,7 +33,7 @@ async function harness(run) {
     send(data) {
       const request = JSON.parse(data); calls.push(request);
       let result = {};
-      if(request.action === 'hello') result={id:'local',iceServers:[{urls:'stun:stun.cloudflare.com:3478'}],peers:[]};
+      if(request.action === 'hello') result={id:'local',canPublish,iceServers:[{urls:'stun:stun.cloudflare.com:3478'}],peers:[]};
       if(request.action === 'publish') result={sessionDescription:{type:'answer',sdp:'audio answer'}};
       if(request.action === 'subscribe') result={sessionDescription:{type:'offer',sdp:'audio offer'},tracks:request.payload.peers.map((peerId,i)=>({peerId,mid:String(i)}))};
       queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({id:request.id,result})}));
@@ -45,7 +45,7 @@ async function harness(run) {
   global.RTCPeerConnection=class extends EventTarget {
     connectionState='new'; iceGatheringState='complete'; localDescription=null; remoteDescription=null;
     sender={track:null,replaceTrack:async track=>{ this.sender.track=track; if(muteDuringReplace) { const fn=muteDuringReplace; muteDuringReplace=null; fn(); } }};
-    constructor() { super(); pcs.push(this); }
+    constructor() { super(); if(pcs.length===1) pcs.unshift(this); else pcs.push(this); }
     addTransceiver(track) { this.sender.track=track; return {sender:this.sender,mid:'0'}; }
     async createOffer() { return {type:'offer',sdp:'m=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=fmtp:111 minptime=10;useinbandfec=1\r\n'}; }
     async createAnswer() { return {type:'answer',sdp:'audio answer'}; }
@@ -134,3 +134,16 @@ test('a reused receiver attaches the new peer even when the browser emits no sec
   await h.room.reconcileQueue;
   assert.deepEqual(received,['first','next']);
 }));
+
+test('OBS joins and subscribes without publisher or hardware capture, even if client requests transmission',async()=>harness(async h=>{
+  await h.room.connect('wss://radio.test/connect','ticket',{canPublish:true});
+  assert.equal(h.room.canPublish,false);
+  assert.deepEqual(h.calls.map(c=>c.action),['hello']);
+  assert.equal(h.pcs.length,1);
+  await assert.rejects(h.room.prepareMicrophone(),/OBS/);
+  await assert.rejects(h.room.localParticipant.publishTrack(new h.LocalAudioTrack(h.mic)),/OBS/);
+  assert.equal(h.captures(),0);
+  h.room.ws.peers([{id:'atc',name:'ATC',published:true}]);
+  await h.room.reconcileQueue;
+  assert.ok(h.calls.some(c=>c.action==='subscribe'));
+},false));

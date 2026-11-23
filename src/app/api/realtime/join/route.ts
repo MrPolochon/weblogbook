@@ -1,3 +1,4 @@
+import { canTransmitRadio } from '@/lib/radio-access';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHmac, randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase/server';
@@ -100,9 +101,8 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Non autorisé pour cet appel' }, { status: 403, headers: corsHeaders });
       }
     }
-    // NB: pour 'vhf-<freq>', toute personne authentifiée peut publier sur la fréquence
-    // (comportement radio = auditeur libre, parlant libre). Si tu veux une autorisation
-    // par fréquence (ex. seuls les ATC), c'est à ajouter ici.
+    // The client may opt into OBS, but only the server grants transmission.
+    const canPublish = roomName.startsWith('call-') || (body.observer !== true && await canTransmitRadio(user.id));
 
     const secret = process.env.CLOUDFLARE_REALTIME_SECRET;
     const url = process.env.CLOUDFLARE_REALTIME_URL;
@@ -113,10 +113,10 @@ export async function POST(request: NextRequest) {
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
     const payload = Buffer.from(JSON.stringify({ aud: 'weblogbook-radio', sub: user.id, room: roomName,
       name: typeof participantName === 'string' ? participantName.trim().slice(0, 80) || user.id : user.id,
-      iat, exp: iat + 60, jti: randomUUID(),
+      canPublish, iat, exp: iat + 60, jti: randomUUID(),
     })).toString('base64url');
     const signature = createHmac('sha256', secret).update(header + '.' + payload).digest('base64url');
-    return NextResponse.json({ token: header + '.' + payload + '.' + signature, url, provider: 'cloudflare', protocol: 1 },
+    return NextResponse.json({ token: header + '.' + payload + '.' + signature, url, provider: 'cloudflare', protocol: 1, canPublish },
       { headers: { ...corsHeaders, 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('[Cloudflare Token] Erreur:', error);

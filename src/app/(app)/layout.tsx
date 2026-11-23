@@ -1,3 +1,5 @@
+import ComBox from '@/components/ComBox';
+import { hasRadioFlight } from '@/lib/radio-access';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
@@ -8,7 +10,6 @@ import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import InactivityLogout from '@/components/InactivityLogout';
 import PilotWorkspace from '@/components/pilot/PilotWorkspace';
-import ComBox from '@/components/ComBox';
 import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
 import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 
@@ -53,6 +54,7 @@ export default async function AppLayout({
     adminCountsResult,
     reparateurResult,
     ifsaResult,
+    radioFlight,
   ] = await Promise.all([
     // 1) Compagnie / PDG / co-PDG
     Promise.all([
@@ -91,6 +93,7 @@ export default async function AppLayout({
     (isIfsa || isAdmin)
       ? Promise.resolve(admin.from('ifsa_signalements').select('*', { count: 'exact', head: true }).eq('statut', 'nouveau')).then(r => r.count ?? 0).catch(() => 0)
       : Promise.resolve(0),
+    hasRadioFlight(uid).catch(() => true),
   ]);
 
   // Extract compagnie info
@@ -179,7 +182,7 @@ export default async function AppLayout({
         </div>
       )}
       <main id="main-content" className="flex-1 mx-auto w-full max-w-7xl px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8"><PilotWorkspace>{children}</PilotWorkspace></main>
-      <ComBox participantName={profile?.identifiant || 'Pilote'} />
+      {!radioFlight && <ComBox participantName={profile?.identifiant || 'Pilote'} observer />}
     </div>
   );
 }

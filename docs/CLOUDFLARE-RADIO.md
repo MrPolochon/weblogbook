@@ -2,7 +2,7 @@
 
 La radio du site, la téléphonie ATC/SIAVI, la radio Windows et la radio Android utilisent le même service Cloudflare Realtime SFU. Discord reste le vocal cockpit. L'hébergement Next.js, Supabase, les comptes et les données restent sur leurs services actuels.
 
-**État au 23 novembre 2026 : Worker déployé sur `weblogbook-realtime.bonnofpf.workers.dev`, identifiants SFU/TURN validés par le script et route `/health` vérifiée. Le raccordement Vercel, la publication du site et une recette audio réelle restent nécessaires avant ouverture.**
+**La migration Cloudflare est publiée. Les évolutions OBS nécessitent le déploiement coordonné du site et du Worker ; une recette audio avec deux utilisateurs reste nécessaire.**
 
 ## 1. Créer le compte et les ressources
 
@@ -76,11 +76,20 @@ Ne résilier l'ancien service LiveKit et ne supprimer ses secrets de production 
 
 ## 5. Comportement de la COM box
 
+- La présélection du bas se règle par saisie directe ou molettes MHz/décimales. Tous les canaux virtuels de 000.000 à 999.999 sont disponibles, indépendamment de l'annuaire et du poste ATC.
+- Le bouton d'échange place la présélection en haut et lance la connexion. Modifier la présélection ne change pas la liaison active.
+- Après une coupure, les tentatives continuent après 5, 10, 20 puis 30 secondes, sans limite de nombre. OFF annule les tentatives et ferme la liaison.
+- Sans vol actif, l'espace pilote affiche une COM box OBS. Avec un vol actif, la COM box est sous le transpondeur. Les contrôleurs y accèdent uniquement en service.
+- Le serveur signe le droit `canPublish` après vérification du vol actif (pilote ou copilote), du poste ATC ou AFIS. Le Worker refuse la publication d'un OBS. Aucun accès à une fréquence n'est réservé à un poste.
+- Le grésillement est un son local à l'ouverture/fermeture des échanges, avec temporisation entre les mots. Il suit le volume radio, peut être désactivé et n'est jamais envoyé au microphone.
 - La connexion commence en **écoute seule**, sans demander le microphone dans la COM box web.
 - **Push-to-talk** : le son passe uniquement pendant l'appui. Relâcher le bouton coupe immédiatement le gain audio ; les dialogues cockpit restent hors radio.
 - **Micro ouvert** : choix explicite, qui transmet aussi les paroles cockpit. Le navigateur ne sait pas distinguer à qui l'utilisateur s'adresse.
 - **Micro coupé** : arrêt de la capture matérielle sur le site.
 - Le raccourci clavier est facultatif et fonctionne lorsque le site a le focus. Un site web ne peut pas intercepter une touche globale pendant que Roblox a le focus.
+- Windows 1.5.1 ouvre le site dans une fenêtre Electron. Choisir un raccourci puis le mode PTT dans la COM box permet de parler avec Roblox au premier plan. Garder l'application ouverte, même réduite. La version navigateur conserve ses raccourcis locaux.
+- L'assistant Windows lit uniquement la touche choisie (Espace, Ctrl droit ou V) avec `GetAsyncKeyState`, attend son premier relâchement avant armement et transmet l'état toutes les 50 ms. Un arrêt du processus, une veille, un verrouillage ou une perte de signal ferme le PTT. Après veille/verrouillage, réactiver le mode PTT.
+- Le helper est compilé lors du build Windows avec le compilateur .NET Framework fourni par Windows ; il ne demande ni administrateur ni modification de stratégie PowerShell. Le build CI produit l'installateur après les contrôles du site. Les téléchargements Windows sont sur la release v1.5.1.
 - Une perte de connexion, un changement de fréquence ou une déconnexion remet le micro au repos. Le mode ouvert n'est pas restauré automatiquement.
 - Utiliser un casque pour éviter que le microphone reprenne le son Discord provenant des haut-parleurs.
 

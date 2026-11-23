@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { installPtt } from './ptt';
+import { app, BrowserWindow, ipcMain, Menu } from 'electron';
 import { autoUpdater } from 'electron-updater';
 import * as path from 'path';
 
@@ -6,8 +7,8 @@ let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 720,
+    width: 1280,
+    height: 850,
     minWidth: 380,
     minHeight: 600,
     title: 'VHF Radio — WebLogbook',
@@ -16,8 +17,10 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
     },
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     icon: path.join(__dirname, '..', 'public', 'icon.png'),
   });
 
@@ -25,8 +28,23 @@ function createWindow() {
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    mainWindow.loadURL('https://www.mixouairlinesptfsweblogbook.com/pilote');
   }
+
+  installPtt(mainWindow);
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const target = new URL(url);
+    if (!['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com'].includes(target.origin)) event.preventDefault();
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'Radio', submenu: [
+      { label: 'COM box du site · PTT global', click: () => { void mainWindow?.loadURL('https://www.mixouairlinesptfsweblogbook.com/pilote'); } },
+      { label: 'Radio classique', click: () => { void mainWindow?.loadFile(path.join(__dirname, '..', 'dist', 'index.html')); } },
+      { type: 'separator' }, { role: 'quit' },
+    ] },
+    { label: 'Affichage', submenu: [{ role: 'reload' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }] },
+  ]));
 
   mainWindow.on('closed', () => {
     mainWindow = null;

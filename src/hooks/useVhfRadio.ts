@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioPresets, ConnectionState, LocalAudioTrack, Room, RoomEvent, Track } from '@/lib/cloudflare/client';
 import { frequencyToRoomName, isValidVhfFrequency } from '@/lib/vhf-frequencies';
+import { RadioSquelch } from '@/lib/radio-squelch';
 import { RadioMicMode, RadioTransmission } from '@/lib/radio-transmission';
 
 type Microphone = {
@@ -22,7 +23,16 @@ function stopMicrophone(mic: Microphone) {
   void mic.context.close().catch(() => {});
 }
 
-export function useVhfRadio(participantName: string) {
+export function useVhfRadio(participantName: string, observer = false) {
+  const poweredRef = useRef(false);
+  const targetRef = useRef('');
+  const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retries = useRef(0);
+  const connectRef = useRef<(target: string, retry?: boolean) => Promise<void>>(async () => {});
+  const soundRef = useRef<RadioSquelch | null>(null);
+  const effectsRef = useRef(true);
+  const [effects, setEffectsState] = useState(true);
+  const [powered, setPowered] = useState(false);
   const roomRef = useRef<Room | null>(null);
   const micRef = useRef<Microphone | null>(null);
   const generation = useRef(0);
@@ -32,6 +42,9 @@ export function useVhfRadio(participantName: string) {
   const volumeRef = useRef(0.8);
   const [connection, setConnection] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [frequency, setFrequency] = useState('');
+  const [receiveOnly, setReceiveOnly] = useState(observer);
+  const observerRef = useRef(observer);
+  observerRef.current = observer;
   const [mode, setMode] = useState<RadioMicMode>('muted');
   const [transmitting, setTransmitting] = useState(false);
   const [preparingMic, setPreparingMic] = useState(false);
@@ -44,14 +57,17 @@ export function useVhfRadio(participantName: string) {
   if (!gate.current) gate.current = new RadioTransmission(enabled => {
     const mic = micRef.current;
     if (mic) mic.gain.gain.setValueAtTime(enabled ? 1 : 0, mic.context.currentTime);
+    soundRef.current?.setTransmit(enabled);
     setTransmitting(enabled);
   });
 
-  const disconnect = useCallback(() => {
+  const cleanup = useCallback(() => {
     generation.current++;
     micRequest.current++;
     abortRef.current?.abort();
     abortRef.current = null;
+    soundRef.current?.close();
+    soundRef.current = null;
     gate.current!.reset();
     setMode('muted');
     setPreparingMic(false);
@@ -67,6 +83,27 @@ export function useVhfRadio(participantName: string) {
     setConnection(ConnectionState.Disconnected);
     setParticipants([]);
     setAudioBlocked(false);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    poweredRef.current = false;
+    setPowered(false);
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = null;
+    cleanup();
+    setError('');
+  }, [cleanup]);
+
+  const scheduleRetry = useCallback((target: string, message: string) => {
+    if (!poweredRef.current || targetRef.current !== target) return;
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    const delay = Math.min(30, 5 * 2 ** Math.min(retries.current++, 3));
+    setConnection(ConnectionState.Reconnecting);
+    setError(message + ' Nouvelle tentative dans ' + delay + ' s.');
+    retryTimer.current = setTimeout(() => {
+      retryTimer.current = null;
+      if (poweredRef.current && targetRef.current === target) void connectRef.current(target, true);
+    }, delay * 1000);
   }, []);
 
   const setMicMode = useCallback(async (next: RadioMicMode, deviceId = '') => {
@@ -87,6 +124,7 @@ export function useVhfRadio(participantName: string) {
       }
       return;
     }
+    if (observerRef.current || room?.canPublish === false) return;
     if (!room || room.state !== ConnectionState.Connected) return;
     setError('');
     setPreparingMic(true);
@@ -163,9 +201,17 @@ export function useVhfRadio(participantName: string) {
     }
   }, []);
 
-  const connect = useCallback(async (target: string) => {
+  const connect = useCallback(async (target: string, retry = false) => {
     if (!isValidVhfFrequency(target)) { setError('Fréquence VHF invalide.'); return; }
-    disconnect();
+    if (retry && (!poweredRef.current || targetRef.current !== target)) return;
+    if (retryTimer.current) clearTimeout(retryTimer.current);
+    retryTimer.current = null;
+    poweredRef.current = true;
+    targetRef.current = target;
+    setPowered(true);
+    if (!retry) retries.current = 0;
+    cleanup();
+    try { soundRef.current = new RadioSquelch(volumeRef.current); soundRef.current.setEnabled(effectsRef.current); } catch { /* Sound effects are optional. */ }
     const attempt = generation.current;
     setError('');
     setFrequency(target);
@@ -177,7 +223,7 @@ export function useVhfRadio(participantName: string) {
     try {
       const response = await fetch('/api/realtime/join', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roomName: frequencyToRoomName(target), participantName }), signal: abort.signal,
+        body: JSON.stringify({ roomName: frequencyToRoomName(target), participantName, observer }), signal: abort.signal,
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Connexion radio refusée.');
@@ -185,9 +231,12 @@ export function useVhfRadio(participantName: string) {
       room = new Room();
       roomRef.current = room;
       const activeRoom = room;
-      const updateParticipants = () => setParticipants(Array.from(activeRoom.remoteParticipants.values()).map(p => ({
-        id: p.identity, name: p.name || p.identity, speaking: p.isSpeaking,
-      })));
+      let joined = false;
+      const updateParticipants = () => {
+        const peers = Array.from(activeRoom.remoteParticipants.values());
+        setParticipants(peers.map(p => ({ id: p.identity, name: p.name || p.identity, speaking: p.isSpeaking })));
+        soundRef.current?.setReceive(peers.some(p => p.isSpeaking));
+      };
       room.on(RoomEvent.ParticipantConnected, updateParticipants);
       room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
       room.on(RoomEvent.ActiveSpeakersChanged, updateParticipants);
@@ -200,8 +249,11 @@ export function useVhfRadio(participantName: string) {
       });
       room.on(RoomEvent.Disconnected, () => {
         if (roomRef.current !== activeRoom) return;
-        disconnect();
-        setError('Radio déconnectée. Reconnecte-toi pour reprendre l’écoute.');
+        // connect() rejects with the original error after its own cleanup.
+        // Keep this attempt alive so the catch below can display that error.
+        if (!joined) return;
+        cleanup();
+        scheduleRetry(target, 'Radio déconnectée.');
       });
       room.on(RoomEvent.TrackSubscribed, track => {
         if (track.kind !== Track.Kind.Audio) return;
@@ -218,21 +270,27 @@ export function useVhfRadio(participantName: string) {
         audio.current.delete(track.sid!);
       });
       room.on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!activeRoom.canPlaybackAudio));
-      await room.connect(data.url, data.token, { autoSubscribe: true });
+      await room.connect(data.url, data.token, { autoSubscribe: true, canPublish: data.canPublish === true && !observer });
       if (attempt !== generation.current) { await room.disconnect(); return; }
+      joined = true;
+      retries.current = 0;
+      setReceiveOnly(observer || !activeRoom.canPublish);
       setConnection(room.state);
       updateParticipants();
       void room.startAudio().catch(() => setAudioBlocked(true));
       // Receive only until the user explicitly chooses PTT or open microphone.
     } catch (cause) {
       if (attempt !== generation.current) { if (room) void room.disconnect(); return; }
-      disconnect();
-      setError(cause instanceof Error ? cause.message : 'Impossible de rejoindre la fréquence.');
+      cleanup();
+      scheduleRetry(target, cause instanceof Error ? cause.message : 'Impossible de rejoindre la fréquence.');
     } finally { clearTimeout(timer); }
-  }, [disconnect, participantName, setMicMode]);
+  }, [cleanup, scheduleRetry, participantName, observer, setMicMode]);
+
+  connectRef.current = connect;
 
   const resumeAudio = useCallback(async () => {
     try {
+      await soundRef.current?.resume();
       await roomRef.current?.startAudio();
       await Promise.all(Array.from(audio.current.values(), el => el.play()));
       setAudioBlocked(false);
@@ -240,13 +298,15 @@ export function useVhfRadio(participantName: string) {
   }, []);
 
   const setVolume = useCallback((value: number) => {
+    value = Math.max(0, Math.min(1, value));
+    soundRef.current?.setVolume(value);
     volumeRef.current = value;
     setVolumeState(value);
     audio.current.forEach(el => { el.volume = value; });
   }, []);
 
   useEffect(() => {
-    const release = () => gate.current!.releaseAll();
+    const release = () => gate.current!.releaseLocal();
     const visibility = () => { if (document.hidden) release(); };
     window.addEventListener('blur', release);
     window.addEventListener('pagehide', disconnect);
@@ -259,11 +319,17 @@ export function useVhfRadio(participantName: string) {
     };
   }, [disconnect]);
 
+  useEffect(() => { disconnect(); setReceiveOnly(observer); }, [observer, disconnect]);
+
   const press = useCallback((source: string) => gate.current!.press(source), []);
   const release = useCallback((source: string) => gate.current!.release(source), []);
   const releaseAll = useCallback(() => gate.current!.releaseAll(), []);
 
-  return { connection, frequency, mode, transmitting, preparingMic, micReady, error, audioBlocked,
+  const setEffects = useCallback((enabled: boolean) => {
+    effectsRef.current = enabled; setEffectsState(enabled); soundRef.current?.setEnabled(enabled);
+  }, []);
+
+  return { powered, effects, setEffects, receiveOnly, connection, frequency, mode, transmitting, preparingMic, micReady, error, audioBlocked,
     participants, volume, setVolume, connect, disconnect, setMicMode, resumeAudio,
     press, release, releaseAll,
   };

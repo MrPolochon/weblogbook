@@ -46,7 +46,7 @@ test('blur clears held PTT but leaves explicitly chosen open mic; disconnect alw
   assert.equal(gate.mode, 'muted');
 });
 
-function hookHarness() {
+function hookHarness({ joinError, observer=false } = {}) {
   const slots = [];
   const effects = [];
   let cursor = 0;
@@ -58,7 +58,7 @@ function hookHarness() {
   };
   const rooms = [];
   class Room {
-    state = 'disconnected'; remoteParticipants = new Map(); handlers = {}; published = [];
+    canPublish = true; state = 'disconnected'; remoteParticipants = new Map(); handlers = {}; published = [];
     localParticipant = {
       publishTrack: async track => { this.published.push(track); },
       unpublishTrack: async () => {},
@@ -66,7 +66,14 @@ function hookHarness() {
     constructor() { rooms.push(this); }
     on(name, callback) { this.handlers[name] = callback; }
     removeAllListeners() { this.handlers = {}; }
-    async connect() { this.state = 'connected'; }
+    async connect(_url,_token,options) {
+      this.canPublish = options?.canPublish !== false;
+      if (joinError) {
+        this.handlers.Disconnected?.();
+        throw joinError;
+      }
+      this.state = 'connected';
+    }
     async disconnect() { this.state = 'disconnected'; }
     async startAudio() {}
   }
@@ -77,12 +84,13 @@ function hookHarness() {
   const { useVhfRadio } = load('src/hooks/useVhfRadio.ts', {
     react,
     '@/lib/cloudflare/client': { Room, LocalAudioTrack, AudioPresets: { speech: {} }, Track: { Source: { Microphone: 'microphone' }, Kind: { Audio: 'audio' } },
-      ConnectionState: { Connected: 'connected', Disconnected: 'disconnected', Connecting: 'connecting' },
+      ConnectionState: { Connected: 'connected', Disconnected: 'disconnected', Connecting: 'connecting', Reconnecting: 'reconnecting' },
       RoomEvent: Object.fromEntries(['ParticipantConnected', 'ParticipantDisconnected', 'ActiveSpeakersChanged', 'ConnectionStateChanged', 'Disconnected', 'TrackSubscribed', 'TrackUnsubscribed', 'AudioPlaybackStatusChanged'].map(x => [x, x])) },
     '@/lib/vhf-frequencies': frequencies,
     '@/lib/radio-transmission': { RadioTransmission },
+    '@/lib/radio-squelch': { RadioSquelch: class { setEnabled(){} setTransmit(){} setReceive(){} close(){} setVolume(){} async resume(){} } },
   });
-  return { rooms, render() { cursor = 0; return useVhfRadio('DLH123'); } };
+  return { rooms, render() { cursor = 0; return useVhfRadio('DLH123', observer); } };
 }
 
 async function withMedia(run) {
@@ -92,7 +100,7 @@ async function withMedia(run) {
   const captures = [];
   let resolveCapture;
   let delayCapture = false;
-  global.fetch = async (url, init) => { requests.push(JSON.parse(init.body)); return Response.json({ token: 'test', url: 'wss://test' }); };
+  global.fetch = async (url, init) => { requests.push(JSON.parse(init.body)); return Response.json({ token: 'test', url: 'wss://test', canPublish: true }); };
   Object.defineProperty(global, 'navigator', { configurable: true, value: { mediaDevices: { getUserMedia: () => {
     const track = { stopped: false, stop() { this.stopped = true; } };
     const stream = { getTracks: () => [track], getAudioTracks: () => [track] };
@@ -115,6 +123,18 @@ test('joining uses the same VHF room as desktop/mobile, with no microphone reque
   const radio = harness.render();
   await radio.connect('118.935');
   assert.equal(media.requests[0].roomName, 'vhf-118935');
+  assert.equal(media.captures.length, 0);
+  radio.disconnect();
+}));
+
+test('initial transport failure preserves its cause when cleanup emits Disconnected first', async () => withMedia(async media => {
+  const cause = new Error('Cloudflare negotiation refused');
+  const harness = hookHarness({ joinError: cause });
+  await harness.render().connect('121.600');
+  const radio = harness.render();
+  assert.ok(radio.error.startsWith(cause.message));
+  assert.equal(radio.connection, 'reconnecting');
+  assert.equal(radio.mode, 'muted');
   assert.equal(media.captures.length, 0);
   radio.disconnect();
 }));
@@ -154,3 +174,42 @@ test('permission granted after cancellation never publishes or reopens microphon
   assert.equal(harness.render().transmitting, false);
   radio.disconnect();
 }));
+
+test('OBS never acquires the microphone or opens the PTT gate',async()=>withMedia(async media=>{
+  const h=hookHarness({observer:true});
+  await h.render().connect('999.123');
+  await h.render().setMicMode('open'); h.render().press('keyboard');
+  assert.equal(media.captures.length,0); assert.equal(h.render().transmitting,false);
+  assert.equal(h.render().receiveOnly,true); h.render().disconnect();
+}));
+test('retries persist after repeated failures; OFF cancels all future attempts',async t=>{
+  t.mock.timers.enable({apis:['setTimeout']});
+  await withMedia(async media=>{
+    const h=hookHarness({joinError:new Error('offline')});
+    await h.render().connect('121.600');
+    for(const delay of [5000,10000,20000,30000,30000]) {
+      t.mock.timers.tick(delay);
+      await new Promise(resolve=>setImmediate(resolve));
+      h.render();
+    }
+    assert.equal(media.requests.length,6);
+    assert.equal(h.render().powered,true);
+    h.render().disconnect(); t.mock.timers.tick(100000);
+    await new Promise(resolve=>setImmediate(resolve));
+    assert.equal(media.requests.length,6); assert.equal(h.render().powered,false);
+  });
+  t.mock.timers.reset();
+});
+test('frequency wheels wrap independently and all six-digit virtual channels are accepted',()=>{
+  assert.equal(frequencies.stepFrequency('121.999','decimal',1),'121.000');
+  assert.equal(frequencies.stepFrequency('999.123','mhz',1),'000.123');
+  assert.equal(frequencies.stepFrequency('000.123','mhz',-1),'999.123');
+  for(const f of ['000.000','118.020','136.975','999.999']) assert.equal(frequencies.isValidVhfFrequency(f),true);
+  for(const f of ['1000.000','118.1','-01.000']) assert.equal(frequencies.isValidVhfFrequency(f),false);
+});
+test('blur preserves native global PTT, while native release and reset always close it',()=>{
+  const gate=new RadioTransmission(()=>{}); gate.setReady(true); gate.setMode('ptt');
+  gate.press('desktop'); gate.press('keyboard'); gate.releaseLocal();
+  assert.equal(gate.transmitting,true); gate.release('desktop'); assert.equal(gate.transmitting,false);
+  gate.press('desktop'); gate.reset(); assert.equal(gate.transmitting,false);
+});

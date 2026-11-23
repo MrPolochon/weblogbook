@@ -34,6 +34,11 @@ export class RadioTransmission {
     this.flush();
   }
 
+  releaseLocal() {
+    for (const source of this.held) if (source !== 'desktop') this.held.delete(source);
+    this.flush();
+  }
+
   releaseAll() {
     this.held.clear();
     this.flush();

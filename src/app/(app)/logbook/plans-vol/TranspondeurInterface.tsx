@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import ComBox from '@/components/ComBox';
 import { Radio, Clock, AlertTriangle, Plane, ArrowRight, CheckCircle2, Headphones, MapPin } from 'lucide-react';
 
 // Codes d'urgence
@@ -122,6 +123,7 @@ export default function TranspondeurInterface({
   };
 
   return (
+    <div className="space-y-4">
     <section aria-labelledby="transponder-heading" className={`rounded-xl border ${isEmergency ? 'border-red-500' : 'border-slate-700/70'} bg-slate-900/80 p-4 sm:p-5`}>
       <div className="relative space-y-6">
         {/* En-tête avec heure */}
@@ -375,5 +377,9 @@ export default function TranspondeurInterface({
         </div>
       </div>
     </section>
+    {['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(statut) && (
+      <ComBox key={planId} participantName={numeroVol || 'Pilote'} placement="inline" />
+    )}
+    </div>
   );
 }

@@ -252,7 +252,7 @@ export default function VhfRadio({
   }, []);
 
   /** Fetch a Cloudflare token from the API, with retry on 401 */
-  const fetchCloudflareToken = useCallback(async (freq: string): Promise<{ token: string; url: string } | null> => {
+  const fetchCloudflareToken = useCallback(async (freq: string): Promise<{ token: string; url: string; canPublish: boolean } | null> => {
     const roomName = frequencyToRoomName(freq);
     const body = JSON.stringify({ roomName, participantName: participantName || 'Inconnu' });
 
@@ -299,7 +299,7 @@ export default function VhfRadio({
       return null;
     }
 
-    return { token: data.token, url: data.url };
+    return { token: data.token, url: data.url, canPublish: data.canPublish === true };
   }, [accessToken, participantName, getFreshToken]);
 
   const connectToFrequency = useCallback(
@@ -378,8 +378,8 @@ export default function VhfRadio({
         room.on(RoomEvent.ParticipantConnected, () => updateParticipants(room));
         room.on(RoomEvent.ParticipantDisconnected, () => updateParticipants(room));
 
-        await room.connect(url, token, { autoSubscribe: true });
-        await room.prepareMicrophone();
+        await room.connect(url, token, { autoSubscribe: true, canPublish: result.canPublish });
+        if (room.canPublish) await room.prepareMicrophone();
         if (generation !== connectionGeneration.current) { await room.disconnect(); return; }
         const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
         if (micPub) await micPub.mute();

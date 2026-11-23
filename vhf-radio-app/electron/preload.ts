@@ -22,3 +22,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: () => ipcRenderer.send('updater:install'),
   checkForUpdate: () => ipcRenderer.send('updater:check'),
 });
+
+if (['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com'].includes(location.origin)) {
+  contextBridge.exposeInMainWorld('radioDesktop', {
+    configure: (code: string) => ipcRenderer.invoke('radio:configure', code),
+    onPtt: (callback: (down: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, down: boolean) => callback(down === true);
+      ipcRenderer.on('radio:ptt', handler);
+      return () => ipcRenderer.removeListener('radio:ptt', handler);
+    },
+  });
+}

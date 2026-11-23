@@ -42,7 +42,7 @@ function harness() {
     return {};
   };
   function member(id, published = false) {
-    let state = { id, identity: id, name: id, hello: true, published, pubSession: published ? `publisher-${id}` : null,
+    let state = { canPublish: true, id, identity: id, name: id, hello: true, published, pubSession: published ? `publisher-${id}` : null,
       pubMid: published ? '0' : null, subSession: null, subscriptions: {}, pending: false, closed: false, minute: Date.now(), count: 0 };
     const ws = { deserializeAttachment: () => structuredClone(state), serializeAttachment: s => { state = structuredClone(s); },
       sent: [], send(message) { this.sent.push(JSON.parse(message)); }, close() { this.closed = true; } };
@@ -149,4 +149,16 @@ test('publisher and subscriber session requests have no body while track and TUR
     assert.equal(hello.result.iceServers.length, 1);
     assert.equal(requests.length, 5);
   } finally { globalThis.fetch = original; }
+});
+
+test('server rejects OBS publication before contacting SFU but still allows reception',async()=>{
+  const h=harness(), obs=h.member('observer');
+  const state=h.room.state(obs); state.canPublish=false; h.room.save(obs,state);
+  h.member('controller',true);
+  const received=await h.send(obs,'subscribe',{peers:['controller']});
+  assert.equal(received.result.tracks[0].peerId,'controller');
+  const before=h.calls.length;
+  const reply=await h.send(obs,'publish',{mid:'0',sessionDescription:{type:'offer',sdp:'m=audio 9 test'}});
+  assert.match(reply.error,/OBS/);
+  assert.ok(!h.calls.slice(before).some(c=>c.path.endsWith('sessions/new')));
 });

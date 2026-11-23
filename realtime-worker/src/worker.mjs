@@ -48,7 +48,7 @@ export class RadioRoom {
       await this.ctx.storage.put(`ticket:${claims.jti}`, claims.exp);
       const [client, server] = Object.values(new WebSocketPair());
       this.ctx.acceptWebSocket(server);
-      this.save(server, { id: claims.jti, identity: claims.sub, name: claims.name,
+      this.save(server, { id: claims.jti, identity: claims.sub, name: claims.name, canPublish: claims.canPublish === true,
         published: false, pubSession: null, pubMid: null, subSession: null,
         subscriptions: {}, pending: false, createdAt: Date.now(), lastSeen: Date.now(), minute: Date.now(), count: 0, closed: false });
       await this.ctx.storage.setAlarm(Date.now() + 60_000);
@@ -114,9 +114,10 @@ export class RadioRoom {
       const result = await this.provider(`turn/keys/${encodeURIComponent(this.env.TURN_KEY_ID)}/credentials/generate-ice-servers`, { ttl: 86400 }, 'POST', true);
       if (!Array.isArray(result.iceServers) || !result.iceServers.length) throw new Error('TURN unavailable');
       this.broadcast();
-      return { id: s.id, iceServers: result.iceServers, peers: this.peers(ws) };
+      return { id: s.id, canPublish: s.canPublish === true, iceServers: result.iceServers, peers: this.peers(ws) };
     }
     if (!s.hello) throw new Error('Join first');
+    if ((action === 'publish' || action === 'published') && s.canPublish !== true) throw new Error('OBS: receive only');
     if (action === 'publish') {
       if (s.pubSession || !p.sessionDescription || p.sessionDescription.type !== 'offer' ||
           typeof p.sessionDescription.sdp !== 'string' || !/^m=audio /m.test(p.sessionDescription.sdp) ||
