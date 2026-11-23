@@ -19,7 +19,7 @@ import {
   Track,
   ConnectionState,
   RemoteParticipant,
-} from 'livekit-client';
+} from '../../../src/lib/cloudflare/client';
 
 /* ───────────────────── Types ───────────────────── */
 
@@ -107,8 +107,9 @@ export default function VhfRadio({
   const safeStbyDecIndex = Math.min(stbyDecIndex, stbyDecimals.length - 1);
   const standbyFreq = formatFrequency(stbyMhz, stbyDecimals[safeStbyDecIndex] ?? '000');
 
-  /* ── LiveKit ── */
+  /* ── Cloudflare ── */
   const roomRef = useRef<Room | null>(null);
+  const connectionGeneration = useRef(0);
   const [connectionState, setConnectionState] = useState<string>('disconnected');
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const audioContainerRef = useRef<HTMLDivElement>(null);
@@ -146,10 +147,10 @@ export default function VhfRadio({
 
   const startTransmit = useCallback(async () => {
     if (!radioOn || pttActiveRef.current) return;
+    const room = roomRef.current;
+    if (!room || room.state !== ConnectionState.Connected || !room.localParticipant.getTrackPublication(Track.Source.Microphone)) return;
     pttActiveRef.current = true;
     setIsTransmitting(true);
-    const room = roomRef.current;
-    if (!room) return;
     try {
       const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
       if (micPub) await micPub.unmute();
@@ -211,10 +212,12 @@ export default function VhfRadio({
   }
 
   /* ══════════════════════════════════════════════════
-     LiveKit
+     Cloudflare
      ══════════════════════════════════════════════════ */
 
   const cleanupRoom = useCallback(() => {
+    connectionGeneration.current++;
+    pttActiveRef.current = false;
     if (collisionOscRef.current) {
       try { collisionOscRef.current.stop(); } catch { /* */ }
       collisionOscRef.current = null;
@@ -248,14 +251,14 @@ export default function VhfRadio({
     }
   }, []);
 
-  /** Fetch a LiveKit token from the API, with retry on 401 */
-  const fetchLiveKitToken = useCallback(async (freq: string): Promise<{ token: string; url: string } | null> => {
+  /** Fetch a Cloudflare token from the API, with retry on 401 */
+  const fetchCloudflareToken = useCallback(async (freq: string): Promise<{ token: string; url: string } | null> => {
     const roomName = frequencyToRoomName(freq);
     const body = JSON.stringify({ roomName, participantName: participantName || 'Inconnu' });
 
     // First attempt with a fresh token
     let freshToken = await getFreshToken();
-    if (!freshToken) freshToken = accessToken;
+    if (!freshToken) freshToken = accessToken || null;
 
     if (!freshToken) {
       setConnectionError('Aucun token d\'authentification — reconnecte-toi');
@@ -263,7 +266,7 @@ export default function VhfRadio({
     }
 
     const doFetch = async (token: string) => {
-      return fetch(`${API_BASE_URL}/api/livekit/token`, {
+      return fetch(`${API_BASE_URL}/api/realtime/join`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body,
@@ -303,13 +306,15 @@ export default function VhfRadio({
     async (freq: string) => {
       if (!isValidVhfFrequency(freq)) return;
       cleanupRoom();
+      const generation = connectionGeneration.current;
       setConnectionError(null);
       if (retryTimerRef.current) { clearTimeout(retryTimerRef.current); retryTimerRef.current = null; }
 
       try {
         setConnectionState('connecting');
 
-        const result = await fetchLiveKitToken(freq);
+        const result = await fetchCloudflareToken(freq);
+        if (generation !== connectionGeneration.current) return;
         if (!result) {
           setConnectionState('error');
           // Auto-retry after 5 seconds
@@ -336,8 +341,11 @@ export default function VhfRadio({
             deviceId: selectedInput || undefined,
           },
         });
+        roomRef.current = room;
 
         room.on(RoomEvent.ConnectionStateChanged, (state: ConnectionState) => {
+          if (generation !== connectionGeneration.current) return;
+          if (state !== ConnectionState.Connected) { pttActiveRef.current = false; setIsTransmitting(false); }
           setConnectionState(state);
           if (state === 'disconnected') {
             // Auto-retry on unexpected disconnect
@@ -371,7 +379,8 @@ export default function VhfRadio({
         room.on(RoomEvent.ParticipantDisconnected, () => updateParticipants(room));
 
         await room.connect(url, token, { autoSubscribe: true });
-        await room.localParticipant.setMicrophoneEnabled(true);
+        await room.prepareMicrophone();
+        if (generation !== connectionGeneration.current) { await room.disconnect(); return; }
         const micPub = room.localParticipant.getTrackPublication(Track.Source.Microphone);
         if (micPub) await micPub.mute();
 
@@ -379,8 +388,12 @@ export default function VhfRadio({
         setConnectionError(null);
         updateParticipants(room);
       } catch (err) {
+        if (generation !== connectionGeneration.current) return;
+        roomRef.current?.removeAllListeners();
+        void roomRef.current?.disconnect();
+        roomRef.current = null;
         console.error('[VHF] Connection error:', err);
-        setConnectionError(err instanceof Error ? err.message : 'Erreur de connexion LiveKit');
+        setConnectionError(err instanceof Error ? err.message : 'Erreur de connexion Cloudflare');
         setConnectionState('error');
         // Auto-retry after 5 seconds
         retryTimerRef.current = setTimeout(() => {
@@ -391,7 +404,7 @@ export default function VhfRadio({
         }, 5000);
       }
     },
-    [cleanupRoom, selectedInput, selectedOutput, fetchLiveKitToken]
+    [cleanupRoom, selectedInput, selectedOutput, fetchCloudflareToken]
   );
 
   function updateParticipants(room: Room) {

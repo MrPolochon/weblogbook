@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { ATC_NAV_BTN, atcNavIdle, atcNavOpen } from '@/lib/atc-ui';
-import { useLiveKitCall } from '@/hooks/useLiveKitCall';
+import { useCloudflareCall } from '@/hooks/useCloudflareCall';
 import { usePhoneAudioDevices } from '@/hooks/usePhoneAudioDevices';
 import { cn } from '@/lib/utils';
 import {
@@ -178,7 +178,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     } catch (e) { console.error('Audio error:', e); }
   }, []);
 
-  const { audioContainerRef, audioLevel, isMuted, cleanupLiveKit, joinLiveKitCall, toggleMute } = useLiveKitCall({
+  const { audioContainerRef, audioLevel, isMuted, cleanupCloudflare, joinCloudflareCall, toggleMute } = useCloudflareCall({
     selectedInputId,
     selectedOutputId,
     playSound,
@@ -245,7 +245,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
     if (callState === 'ringing' || callState === 'connecting' || callState === 'incoming') {
       const timeout = setTimeout(async () => {
         playMessage('Délai dépassé');
-        await cleanupLiveKit();
+        await cleanupCloudflare();
         const callId = currentCall?.callId || incomingCall?.callId;
         if (callId) {
           await fetch('/api/atc/telephone/hangup', {
@@ -261,7 +261,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       }, 30000);
       return () => clearTimeout(timeout);
     }
-  }, [callState, currentCall, incomingCall, cleanupLiveKit, playMessage]);
+  }, [callState, currentCall, incomingCall, cleanupCloudflare, playMessage]);
 
   const micTestActiveRef = useRef(false);
   micTestActiveRef.current = isMicTestActive;
@@ -287,7 +287,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ reset: true }),
             });
-            await cleanupLiveKit();
+            await cleanupCloudflare();
             setCallState('idle');
             setNumber('');
             setIncomingCall(null);
@@ -300,7 +300,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       return next;
     });
     if (callState === 'idle') setCallState('dialing');
-  }, [callState, playSound, cleanupLiveKit, playMessage]);
+  }, [callState, playSound, cleanupCloudflare, playMessage]);
 
   const handleDelete = useCallback(() => {
     setDialHint(null);
@@ -471,7 +471,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
           if (statusData.status === 'connected') {
             setCallState('connecting');
-            const ok = await joinLiveKitCall(data.call.id, `${aeroport}-${position}`, {
+            const ok = await joinCloudflareCall(data.call.id, `${aeroport}-${position}`, {
               onConnected: () => setCallState('connected'),
               onDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
               onParticipantDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
@@ -524,7 +524,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       });
       if (res.ok) {
         setCurrentCall({ to: incomingCall.from, toPosition: incomingCall.fromPosition, callId: incomingCall.callId });
-        const ok = await joinLiveKitCall(incomingCall.callId, `${aeroport}-${position}`, {
+        const ok = await joinCloudflareCall(incomingCall.callId, `${aeroport}-${position}`, {
           onConnected: () => setCallState('connected'),
           onDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
           onParticipantDisconnected: () => { setCallState('idle'); setNumber(''); setIncomingCall(null); setCurrentCall(null); },
@@ -586,7 +586,7 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
       return;
     }
 
-    await cleanupLiveKit();
+    await cleanupCloudflare();
     if (callId) {
       await fetch('/api/atc/telephone/hangup', {
         method: 'POST',
@@ -604,8 +604,8 @@ export default function AtcTelephone({ aeroport, position }: AtcTelephoneProps) 
 
   useEffect(() => () => {
     stopLocalMicTest();
-    void cleanupLiveKit();
-  }, [cleanupLiveKit, stopLocalMicTest]);
+    void cleanupCloudflare();
+  }, [cleanupCloudflare, stopLocalMicTest]);
 
   // Keep Enter synchronized with the latest number and audio-device selection.
   const callHandlerRef = useRef(handleCall);

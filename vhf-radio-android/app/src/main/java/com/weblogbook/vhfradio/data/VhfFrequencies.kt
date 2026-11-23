@@ -83,10 +83,10 @@ object VhfFrequencies {
         }
     }
 
-    /** Convertit une fréquence en nom de room LiveKit. Ex: "118.935" → "vhf-118935" */
+    /** Convertit une fréquence en nom de room Cloudflare. Ex: "118.935" → "vhf-118935" */
     fun frequencyToRoomName(freq: String): String = "vhf-${freq.replace(".", "")}"
 
-    /** Convertit un nom de room LiveKit en fréquence. Ex: "vhf-118935" → "118.935" */
+    /** Convertit un nom de room Cloudflare en fréquence. Ex: "vhf-118935" → "118.935" */
     fun roomNameToFrequency(roomName: String): String? {
         val regex = Regex("""^vhf-(\d{3})(\d{3})$""")
         val match = regex.matchEntire(roomName) ?: return null

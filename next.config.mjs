@@ -1,15 +1,16 @@
 /** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== 'production';
+const realtimeOrigin = process.env.CLOUDFLARE_REALTIME_URL ? new URL(process.env.CLOUDFLARE_REALTIME_URL).origin : '';
 
 function buildCsp(frameAncestors) {
   return [
     "default-src 'self'",
-    "connect-src 'self' wss://*.livekit.cloud https://*.livekit.cloud https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://api.elevenlabs.io",
+    `connect-src 'self' ${realtimeOrigin} https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://api.elevenlabs.io`,
     "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://cdn.project-flight.com",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
-    "media-src 'self' blob: https://*.livekit.cloud https://api.elevenlabs.io",
+    "media-src 'self' blob: https://api.elevenlabs.io",
     "worker-src 'self' blob:",
     "frame-src 'self'",
     `frame-ancestors ${frameAncestors}`,

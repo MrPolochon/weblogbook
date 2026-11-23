@@ -14,6 +14,7 @@ import AtcPlansRealtimeRefresh from '@/components/AtcPlansRealtimeRefresh';
 import AtcMain from '@/components/AtcMain';
 import AtcSoundSettings from '@/components/AtcSoundSettings';
 import AtcReservationHandover from '@/components/AtcReservationHandover';
+import ComBox from '@/components/ComBox';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,6 +124,7 @@ export default async function AtcLayout({
         <AtcAtisDesyncBanner />
         <AtcReservationHandover enService={enService} />
         {enService && <AtcSoundSettings />}
+        {enService && session && <ComBox participantName={`${session.aeroport} ${session.position}`} station={{ aeroport: session.aeroport, position: session.position }} />}
         <div className="flex flex-1 w-full min-h-0">
           <AtcMain>{children}</AtcMain>
           {enService && (

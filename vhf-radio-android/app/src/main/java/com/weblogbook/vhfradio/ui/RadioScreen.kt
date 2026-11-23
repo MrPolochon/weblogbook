@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.weblogbook.vhfradio.data.ApiClient
 import com.weblogbook.vhfradio.data.VhfFrequencies
-import com.weblogbook.vhfradio.livekit.LiveKitManager
+import com.weblogbook.vhfradio.cloudflare.CloudflareManager
 import com.weblogbook.vhfradio.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -37,7 +37,7 @@ fun RadioScreen(
     profile: UserProfile,
     mode: RadioMode,
     accessToken: String,
-    liveKitManager: LiveKitManager,
+    cloudflareManager: CloudflareManager,
     onLogout: () -> Unit,
     onStartOverlay: () -> Unit
 ) {
@@ -59,12 +59,12 @@ fun RadioScreen(
     var noSession by remember { mutableStateOf(false) }
     var lastSessionKey by remember { mutableStateOf("") }
 
-    // LiveKit state
-    val connectionState by liveKitManager.connectionState.collectAsState()
-    val isTransmitting by liveKitManager.isTransmitting.collectAsState()
-    val participants by liveKitManager.participants.collectAsState()
-    val collision by liveKitManager.collision.collectAsState()
-    val connectionError by liveKitManager.connectionError.collectAsState()
+    // Cloudflare state
+    val connectionState by cloudflareManager.connectionState.collectAsState()
+    val isTransmitting by cloudflareManager.isTransmitting.collectAsState()
+    val participants by cloudflareManager.participants.collectAsState()
+    val collision by cloudflareManager.collision.collectAsState()
+    val connectionError by cloudflareManager.connectionError.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
     var isReconnecting by remember { mutableStateOf(false) }
@@ -80,8 +80,8 @@ fun RadioScreen(
     val safeStbyDecIndex = stbyDecIndex.coerceAtMost(stbyDecimals.size - 1)
     val standbyFreq = VhfFrequencies.format(stbyMhz, stbyDecimals.getOrElse(safeStbyDecIndex) { "000" })
 
-    val isConnected = connectionState == LiveKitManager.ConnectionStatus.CONNECTED
-    val isConnecting = connectionState == LiveKitManager.ConnectionStatus.CONNECTING
+    val isConnected = connectionState == CloudflareManager.ConnectionStatus.CONNECTED
+    val isConnecting = connectionState == CloudflareManager.ConnectionStatus.CONNECTING
 
     val participantName = if (sessionInfo.isNotEmpty()) {
         "${profile.identifiant} ($sessionInfo)"
@@ -128,15 +128,15 @@ fun RadioScreen(
     var prevActiveFreq by remember { mutableStateOf("") }
     LaunchedEffect(radioOn, activeFreq) {
         if (!radioOn) {
-            if (connectionState != LiveKitManager.ConnectionStatus.DISCONNECTED) {
-                liveKitManager.disconnect()
+            if (connectionState != CloudflareManager.ConnectionStatus.DISCONNECTED) {
+                cloudflareManager.disconnect()
             }
             prevActiveFreq = ""
             return@LaunchedEffect
         }
         if (activeFreq != prevActiveFreq) {
             prevActiveFreq = activeFreq
-            liveKitManager.connectToFrequency(activeFreq, participantName, accessToken)
+            cloudflareManager.connectToFrequency(activeFreq, participantName, accessToken)
         }
     }
 
@@ -206,7 +206,7 @@ fun RadioScreen(
                     safeStbyDecIndex = safeStbyDecIndex,
                     onToggleRadio = {
                         if (radioOn) {
-                            liveKitManager.disconnect()
+                            cloudflareManager.disconnect()
                             radioOn = false
                         } else {
                             radioOn = true
@@ -227,19 +227,19 @@ fun RadioScreen(
                         stbyDecIndex = it.coerceAtMost(stbyDecimals.size - 1)
                     },
                     onPttDown = {
-                        scope.launch { liveKitManager.startTransmit() }
+                        scope.launch { cloudflareManager.startTransmit() }
                     },
                     onPttUp = {
-                        scope.launch { liveKitManager.stopTransmit() }
+                        scope.launch { cloudflareManager.stopTransmit() }
                     },
                     onReconnect = {
                         if (!isReconnecting && radioOn) {
                             isReconnecting = true
                             scope.launch {
-                                liveKitManager.disconnect()
+                                cloudflareManager.disconnect()
                                 delay(500)
                                 prevActiveFreq = ""
-                                liveKitManager.connectToFrequency(activeFreq, participantName, accessToken)
+                                cloudflareManager.connectToFrequency(activeFreq, participantName, accessToken)
                                 isReconnecting = false
                             }
                         }
@@ -440,7 +440,7 @@ private fun RadioPanel(
     isTransmitting: Boolean,
     isReconnecting: Boolean,
     connectionError: String?,
-    participants: List<LiveKitManager.ParticipantInfo>,
+    participants: List<CloudflareManager.ParticipantInfo>,
     mhzRange: List<Int>,
     stbyDecimals: List<String>,
     stbyMhzIndex: Int,
@@ -979,7 +979,7 @@ private fun PttButton(
 }
 
 @Composable
-private fun ParticipantsList(participants: List<LiveKitManager.ParticipantInfo>) {
+private fun ParticipantsList(participants: List<CloudflareManager.ParticipantInfo>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()

@@ -12,7 +12,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react': ['react', 'react-dom'],
-          'vendor-livekit': ['livekit-client'],
           'vendor-supabase': ['@supabase/supabase-js'],
         },
       },

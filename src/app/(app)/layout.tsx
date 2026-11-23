@@ -8,6 +8,7 @@ import AdminModeBg from '@/components/AdminModeBg';
 import AutoRefresh from '@/components/AutoRefresh';
 import InactivityLogout from '@/components/InactivityLogout';
 import PilotWorkspace from '@/components/pilot/PilotWorkspace';
+import ComBox from '@/components/ComBox';
 import { getPendingMedevacReport } from '@/lib/siavi/pending-report';
 import { SIAVI_SPACE_MAINTENANCE } from '@/lib/siavi/space-status';
 
@@ -25,7 +26,7 @@ export default async function AppLayout({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, armee, ifsa, siavi')
+    .select('role, armee, ifsa, siavi, identifiant')
     .eq('id', uid)
     .single();
 
@@ -178,6 +179,7 @@ export default async function AppLayout({
         </div>
       )}
       <main id="main-content" className="flex-1 mx-auto w-full max-w-7xl px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8"><PilotWorkspace>{children}</PilotWorkspace></main>
+      <ComBox participantName={profile?.identifiant || 'Pilote'} />
     </div>
   );
 }

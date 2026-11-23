@@ -14,7 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.weblogbook.vhfradio.livekit.LiveKitManager
+import com.weblogbook.vhfradio.cloudflare.CloudflareManager
 import com.weblogbook.vhfradio.service.VhfOverlayService
 import com.weblogbook.vhfradio.ui.LoginScreen
 import com.weblogbook.vhfradio.ui.RadioMode
@@ -24,7 +24,7 @@ import com.weblogbook.vhfradio.ui.theme.VHFRadioTheme
 
 class MainActivity : ComponentActivity() {
 
-    private var liveKitManager: LiveKitManager? = null
+    private var cloudflareManager: CloudflareManager? = null
 
     // Permission launchers
     private val requestMicPermission = registerForActivityResult(
@@ -53,8 +53,8 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        liveKitManager?.destroy()
-        liveKitManager = null
+        cloudflareManager?.destroy()
+        cloudflareManager = null
         // Stop overlay service
         stopService(Intent(this, VhfOverlayService::class.java))
         super.onDestroy()
@@ -74,9 +74,9 @@ class MainActivity : ComponentActivity() {
                     mode = m
                     accessToken = token
 
-                    // Initialize LiveKitManager
-                    if (liveKitManager == null) {
-                        liveKitManager = LiveKitManager(applicationContext)
+                    // Initialize CloudflareManager
+                    if (cloudflareManager == null) {
+                        cloudflareManager = CloudflareManager(applicationContext)
                     }
 
                     screen = AppScreen.Radio
@@ -84,14 +84,14 @@ class MainActivity : ComponentActivity() {
             }
 
             AppScreen.Radio -> {
-                val lkm = liveKitManager
+                val lkm = cloudflareManager
                 val prof = profile
                 if (lkm != null && prof != null) {
                     RadioScreen(
                         profile = prof,
                         mode = mode,
                         accessToken = accessToken,
-                        liveKitManager = lkm,
+                        cloudflareManager = lkm,
                         onLogout = {
                             lkm.disconnect()
                             stopService(Intent(this@MainActivity, VhfOverlayService::class.java))
@@ -126,7 +126,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun startOverlayService(lkm: LiveKitManager, mode: RadioMode) {
+    private fun startOverlayService(lkm: CloudflareManager, mode: RadioMode) {
         // Check overlay permission
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(
@@ -142,8 +142,8 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Share the LiveKitManager with the service
-        VhfOverlayService.sharedLiveKitManager = lkm
+        // Share the CloudflareManager with the service
+        VhfOverlayService.sharedCloudflareManager = lkm
         VhfOverlayService.sharedIsLocked = mode != RadioMode.PILOT
 
         // Start the foreground service

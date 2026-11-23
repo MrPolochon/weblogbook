@@ -110,7 +110,7 @@ export function getDecimalsForMhz(mhz: number): string[] {
 }
 
 /**
- * Convertit une fréquence en nom de room LiveKit.
+ * Convertit une fréquence en nom de room Cloudflare.
  * Ex: "118.935" → "vhf-118935"
  */
 export function frequencyToRoomName(freq: string): string {
@@ -118,7 +118,7 @@ export function frequencyToRoomName(freq: string): string {
 }
 
 /**
- * Convertit un nom de room LiveKit en fréquence.
+ * Convertit un nom de room Cloudflare en fréquence.
  * Ex: "vhf-118935" → "118.935"
  */
 export function roomNameToFrequency(roomName: string): string | null {
