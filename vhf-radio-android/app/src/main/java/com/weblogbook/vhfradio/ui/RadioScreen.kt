@@ -43,6 +43,8 @@ fun RadioScreen(service: VhfOverlayService, onMicMode: (MicMode) -> Unit, onSwap
     val volume by radio.volume.collectAsState()
     val effects by radio.effects.collectAsState()
     var confirmOpen by remember { mutableStateOf(false) }
+    var outputs by remember { mutableStateOf<List<Pair<Int, String>>>(emptyList()) }
+    var outputMenu by remember { mutableStateOf(false) }
     val canSpeak = connected == ConnectionStatus.CONNECTED && !receiveOnly && positionAllowed
     DisposableEffect(radio) { onDispose { radio.release("screen") } }
     Column(Modifier.fillMaxSize().background(Color(0xff020617)).safeDrawingPadding()
@@ -110,6 +112,13 @@ fun RadioScreen(service: VhfOverlayService, onMicMode: (MicMode) -> Unit, onSwap
             Text("Pour parler depuis la bulle, active d'abord PTT ici. Déplace la bulle en faisant glisser sa fréquence.", color = Color(0xff94a3b8), fontSize = 12.sp)
             Text("Volume radio : " + (volume * 100).toInt() + " %", color = Color.White)
             Slider(value = volume, onValueChange = radio::setVolume)
+            if (android.os.Build.VERSION.SDK_INT >= 31) Box {
+                OutlinedButton(onClick = { outputs = service.audioOutputs(); outputMenu = true }, enabled = powered) { Text("Choisir la sortie audio") }
+                DropdownMenu(expanded = outputMenu, onDismissRequest = { outputMenu = false }) {
+                    outputs.forEach { (id, label) -> DropdownMenuItem(text = { Text(label) }, onClick = { outputMenu = false; service.chooseAudioOutput(id) }) }
+                    if (outputs.isEmpty()) DropdownMenuItem(text = { Text("Aucune sortie disponible") }, onClick = { outputMenu = false }, enabled = false)
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Checkbox(checked = effects, onCheckedChange = radio::setEffects)
                 Text("Grésillement radio", color = Color.White)

@@ -13,6 +13,8 @@ Version 1.2.0 beta 1, Android 8 ou plus récent. Le téléphone rejoint les mêm
 
 Le mode micro ouvert transmet toutes les paroles, même en arrière-plan. Utiliser un casque. Discord cockpit doit de préférence fonctionner sur un autre appareil : les systèmes mobiles limitent le partage du microphone entre deux applications d'appel. Cette application ne modifie pas Discord et ne promet pas de contourner ces restrictions.
 
+Sur Android 12 et plus, « Choisir la sortie audio » permet de sélectionner le haut-parleur, l'écouteur ou un casque reconnu par Android. Un changement de sortie ou le retrait du casque coupe le micro : réactiver PTT ensuite.
+
 ## Cycle de vie et confidentialité
 
 Le service Android possède la connexion et les jetons en mémoire. Une rotation ou une recréation de l'Activity ne détruit pas une radio déjà démarrée. Aucun jeton ni mot de passe n'est enregistré sur disque. Le service ne se redémarre pas automatiquement après un arrêt du processus.

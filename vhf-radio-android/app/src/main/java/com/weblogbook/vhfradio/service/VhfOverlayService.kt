@@ -6,6 +6,9 @@ import android.content.*
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.os.*
 import android.provider.Settings
 import android.view.*
@@ -49,6 +52,18 @@ class VhfOverlayService : Service() {
     private var bubble: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
     private val windows by lazy { getSystemService(WINDOW_SERVICE) as WindowManager }
+    private val audio by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
+    private var selectedOutput: Int? = null
+    private val audioDevices = object : AudioDeviceCallback() {
+        override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) {
+            // Never continue an open microphone after a headset is unplugged.
+            if (removed.any { it.isSource || it.id == selectedOutput }) {
+                radio.mute()
+                if (removed.any { it.id == selectedOutput }) clearAudioOutput()
+                if (radio.powered.value) message.value = "Casque déconnecté : micro coupé. Réactive PTT pour parler."
+            }
+        }
+    }
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             radio.mute()
@@ -58,6 +73,7 @@ class VhfOverlayService : Service() {
     override fun onCreate() {
         super.onCreate()
         radio = CloudflareManager(applicationContext)
+        audio.registerAudioDeviceCallback(audioDevices, Handler(Looper.getMainLooper()))
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CHANNEL, "Radio VHF", NotificationManager.IMPORTANCE_LOW)
         )
@@ -136,10 +152,35 @@ class VhfOverlayService : Service() {
     }
     fun powerOff() {
         radio.disconnect()
+        clearAudioOutput()
         hideOverlay()
         foreground = false; microphoneForeground = false
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+    fun audioOutputs(): List<Pair<Int, String>> {
+        if (Build.VERSION.SDK_INT < 31) return emptyList()
+        return runCatching { audio.availableCommunicationDevices.map { device -> device.id to when (device.type) {
+            AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Haut-parleur"
+            AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Écouteur du téléphone"
+            else -> device.productName.toString()
+        } } }.getOrElse { message.value = "Impossible de lire les sorties audio."; emptyList() }
+    }
+    fun chooseAudioOutput(id: Int) {
+        if (Build.VERSION.SDK_INT < 31 || !radio.powered.value) return
+        radio.mute()
+        val selected = runCatching {
+            val device = audio.availableCommunicationDevices.find { it.id == id }
+            device != null && audio.setCommunicationDevice(device)
+        }.getOrDefault(false)
+        if (selected) {
+            selectedOutput = id
+            message.value = "Sortie audio sélectionnée. Réactive PTT pour parler."
+        } else message.value = "Cette sortie audio n'est pas disponible."
+    }
+    private fun clearAudioOutput() {
+        if (Build.VERSION.SDK_INT >= 31 && selectedOutput != null) runCatching { audio.clearCommunicationDevice() }
+        selectedOutput = null
     }
     private fun promote(microphone: Boolean) {
         val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
@@ -241,6 +282,8 @@ class VhfOverlayService : Service() {
     override fun onTaskRemoved(rootIntent: Intent?) { powerOff(); super.onTaskRemoved(rootIntent) }
     override fun onDestroy() {
         hideOverlay(); positionJob?.cancel(); scope.cancel()
+        audio.unregisterAudioDeviceCallback(audioDevices)
+        clearAudioOutput()
         radio.destroy(); ApiClient.clearTokens(); token = ""
         unregisterReceiver(screenReceiver)
         super.onDestroy()
