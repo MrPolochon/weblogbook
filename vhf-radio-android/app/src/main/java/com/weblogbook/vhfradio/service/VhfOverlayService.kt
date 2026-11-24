@@ -143,7 +143,7 @@ class VhfOverlayService : Service() {
     }
     private fun promote(microphone: Boolean) {
         val types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK or
-            (if (microphone) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
+            (if (microphone && Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0)
         ServiceCompat.startForeground(this, NOTIFICATION, notification(), types)
         foreground = true; microphoneForeground = microphone
     }

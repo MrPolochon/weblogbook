@@ -158,7 +158,11 @@ class CloudflareManager(private val context: Context) {
                 controls.arm(true, session.canPublish, session.microphone != null, mode)
                 _micMode.value = controls.mode
                 applyTransmit()
-            } catch (cancelled: CancellationException) { throw cancelled }
+            } catch (cancelled: CancellationException) {
+                // An interrupted SDP publication cannot safely be reused by another PTT press.
+                if (current === session && !session.microphonePrepared) fail(session, "Activation du microphone interrompue")
+                throw cancelled
+            }
             catch (_: Exception) { fail(session, "Microphone indisponible. Vérifie les autorisations et les autres appels.") }
             finally { _preparing.value = false }
         }
@@ -197,6 +201,8 @@ class CloudflareManager(private val context: Context) {
         var permissionJob: Job? = null
         private lateinit var configuration: PeerConnection.RTCConfiguration
         private val microphoneLock = Mutex()
+        var microphonePrepared = false
+            private set
         var microphone: AudioTrack? = null
         private var source: AudioSource? = null
         private var factory: PeerConnectionFactory? = null
@@ -276,7 +282,13 @@ class CloudflareManager(private val context: Context) {
             }
             previousMode = audioManager.mode
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            audioModule = JavaAudioDeviceModule.builder(context.applicationContext).createAudioDeviceModule()
+            audioModule = JavaAudioDeviceModule.builder(context.applicationContext)
+                .setAudioRecordErrorCallback(object : JavaAudioDeviceModule.AudioRecordErrorCallback {
+                    override fun onWebRtcAudioRecordInitError(error: String) { microphoneError() }
+                    override fun onWebRtcAudioRecordStartError(code: JavaAudioDeviceModule.AudioRecordStartErrorCode, error: String) { microphoneError() }
+                    override fun onWebRtcAudioRecordError(error: String) { microphoneError() }
+                    private fun microphoneError() { launchActive { fail(this@Session, "Microphone indisponible. Vérifie les autorisations et les autres appels.") } }
+                }).createAudioDeviceModule()
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioModule).createPeerConnectionFactory()
             configuration = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
             audioModule?.setMicrophoneMute(true)
@@ -293,7 +305,8 @@ class CloudflareManager(private val context: Context) {
         }
         suspend fun prepareMicrophone() = microphoneLock.withLock {
             check(canPublish && !closed)
-            if (publisher != null) return@withLock
+            if (microphonePrepared) return@withLock
+            check(publisher == null) { "Activation du microphone interrompue" }
             publisher = factory!!.createPeerConnection(configuration, observer(false)) ?: error("WebRTC indisponible")
             publisher!!.setAudioRecording(false)
             source = factory!!.createAudioSource(MediaConstraints().apply {
@@ -309,6 +322,7 @@ class CloudflareManager(private val context: Context) {
             setDescription(publisher!!, answer.getAsJsonObject("sessionDescription"), false)
             withTimeout(15_000) { while (publisher!!.connectionState() != PeerConnection.PeerConnectionState.CONNECTED) { check(!closed); delay(50) } }
             rpc("published")
+            microphonePrepared = true
         }
         fun muteInput(muted: Boolean) { audioModule?.setMicrophoneMute(muted) }
         fun recording(enabled: Boolean) { publisher?.setAudioRecording(enabled) }
