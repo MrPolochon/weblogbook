@@ -8,13 +8,14 @@ export default function DownloadPage() {
     {
       platform: 'RadarCapture',
       icon: Radar,
-      description: 'Outil de capture radar pour ATC — Capturez les positions des avions depuis PTFS et alimentez le radar en temps réel.',
-      version: 'v1.0 — Disponible',
-      downloadUrl: '/downloads/RadarCapture.exe',
-      color: 'from-sky-500 to-cyan-600',
-      bgColor: 'bg-sky-50',
-      borderColor: 'border-sky-200',
-      available: true,
+      description: 'Outil de capture radar pour ATC. Le téléchargement est temporairement suspendu.',
+      version: 'En maintenance',
+      downloadUrl: null,
+      color: 'from-slate-600 to-slate-700',
+      bgColor: 'bg-slate-800/50',
+      borderColor: 'border-slate-700',
+      available: false,
+      maintenance: true,
     },
     {
       platform: 'Android',
@@ -23,20 +24,22 @@ export default function DownloadPage() {
       version: 'Bientôt disponible',
       downloadUrl: null,
       color: 'from-green-500 to-emerald-600',
-      bgColor: 'bg-green-50',
-      borderColor: 'border-green-200',
+      bgColor: 'bg-emerald-950/30',
+      borderColor: 'border-emerald-800',
       available: false,
+      maintenance: false,
     },
     {
       platform: 'Windows',
       icon: Monitor,
-      description: 'Application de bureau pour Windows 10/11',
-      version: 'Bientôt disponible',
-      downloadUrl: null,
+      description: 'WebLogBook et radio VHF avec push-to-talk global pour Windows 10/11',
+      version: 'v1.5.1 — Disponible',
+      downloadUrl: 'https://github.com/MrPolochon/weblogbook/releases/download/v1.5.1/VHF-Radio-Setup-1.5.1.exe',
       color: 'from-blue-500 to-indigo-600',
-      bgColor: 'bg-blue-50',
-      borderColor: 'border-blue-200',
-      available: false,
+      bgColor: 'bg-blue-950/30',
+      borderColor: 'border-blue-800',
+      available: true,
+      maintenance: false,
     },
     {
       platform: 'iOS',
@@ -45,9 +48,10 @@ export default function DownloadPage() {
       version: 'Bientôt disponible',
       downloadUrl: null,
       color: 'from-slate-600 to-slate-800',
-      bgColor: 'bg-slate-50',
-      borderColor: 'border-slate-200',
+      bgColor: 'bg-slate-800/50',
+      borderColor: 'border-slate-700',
       available: false,
+      maintenance: false,
     },
   ];
 
@@ -87,7 +91,7 @@ export default function DownloadPage() {
               return (
                 <div
                   key={app.platform}
-                  className={`relative rounded-2xl border ${app.borderColor} ${app.bgColor} p-6 transition-all hover:shadow-lg hover:scale-[1.02]`}
+                  className={`relative rounded-2xl border ${app.borderColor} ${app.bgColor} p-6 transition-all ${app.maintenance ? 'opacity-70 grayscale' : 'hover:shadow-lg hover:scale-[1.02]'}`}
                 >
                   {/* Platform icon */}
                   <div className={`inline-flex p-3 rounded-xl bg-gradient-to-br ${app.color} mb-4`}>
@@ -95,15 +99,15 @@ export default function DownloadPage() {
                   </div>
 
                   {/* Platform info */}
-                  <h2 className="text-xl font-bold text-slate-900 mb-2">{app.platform}</h2>
-                  <p className="text-slate-600 text-sm mb-4">{app.description}</p>
+                  <h2 className="text-xl font-bold text-slate-100 mb-2">{app.platform}</h2>
+                  <p className="text-slate-300 text-sm mb-4">{app.description}</p>
 
                   {/* Version badge */}
                   <div className="mb-4">
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
-                      app.available 
-                        ? 'bg-emerald-100 text-emerald-700' 
-                        : 'bg-amber-100 text-amber-700'
+                      app.maintenance ? 'bg-slate-700 text-slate-300' : app.available
+                        ? 'bg-emerald-900 text-emerald-200'
+                        : 'bg-amber-900 text-amber-200'
                     }`}>
                       {app.version}
                     </span>
@@ -125,7 +129,7 @@ export default function DownloadPage() {
                       className="w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-slate-200 text-slate-500 font-medium cursor-not-allowed"
                     >
                       <Download className="h-5 w-5" />
-                      Bientôt disponible
+                      {app.maintenance ? 'En maintenance' : 'Bientôt disponible'}
                     </button>
                   )}
                 </div>
@@ -133,6 +137,7 @@ export default function DownloadPage() {
             })}
           </div>
 
+          {apps[0].available && <>
           {/* Configuration RadarCapture */}
           <div className="mt-8 max-w-2xl mx-auto">
             <div className="rounded-xl border border-sky-300/30 bg-sky-50/5 p-5 mb-4">
@@ -205,6 +210,7 @@ export default function DownloadPage() {
             </div>
           </div>
 
+          </>}
           {/* Web app notice */}
           <div className="mt-8 text-center">
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-slate-800 border border-slate-700">
