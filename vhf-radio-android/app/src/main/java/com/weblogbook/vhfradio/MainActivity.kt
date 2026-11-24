@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
     }
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
     private val overlayPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        if (pendingOverlay && Settings.canDrawOverlays(this)) service?.showOverlay()
+        if (pendingOverlay && Settings.canDrawOverlays(this@MainActivity)) service?.showOverlay()
         else service?.message?.value = "Autorisation d'affichage nécessaire pour le PTT au-dessus de Roblox."
         pendingOverlay = false
     }
@@ -61,28 +61,28 @@ class MainActivity : ComponentActivity() {
                 val updateState by updater.state.collectAsState()
                 val powered = if (current == null) false else current.radio.powered.collectAsState().value
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
-                Box(Modifier.weight(1f)) {
-                if (current == null) CircularProgressIndicator()
-                else {
-                    val user by current.profile.collectAsState()
-                    if (user == null) LoginScreen { profile, mode, token -> current.login(profile, mode, token) }
-                    else RadioScreen(current,
-                        onMicMode = ::selectMicMode,
-                        onSwap = {
-                            current.swap()
-                            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
-                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        },
-                        onOverlay = {
-                            if (current.overlayVisible.value) current.hideOverlay()
-                            else if (Settings.canDrawOverlays(this)) current.showOverlay()
-                            else {
-                                pendingOverlay = true
-                                overlayPermission.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
-                            }
-                        })
-                }
-                }
+                    Box(Modifier.weight(1f)) {
+                    if (current == null) CircularProgressIndicator()
+                    else {
+                        val user by current.profile.collectAsState()
+                        if (user == null) LoginScreen { profile, mode, token -> current.login(profile, mode, token) }
+                        else RadioScreen(current,
+                            onMicMode = ::selectMicMode,
+                            onSwap = {
+                                current.swap()
+                                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                                    notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            },
+                            onOverlay = {
+                                if (current.overlayVisible.value) current.hideOverlay()
+                                else if (Settings.canDrawOverlays(this@MainActivity)) current.showOverlay()
+                                else {
+                                    pendingOverlay = true
+                                    overlayPermission.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                                }
+                            })
+                    }
+                    }
                 UpdatePanel(updateState, powered, { updater.check() }, { updater.download() }, ::installUpdate)
                 }
             }
@@ -110,7 +110,7 @@ class MainActivity : ComponentActivity() {
         }
     }
     private fun selectMicMode(mode: MicMode) {
-        if (mode != MicMode.MUTED && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+        if (mode != MicMode.MUTED && ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             pendingMode = mode; micPermission.launch(Manifest.permission.RECORD_AUDIO)
         } else service?.setMicMode(mode)
     }
