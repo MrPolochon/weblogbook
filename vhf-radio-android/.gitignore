@@ -12,3 +12,8 @@ local.properties
 /app/release
 *.apk
 *.aab
+*.jks
+*.keystore
+*.p12
+*.dpapi
+signing.json
