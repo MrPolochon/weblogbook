@@ -15,6 +15,7 @@ async function harness(run, canPublish=true) {
   const originals = Object.fromEntries(keys.map(key => [key,Object.getOwnPropertyDescriptor(global,key)]));
   const calls = [], pcs = [], contexts = [];
   let captures = 0, captureResolver, delayedCapture = false, muteDuringReplace;
+  let delaySubscriber = false, nextMid = 0, subscriberAnswers = 0, incompleteIce = false, relayCandidate = true;
   const mic = { enabled: true, kind:'audio', stopped:false, stop() { this.stopped=true; } };
   global.MediaStream = class { constructor(tracks) { this.tracks=tracks; } };
   global.AudioContext = class {
@@ -33,9 +34,19 @@ async function harness(run, canPublish=true) {
     send(data) {
       const request = JSON.parse(data); calls.push(request);
       let result = {};
-      if(request.action === 'hello') result={id:'local',canPublish,iceServers:[{urls:'stun:stun.cloudflare.com:3478'}],peers:[]};
+      if(request.action === 'hello') result={id:'local',canPublish,iceServers:[{urls:'stun:stun.cloudflare.com:3478'},
+        {urls:['turn:turn.cloudflare.com:3478?transport=udp','turn:turn.cloudflare.com:53?transport=udp','turns:turn.cloudflare.com:443?transport=tcp'],username:'test',credential:'test'},
+        {urls:'turn:turn.cloudflare.com:53?transport=tcp',username:'test',credential:'test'}],peers:[]};
       if(request.action === 'publish') result={sessionDescription:{type:'answer',sdp:'audio answer'}};
-      if(request.action === 'subscribe') result={sessionDescription:{type:'offer',sdp:'audio offer'},tracks:request.payload.peers.map((peerId,i)=>({peerId,mid:String(i)}))};
+      if(request.action === 'subscribe') {
+        const receiver = pcs.find(pc => pc !== pcs[0] || !canPublish);
+        if (subscriberAnswers && receiver.connectionState !== 'connected') {
+          queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({id:request.id,error:'Subscriber transport not ready'})}));
+          return;
+        }
+        result={sessionDescription:{type:'offer',sdp:'audio offer'},tracks:request.payload.peers.map(peerId=>({peerId,mid:String(nextMid++)}))};
+      }
+      if(request.action === 'answer') subscriberAnswers++;
       queueMicrotask(()=>this.onmessage?.({data:JSON.stringify({id:request.id,result})}));
     }
     peers(peers) { this.onmessage?.({data:JSON.stringify({event:'peers',peers})}); }
@@ -45,13 +56,20 @@ async function harness(run, canPublish=true) {
   global.RTCPeerConnection=class extends EventTarget {
     connectionState='new'; iceGatheringState='complete'; localDescription=null; remoteDescription=null;
     sender={track:null,replaceTrack:async track=>{ this.sender.track=track; if(muteDuringReplace) { const fn=muteDuringReplace; muteDuringReplace=null; fn(); } }};
-    constructor() { super(); if(pcs.length===1) pcs.unshift(this); else pcs.push(this); }
+    constructor(configuration) { super(); this.configuration=configuration; if(pcs.length===1) pcs.unshift(this); else pcs.push(this); }
     addTransceiver(track) { this.sender.track=track; return {sender:this.sender,mid:'0'}; }
     async createOffer() { return {type:'offer',sdp:'m=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=fmtp:111 minptime=10;useinbandfec=1\r\n'}; }
     async createAnswer() { return {type:'answer',sdp:'audio answer'}; }
     getTransceivers() { return this.transceivers || []; }
-    async setLocalDescription(sdp) { this.localDescription=sdp; }
-    async setRemoteDescription(sdp) { this.remoteDescription=sdp; this.connectionState='connected'; }
+    async setLocalDescription(sdp) {
+      this.localDescription=sdp;
+      if(incompleteIce) {
+        this.iceGatheringState='gathering';
+        this.localDescription={...sdp,sdp:sdp.sdp+'\r\na=candidate:1 1 udp 100 192.0.2.1 5000 typ host\r\n'+
+          (relayCandidate?'a=candidate:2 1 udp 90 192.0.2.2 5001 typ relay raddr 192.0.2.1 rport 5000\r\n':'')};
+      }
+    }
+    async setRemoteDescription(sdp) { this.remoteDescription=sdp; this.connectionState=sdp.type==='offer' && delaySubscriber ? 'connecting' : 'connected'; }
     close() { this.connectionState='closed'; }
   };
   Object.defineProperty(global,'navigator',{configurable:true,value:{mediaDevices:{getUserMedia:async()=>{
@@ -61,7 +79,10 @@ async function harness(run, canPublish=true) {
   const {Room,LocalAudioTrack}=client();
   const room=new Room();
   try { await run({room,LocalAudioTrack,pcs,calls,mic,contexts,captures:()=>captures,
-    delayCapture(){delayedCapture=true;},resolveCapture(){captureResolver();},onReplace(fn){muteDuringReplace=fn;}}); }
+    delayCapture(){delayedCapture=true;},resolveCapture(){captureResolver();},onReplace(fn){muteDuringReplace=fn;},
+    delaySubscriber(){delaySubscriber=true;},
+    connectSubscriber(){delaySubscriber=false;const pc=pcs[canPublish?1:0];pc.connectionState='connected';pc.dispatchEvent(new Event('connectionstatechange'));},
+    resetMids(){nextMid=0;},slowIce(relay=true){incompleteIce=true;relayCandidate=relay;}}); }
   finally { await room.disconnect(); for(const key of keys) { if(originals[key]) Object.defineProperty(global,key,originals[key]);else delete global[key]; } }
 }
 test('connect publishes silence without acquiring the microphone, and exchanges complete SDP', async () => harness(async h=>{
@@ -130,6 +151,7 @@ test('a reused receiver attaches the new peer even when the browser emits no sec
   await h.room.reconcileQueue;
   h.room.ws.peers([]);
   await h.room.reconcileQueue;
+  h.resetMids();
   h.room.ws.peers([{id:'next',name:'Next',published:true}]);
   await h.room.reconcileQueue;
   assert.deepEqual(received,['first','next']);
@@ -147,3 +169,70 @@ test('OBS joins and subscribes without publisher or hardware capture, even if cl
   await h.room.reconcileQueue;
   assert.ok(h.calls.some(c=>c.action==='subscribe'));
 },false));
+
+test('browser ICE excludes blocked TURN port 53 and preserves UDP and TLS relays',async()=>harness(async h=>{
+  await h.room.connect('wss://radio.test/connect','ticket');
+  for (const pc of h.pcs) {
+    const urls=pc.configuration.iceServers.flatMap(server=>server.urls);
+    assert.ok(!urls.some(url=>/:53(?:\?|$)/.test(url)));
+    assert.ok(urls.includes('turn:turn.cloudflare.com:3478?transport=udp'));
+    assert.ok(urls.includes('turns:turn.cloudflare.com:443?transport=tcp'));
+    assert.equal(pc.configuration.bundlePolicy,'max-bundle');
+  }
+}));
+
+test('third participant waits for the first receiving transport instead of disconnecting the radio',async()=>harness(async h=>{
+  await h.room.connect('wss://radio.test/connect','ticket');
+  h.delaySubscriber();
+  const first={id:'first',name:'First',published:true};
+  h.room.ws.peers([first]);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.ok(h.calls.some(call=>call.action==='answer'));
+  h.room.ws.peers([first,{id:'third',name:'Third',published:true}]);
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(h.calls.filter(call=>call.action==='subscribe').length,1,'No mutation before ICE/DTLS is connected');
+  h.connectSubscriber();
+  await h.room.reconcileQueue;
+  assert.equal(h.room.state,'connected');
+  assert.equal(h.room.remoteParticipants.size,2);
+  assert.equal(h.calls.filter(call=>call.action==='subscribe').length,2);
+  assert.equal(new Set(h.room.subscribed.values()).size,2);
+}));
+
+test('50 participants retain distinct subscriptions across batches and leave/rejoin',async()=>harness(async h=>{
+  await h.room.connect('wss://radio.test/connect','ticket');
+  const peers=Array.from({length:49},(_,i)=>({id:'peer-'+i,name:'Pilot '+i,published:true}));
+  h.room.ws.peers(peers);
+  await h.room.reconcileQueue;
+  assert.equal(h.room.remoteParticipants.size,49);
+  assert.equal(new Set(h.room.subscribed.values()).size,49);
+  assert.deepEqual(h.calls.filter(call=>call.action==='subscribe').map(call=>call.payload.peers.length),[32,17]);
+  h.room.ws.peers(peers.slice(1));
+  await h.room.reconcileQueue;
+  h.room.ws.peers([...peers.slice(1),{id:'replacement',name:'Replacement',published:true}]);
+  await h.room.reconcileQueue;
+  assert.equal(h.room.state,'connected');
+  assert.equal(h.room.subscribed.size,49);
+  assert.ok(!h.room.subscribed.has('peer-0'));
+  assert.ok(h.room.subscribed.has('replacement'));
+}));
+
+test('a gathered TURN relay allows setup without waiting for unused server timeouts',async()=>harness(async h=>{
+  h.slowIce();
+  const started=Date.now();
+  await h.room.connect('wss://radio.test/connect','ticket');
+  assert.ok(Date.now()-started<2000,'A usable relay must not wait for the 12-second ICE deadline');
+  assert.equal(h.pcs[0].iceGatheringState,'gathering');
+  assert.match(h.calls.find(call=>call.action==='publish').payload.sessionDescription.sdp,/typ relay/);
+  assert.equal(h.room.state,'connected');
+}));
+
+test('host-only candidates do not skip TURN gathering and cancellation does not publish',async()=>harness(async h=>{
+  h.slowIce(false);
+  const connecting=h.room.connect('wss://radio.test/connect','ticket');
+  await new Promise(resolve=>setTimeout(resolve,450));
+  assert.ok(!h.calls.some(call=>call.action==='publish'));
+  await h.room.disconnect();
+  await assert.rejects(connecting,/interrompue|déconnectée/);
+  assert.equal(h.captures(),0);
+}));

@@ -1,10 +1,12 @@
 # VHF Radio Android
 
-Version 1.2.0 beta 1, Android 8 ou plus récent. Le téléphone rejoint les mêmes fréquences Cloudflare que le site et l'application Windows.
+Version 1.2.0 beta 2, Android 8 ou plus récent. Le téléphone rejoint les mêmes fréquences Cloudflare que le site et l'application Windows.
+
+Cette version attend la connexion audio effective avant d'ajouter un autre participant et évite les délais des adresses TURN inutilisables lorsqu'un relais est déjà prêt. Si Android refuse la mise à jour de la bêta 1, désinstaller cette ancienne bêta puis installer la bêta 2 (signature de développement différente).
 
 ## Utilisation
 
-1. Installer l'APK depuis la release `android-v1.2.0-beta.1` du dépôt. Cette version de test utilise une signature Android de développement et un identifiant `.beta` séparé. Une future mise à jour pourra nécessiter sa désinstallation.
+1. Installer l'APK depuis la release `android-v1.2.0-beta.2` du dépôt. Cette version de test utilise une signature Android de développement et un identifiant `.beta` séparé. Une future mise à jour pourra nécessiter sa désinstallation.
 2. Se connecter avec les identifiants WebLogbook. En pilote sans plan actif, la radio reste en OBS. En ATC/AFIS, prendre une position sur le site.
 3. Régler la fréquence en attente, puis « Basculer et connecter ». Les molettes et la saisie ne modifient que la présélection. Les 3 040 canaux de 118.000 à 136.990 sont disponibles sans annuaire imposé.
 4. Choisir PTT et autoriser le microphone. Puis « Afficher la bulle sur Roblox » et autoriser l'affichage par-dessus les autres applications. Activer le mode PTT avant de quitter l'écran de la radio.

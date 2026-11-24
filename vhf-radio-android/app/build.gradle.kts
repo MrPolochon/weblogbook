@@ -11,8 +11,8 @@ android {
         applicationId = "com.weblogbook.vhfradio"
         minSdk = 26
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.2.0-beta.1"
+        versionCode = 4
+        versionName = "1.2.0-beta.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Config values

@@ -272,10 +272,13 @@ class CloudflareManager(private val context: Context) {
             canPublish = ticketCanPublish && hello.get("canPublish")?.asBoolean == true
             _receiveOnly.value = !canPublish
             desired = hello.getAsJsonArray("peers").map { it.asJsonObject }
-            val iceServers = hello.getAsJsonArray("iceServers").map { item ->
+            val iceServers = hello.getAsJsonArray("iceServers").mapNotNull { item ->
                 val ice = item.asJsonObject
                 val urls = ice.get("urls")
-                val builder = PeerConnection.IceServer.builder(if (urls.isJsonArray) urls.asJsonArray.map { it.asString } else listOf(urls.asString))
+                val usableUrls = (if (urls.isJsonArray) urls.asJsonArray.map { it.asString } else listOf(urls.asString))
+                    .filterNot { it.substringBefore('?').endsWith(":53") }
+                if (usableUrls.isEmpty()) return@mapNotNull null
+                val builder = PeerConnection.IceServer.builder(usableUrls)
                 ice.get("username")?.let { builder.setUsername(it.asString) }
                 ice.get("credential")?.let { builder.setPassword(it.asString) }
                 builder.createIceServer()
@@ -290,7 +293,10 @@ class CloudflareManager(private val context: Context) {
                     private fun microphoneError() { launchActive { fail(this@Session, "Microphone indisponible. Vérifie les autorisations et les autres appels.") } }
                 }).createAudioDeviceModule()
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioModule).createPeerConnectionFactory()
-            configuration = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
+            configuration = PeerConnection.RTCConfiguration(iceServers).apply {
+                sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
+                bundlePolicy = PeerConnection.BundlePolicy.MAXBUNDLE
+            }
             audioModule?.setMicrophoneMute(true)
             subscriber = factory!!.createPeerConnection(configuration, observer(true)) ?: error("WebRTC indisponible")
             reconcile()
@@ -365,6 +371,14 @@ class CloudflareManager(private val context: Context) {
                 }
                 val answer = localDescription(subscriber!!, false)
                 rpc("answer", mapOf("sessionDescription" to answer))
+                // SDP acceptance can precede ICE/DTLS readiness. Hold the lock
+                // until the receiving transport can accept another participant.
+                withTimeout(15_000) {
+                    while (subscriber!!.connectionState() != PeerConnection.PeerConnectionState.CONNECTED) {
+                        check(!closed && subscriber!!.connectionState() != PeerConnection.PeerConnectionState.FAILED)
+                        delay(50)
+                    }
+                }
             }
             if (!closed) updateLevels()
         }
@@ -410,7 +424,21 @@ class CloudflareManager(private val context: Context) {
             }
             val tuned = SessionDescription(description.type, description.description.replace(Regex("(a=fmtp:\\d+ .*minptime[^\\r\\n]*)"), "$1;usedtx=1;maxaveragebitrate=24000"))
             setDescription(pc, gson.toJsonTree(mapOf("type" to tuned.type.canonicalForm(), "sdp" to tuned.description)).asJsonObject, true)
-            withTimeout(12_000) { while (pc.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) { check(!closed); delay(50) } }
+            withTimeout(12_000) {
+                var candidates = ""
+                var changedAt = android.os.SystemClock.elapsedRealtime()
+                while (pc.iceGatheringState() != PeerConnection.IceGatheringState.COMPLETE) {
+                    check(!closed && pc.connectionState() != PeerConnection.PeerConnectionState.FAILED)
+                    val next = Regex("^a=candidate:.*$", RegexOption.MULTILINE)
+                        .findAll(pc.localDescription?.description.orEmpty()).joinToString("\n") { it.value }
+                    if (next != candidates) { candidates = next; changedAt = android.os.SystemClock.elapsedRealtime() }
+                    // A working TURN allocation is enough once candidate discovery
+                    // settles; unused alternate URLs must not delay the connection.
+                    if (Regex("\\btyp relay(?:\\s|$)").containsMatchIn(candidates) &&
+                        android.os.SystemClock.elapsedRealtime() - changedAt >= 350) break
+                    delay(50)
+                }
+            }
             return mapOf("type" to pc.localDescription.type.canonicalForm(), "sdp" to pc.localDescription.description)
         }
         private suspend fun setDescription(pc: PeerConnection, json: JsonObject, local: Boolean) = withTimeout(15_000) {

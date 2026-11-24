@@ -253,7 +253,7 @@ export function useVhfRadio(participantName: string, observer = false) {
         // Keep this attempt alive so the catch below can display that error.
         if (!joined) return;
         cleanup();
-        scheduleRetry(target, 'Radio déconnectée.');
+        scheduleRetry(target, activeRoom.connectionError || 'Radio déconnectée.');
       });
       room.on(RoomEvent.TrackSubscribed, track => {
         if (track.kind !== Track.Kind.Audio) return;
