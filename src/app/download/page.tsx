@@ -21,8 +21,8 @@ export default function DownloadPage() {
       platform: 'Android',
       icon: Smartphone,
       description: 'Radio VHF avec bulle push-to-talk au-dessus de Roblox. Android 8 et plus.',
-      version: 'v1.2.0 bêta 3',
-      downloadUrl: 'https://github.com/MrPolochon/weblogbook/releases/download/android-v1.2.0-beta.3/VHF-Radio-Android-1.2.0-beta.3.apk',
+      version: 'v1.2.0 bêta 4',
+      downloadUrl: 'https://github.com/MrPolochon/weblogbook/releases/download/android-v1.2.0-beta.4/VHF-Radio-Android-1.2.0-beta.4.apk',
       color: 'from-green-500 to-emerald-600',
       bgColor: 'bg-emerald-950/30',
       borderColor: 'border-emerald-800',
@@ -140,9 +140,10 @@ export default function DownloadPage() {
           <div className="mt-6 rounded-xl border border-emerald-800 bg-emerald-950/20 p-5 text-sm text-slate-300">
             <h3 className="font-semibold text-emerald-200 mb-2">Radio Android — version bêta</h3>
             <p>Connecte-toi avec ton compte WebLogBook, règle la fréquence en attente puis bascule-la pour te connecter. Sans plan de vol actif, tu peux écouter en OBS.</p>
-            <p className="mt-2">Pour parler depuis Roblox, active PTT dans la radio, autorise le microphone puis la bulle flottante. Utilise un autre appareil pour le cockpit Discord.</p>
+            <p className="mt-2">Pour parler depuis Roblox, active PTT dans la radio, autorise le microphone puis la bulle flottante. Fais glisser « Déplacer » ou la bulle réduite où tu veux : sa position est mémorisée. Utilise un autre appareil pour le cockpit Discord.</p>
+            <p className="mt-2">Réception amplifiée à 200 % par défaut, réglable jusqu&apos;à 300 % dans la COM BOX.</p>
             <p className="mt-2">L&apos;application recherche les nouvelles versions au lancement. Utilise « Mettre à jour », puis éteins la radio avec OFF pour installer la mise à jour et confirmer dans Android.</p>
-            <p className="mt-2 text-slate-400">Si tu utilises la bêta 1 ou 2, désinstalle-la une dernière fois avant d&apos;installer cette bêta 3 : les prochaines mises à jour conserveront la même signature. Les essais audio sur téléphone restent à valider. <a href="https://github.com/MrPolochon/weblogbook/releases/tag/android-v1.2.0-beta.3" className="text-emerald-300 underline hover:text-emerald-200">Détails de la version</a></p>
+            <p className="mt-2 text-slate-400">Depuis la bêta 3, mets à jour directement sans désinstaller. Si tu utilises encore la bêta 1 ou 2, désinstalle-la une dernière fois : les versions récentes conservent la même signature permanente. Les essais audio sur téléphone restent à valider. <a href="https://github.com/MrPolochon/weblogbook/releases/tag/android-v1.2.0-beta.4" className="text-emerald-300 underline hover:text-emerald-200">Détails de la version</a></p>
           </div>
 
           {apps[0].available && <>
