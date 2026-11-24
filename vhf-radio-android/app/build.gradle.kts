@@ -8,11 +8,11 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.weblogbook.vhfradio"
+        applicationId = "com.weblogbook.vhfradio.beta"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "1.2.0-beta.2"
+        versionCode = providers.gradleProperty("radioVersionCode").orElse("5").get().toInt()
+        versionName = providers.gradleProperty("radioVersionName").orElse("1.2.0-beta.3").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Config values
@@ -21,11 +21,23 @@ android {
         buildConfigField("String", "API_BASE_URL", "\"https://www.mixouairlinesptfsweblogbook.com\"")
     }
 
+    val distributionKey = System.getenv("ANDROID_KEYSTORE_FILE")
+    if (!distributionKey.isNullOrBlank()) {
+        signingConfigs {
+            create("distribution") {
+                storeFile = file(distributionKey)
+                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         debug {
-            applicationIdSuffix = ".beta"
+            applicationIdSuffix = ".dev"
         }
         release {
+            if (!distributionKey.isNullOrBlank()) signingConfig = signingConfigs.getByName("distribution")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -60,6 +72,7 @@ dependencies {
     // Core Android
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
 
     // Compose
