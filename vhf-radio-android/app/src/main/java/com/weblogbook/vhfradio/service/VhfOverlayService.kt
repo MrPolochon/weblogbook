@@ -5,6 +5,7 @@ import android.app.*
 import android.content.*
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
+import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
@@ -51,6 +52,9 @@ class VhfOverlayService : Service() {
     private var microphoneForeground = false
     private var bubble: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
+    private val preferences by lazy { RadioPreferences(this) }
+    private var landscape = false
+    private var overlayPosition = OverlayPosition()
     private val windows by lazy { getSystemService(WINDOW_SERVICE) as WindowManager }
     private val audio by lazy { getSystemService(AUDIO_SERVICE) as AudioManager }
     private var selectedOutput: Int? = null
@@ -72,6 +76,8 @@ class VhfOverlayService : Service() {
     }
     override fun onCreate() {
         super.onCreate()
+        landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        overlayPosition = preferences.position(landscape)
         radio = CloudflareManager(applicationContext)
         audio.registerAudioDeviceCallback(audioDevices, Handler(Looper.getMainLooper()))
         getSystemService(NotificationManager::class.java).createNotificationChannel(
@@ -216,12 +222,17 @@ class VhfOverlayService : Service() {
             val params = WindowManager.LayoutParams(WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL, PixelFormat.TRANSLUCENT)
-            params.gravity = Gravity.TOP or Gravity.START; params.x = 12; params.y = 160
+            // Absolute coordinates in the display, with explicit safe bounds below.
+            params.gravity = Gravity.TOP or Gravity.LEFT
+            params.flags = params.flags or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+            if (Build.VERSION.SDK_INT >= 30) params.setFitInsetsTypes(0)
+            overlayPosition = preferences.position(landscape)
             bubble = view; bubbleParams = params
             view.findViewById<View>(R.id.btn_ptt).setOnTouchListener { button, event ->
                 when (event.actionMasked) {
                     MotionEvent.ACTION_DOWN -> { radio.press("overlay"); true }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> { radio.release("overlay"); button.performClick(); true }
+                    MotionEvent.ACTION_UP -> { radio.release("overlay"); button.performClick(); true }
+                    MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_POINTER_DOWN, MotionEvent.ACTION_POINTER_UP -> { radio.release("overlay"); true }
                     else -> true
                 }
             }
@@ -236,24 +247,65 @@ class VhfOverlayService : Service() {
                 view.findViewById<View>(R.id.bubble_expanded).visibility = View.VISIBLE
                 view.findViewById<View>(R.id.bubble_collapsed).visibility = View.GONE
             }
-            var x = 0; var y = 0; var touchX = 0f; var touchY = 0f
-            view.findViewById<View>(R.id.tv_frequency).setOnTouchListener { _, event ->
-                when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN -> { x = params.x; y = params.y; touchX = event.rawX; touchY = event.rawY; radio.release("overlay") }
-                    MotionEvent.ACTION_MOVE -> {
-                        val metrics = resources.displayMetrics
-                        params.x = (x + event.rawX.toInt() - touchX.toInt()).coerceIn(0, (metrics.widthPixels - view.width).coerceAtLeast(0))
-                        params.y = (y + event.rawY.toInt() - touchY.toInt()).coerceIn(0, (metrics.heightPixels - view.height).coerceAtLeast(0))
-                        windows.updateViewLayout(view, params)
-                    }
-                }
-                true
+            for (handle in listOf(R.id.drag_handle, R.id.bubble_collapsed)) {
+                view.findViewById<View>(handle).setOnTouchListener(OverlayDragTouchListener(
+                    ViewConfiguration.get(this).scaledTouchSlop,
+                    { params.x to params.y }, { radio.release("overlay") },
+                    { x, y ->
+                        overlayPosition = OverlayPosition.fromPixels(x, y, overlayBounds(view), overlayPosition)
+                        positionOverlay()
+                    }, { preferences.savePosition(landscape, overlayPosition) }
+                ))
             }
+            // Expansion, text size changes and rotation must keep the full controls on screen.
+            view.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> positionOverlay() }
+            view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
+            val initial = overlayPosition.pixels(overlayBounds(view))
+            params.x = initial.first; params.y = initial.second
             windows.addView(view, params)
             overlayVisible.value = true; renderBubble()
         } catch (_: Exception) {
             hideOverlay(); message.value = "Bulle indisponible : vérifie l'autorisation d'affichage."
         }
+    }
+    fun placeOverlayOnSide(right: Boolean) {
+        radio.release("overlay")
+        overlayPosition = preferences.position(landscape).copy(horizontal = if (right) 1f else 0f)
+        preferences.savePosition(landscape, overlayPosition)
+        positionOverlay()
+    }
+    private fun overlayBounds(view: View): OverlayBounds {
+        val margin = (8 * resources.displayMetrics.density).toInt()
+        if (Build.VERSION.SDK_INT >= 30) {
+            val metrics = windows.currentWindowMetrics
+            val insets = metrics.windowInsets.getInsetsIgnoringVisibility(WindowInsets.Type.systemBars() or WindowInsets.Type.displayCutout())
+            return OverlayBounds.available(metrics.bounds.width(), metrics.bounds.height(), view.measuredWidth, view.measuredHeight,
+                insets.left, insets.top, insets.right, insets.bottom, margin)
+        }
+        @Suppress("DEPRECATION")
+        val metrics = android.util.DisplayMetrics().also { windows.defaultDisplay.getRealMetrics(it) }
+        // On older Android the visible frame also excludes navigation and status bars.
+        val frame = android.graphics.Rect().also { view.getWindowVisibleDisplayFrame(it) }
+        return OverlayBounds.available(metrics.widthPixels, metrics.heightPixels, view.measuredWidth, view.measuredHeight,
+            frame.left.coerceAtLeast(0), frame.top.coerceAtLeast(0),
+            (metrics.widthPixels - frame.right).coerceIn(0, metrics.widthPixels / 2),
+            (metrics.heightPixels - frame.bottom).coerceIn(0, metrics.heightPixels / 2), margin)
+    }
+    private fun positionOverlay() {
+        val view = bubble ?: return
+        val params = bubbleParams ?: return
+        if (!view.isAttachedToWindow) return
+        val next = overlayPosition.pixels(overlayBounds(view))
+        if (params.x == next.first && params.y == next.second) return
+        params.x = next.first; params.y = next.second
+        runCatching { windows.updateViewLayout(view, params) }
+    }
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        radio.release("overlay")
+        landscape = newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE
+        overlayPosition = preferences.position(landscape)
+        bubble?.post { positionOverlay() }
     }
     fun hideOverlay() {
         radio.release("overlay")

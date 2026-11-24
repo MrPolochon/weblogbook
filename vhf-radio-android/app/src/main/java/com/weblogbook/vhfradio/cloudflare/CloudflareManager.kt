@@ -6,6 +6,8 @@ import android.media.AudioFormat
 import android.media.AudioTrack as AndroidAudioTrack
 import kotlin.random.Random
 import com.weblogbook.vhfradio.data.RadioControls
+import com.weblogbook.vhfradio.data.RadioPreferences
+import com.weblogbook.vhfradio.data.RadioVolume
 import com.weblogbook.vhfradio.data.RadioControls.MicMode
 import com.weblogbook.vhfradio.data.radioRetryDelay
 import android.media.AudioManager
@@ -66,7 +68,8 @@ class CloudflareManager(private val context: Context) {
     val micMode: StateFlow<MicMode> = _micMode
     private val _preparing = MutableStateFlow(false)
     val preparing: StateFlow<Boolean> = _preparing
-    private val _volume = MutableStateFlow(0.8f)
+    private val preferences = RadioPreferences(context)
+    private val _volume = MutableStateFlow(preferences.volume())
     val volume: StateFlow<Float> = _volume
     private val _effects = MutableStateFlow(true)
     val effects: StateFlow<Boolean> = _effects
@@ -177,9 +180,10 @@ class CloudflareManager(private val context: Context) {
         updateSquelch()
     }
     fun setVolume(value: Float) {
-        _volume.value = value.coerceIn(0f, 1f)
+        _volume.value = RadioVolume.clamp(value)
+        preferences.saveVolume(_volume.value)
         current?.setVolume(_volume.value)
-        collisionAndroidAudioTrack?.setVolume(_volume.value)
+        collisionAndroidAudioTrack?.setVolume(RadioVolume.effectLevel(_volume.value))
     }
     fun setEffects(enabled: Boolean) { _effects.value = enabled; updateSquelch() }
     private fun updateSquelch() {
@@ -530,7 +534,7 @@ class CloudflareManager(private val context: Context) {
 
             audioTrack.write(samples, 0, samples.size)
             audioTrack.setLoopPoints(0, numSamples, -1) // Loop indefinitely
-            audioTrack.setVolume(_volume.value)
+            audioTrack.setVolume(RadioVolume.effectLevel(_volume.value))
             audioTrack.play()
 
             collisionAndroidAudioTrack = audioTrack

@@ -1,21 +1,23 @@
 # VHF Radio Android
 
-Version 1.2.0 beta 3, Android 8 ou plus récent. Le téléphone rejoint les mêmes fréquences Cloudflare que le site et l'application Windows.
+Version 1.2.0 beta 4, Android 8 ou plus récent. Le téléphone rejoint les mêmes fréquences Cloudflare que le site et l'application Windows.
 
-Cette version conserve les corrections de connexion radio de la bêta 2 et ajoute la recherche automatique de mises à jour. Le passage depuis les bêtas 1 ou 2 demande une dernière désinstallation, car leur signature de développement est remplacée par une signature permanente de distribution.
+Cette version ajoute le placement libre et mémorisé de la bulle PTT et une amplification réglable de la réception. Elle se met à jour directement depuis la bêta 3 avec la même signature permanente. Seules les anciennes bêtas 1 et 2 demandent une dernière désinstallation.
 
 ## Utilisation
 
-1. Installer l'APK signé depuis la release `android-v1.2.0-beta.3` du dépôt. Les prochaines versions apparaîtront dans l'application : « Mettre à jour », puis « Installer la mise à jour ». Éteindre la radio avec OFF avant l'installation. Android peut demander l'autorisation d'installer depuis VHF Radio, puis une confirmation. La recherche et le téléchargement ne coupent pas la radio.
+1. Depuis la bêta 3, utiliser « Mettre à jour », puis « Installer la mise à jour ». Pour une première installation, prendre l'APK signé de la release `android-v1.2.0-beta.4`. Éteindre la radio avec OFF avant l'installation. Android peut demander l'autorisation d'installer depuis VHF Radio, puis une confirmation. La recherche et le téléchargement ne coupent pas la radio.
 2. Se connecter avec les identifiants WebLogbook. En pilote sans plan actif, la radio reste en OBS. En ATC/AFIS, prendre une position sur le site.
 3. Régler la fréquence en attente, puis « Basculer et connecter ». Les molettes et la saisie ne modifient que la présélection. Les 3 040 canaux de 118.000 à 136.990 sont disponibles sans annuaire imposé.
 4. Choisir PTT et autoriser le microphone. Puis « Afficher la bulle sur Roblox » et autoriser l'affichage par-dessus les autres applications. Activer le mode PTT avant de quitter l'écran de la radio.
-5. Ouvrir Roblox. Maintenir le bouton de la bulle pour émettre ; relâcher pour couper. Déplacer la bulle par sa fréquence. « Réduire » la replie. « Couper le micro » est disponible dans la bulle et la notification.
+5. Ouvrir Roblox. Maintenir le bouton de la bulle pour émettre ; relâcher pour couper. Faire glisser la poignée « Déplacer » ou la bulle réduite pour choisir librement son emplacement. Les boutons « PTT à gauche / à droite » proposent un placement rapide. Les positions portrait et paysage sont mémorisées séparément sur le téléphone, y compris après une mise à jour. « Réduire » replie la bulle. « Couper le micro » est disponible dans la bulle et la notification.
 6. OFF coupe la radio et arrête les tentatives de reconnexion. Une perte réseau coupe toujours le micro ; il faut réactiver PTT ou micro ouvert après reconnexion. Verrouiller l'écran coupe aussi le micro. Fermer l'application depuis les applications récentes arrête la radio.
 
 Le mode micro ouvert transmet toutes les paroles, même en arrière-plan. Utiliser un casque. Discord cockpit doit de préférence fonctionner sur un autre appareil : les systèmes mobiles limitent le partage du microphone entre deux applications d'appel. Cette application ne modifie pas Discord et ne promet pas de contourner ces restrictions.
 
 Sur Android 12 et plus, « Choisir la sortie audio » permet de sélectionner le haut-parleur, l'écouteur ou un casque reconnu par Android. Un changement de sortie ou le retrait du casque coupe le micro : réactiver PTT ensuite.
+
+Le volume de réception est réglé à 200 % par défaut et peut aller de 0 à 300 %. Au-dessus de 100 %, le gain WebRTC amplifie les voix ; réduire le réglage si une source forte sature. Le grésillement conserve un gain maximal de 100 %. Ce réglage est mémorisé et appliqué aussi aux nouveaux participants et aux reconnexions. Il ne modifie ni le microphone émis, ni le volume global des autres applications. Sur l'écran radio, les touches du téléphone règlent le volume de communication.
 
 ## Cycle de vie et confidentialité
 

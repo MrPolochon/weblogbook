@@ -20,6 +20,7 @@ import com.weblogbook.vhfradio.BuildConfig
 import com.weblogbook.vhfradio.cloudflare.CloudflareManager.ConnectionStatus
 import com.weblogbook.vhfradio.data.RadioControls.MicMode
 import com.weblogbook.vhfradio.data.VhfFrequencies
+import com.weblogbook.vhfradio.data.RadioVolume
 import com.weblogbook.vhfradio.service.VhfOverlayService
 
 @Composable
@@ -109,9 +110,14 @@ fun RadioScreen(service: VhfOverlayService, onMicMode: (MicMode) -> Unit, onSwap
             }
             if (mode == MicMode.OPEN) Text("Micro ouvert : toutes tes paroles sont envoyées à la fréquence.", color = Color(0xfffca5a5))
             OutlinedButton(onClick = onOverlay, enabled = powered, modifier = Modifier.fillMaxWidth()) { Text(if (overlay) "Masquer la bulle PTT" else "Afficher la bulle sur Roblox") }
-            Text("Pour parler depuis la bulle, active d'abord PTT ici. Déplace la bulle en faisant glisser sa fréquence.", color = Color(0xff94a3b8), fontSize = 12.sp)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { service.placeOverlayOnSide(false) }, modifier = Modifier.weight(1f)) { Text("PTT à gauche") }
+                OutlinedButton(onClick = { service.placeOverlayOnSide(true) }, modifier = Modifier.weight(1f)) { Text("PTT à droite") }
+            }
+            Text("Active PTT ici pour parler depuis la bulle. Fais glisser « Déplacer » ou la bulle réduite où tu veux : la position est mémorisée en portrait et en paysage.", color = Color(0xff94a3b8), fontSize = 12.sp)
             Text("Volume radio : " + (volume * 100).toInt() + " %", color = Color.White)
-            Slider(value = volume, onValueChange = radio::setVolume)
+            Slider(value = volume, onValueChange = radio::setVolume, valueRange = 0f..RadioVolume.MAX)
+            Text("Voix amplifiées au-dessus de 100 %. Ajuste le volume si elles saturent. Les boutons de volume du téléphone règlent aussi le niveau de sortie.", color = Color(0xff94a3b8), fontSize = 12.sp)
             if (android.os.Build.VERSION.SDK_INT >= 31) Box {
                 OutlinedButton(onClick = { outputs = service.audioOutputs(); outputMenu = true }, enabled = powered) { Text("Choisir la sortie audio") }
                 DropdownMenu(expanded = outputMenu, onDismissRequest = { outputMenu = false }) {
