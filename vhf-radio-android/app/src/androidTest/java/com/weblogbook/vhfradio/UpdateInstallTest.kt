@@ -48,6 +48,9 @@ class UpdateInstallTest {
             radioPreferences.savePosition(true, OverlayPosition(0.2f, 0.4f))
             assertEquals(OverlayPosition(0.8f, 0.6f), radioPreferences.position(false))
             radioPreferences.saveVolume(2.5f)
+            // The instrumentation runner exits the process without Activity.onStop.
+            // Wait for the normal asynchronous preference writes before that exit.
+            assertTrue(context.getSharedPreferences("radio-preferences", Context.MODE_PRIVATE).edit().commit())
         }
     }
 }
