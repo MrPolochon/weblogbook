@@ -42,8 +42,11 @@ class UpdateInstallTest {
             assertEquals(2.5f, radioPreferences.volume(), 0f)
         } else {
             assertTrue(preferences.edit().putString("marker", "keep-me").commit())
+            assertTrue(context.getSharedPreferences("radio-preferences", Context.MODE_PRIVATE).edit().clear().commit())
             radioPreferences.savePosition(false, OverlayPosition(0.8f, 0.6f))
+            assertEquals(OverlayPosition(0.8f, 0.6f), radioPreferences.position(true))
             radioPreferences.savePosition(true, OverlayPosition(0.2f, 0.4f))
+            assertEquals(OverlayPosition(0.8f, 0.6f), radioPreferences.position(false))
             radioPreferences.saveVolume(2.5f)
         }
     }

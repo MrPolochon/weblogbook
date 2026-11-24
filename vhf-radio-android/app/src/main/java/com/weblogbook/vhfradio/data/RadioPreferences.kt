@@ -8,7 +8,11 @@ class RadioPreferences(context: Context) {
 
     fun position(landscape: Boolean): OverlayPosition {
         val key = if (landscape) "landscape" else "portrait"
-        return OverlayPosition(preferences.getFloat("$key-x", 0f), preferences.getFloat("$key-y", 0.3f))
+        val other = if (landscape) "portrait" else "landscape"
+        // A first switch to Roblox in landscape keeps the side just chosen in the app.
+        // Once each orientation has been positioned, its own settings take precedence.
+        return OverlayPosition(preferences.getFloat("$key-x", preferences.getFloat("$other-x", 0f)),
+            preferences.getFloat("$key-y", preferences.getFloat("$other-y", 0.3f)))
     }
     fun savePosition(landscape: Boolean, position: OverlayPosition) {
         val key = if (landscape) "landscape" else "portrait"
