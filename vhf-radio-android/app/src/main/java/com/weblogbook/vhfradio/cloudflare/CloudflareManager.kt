@@ -4,7 +4,10 @@ import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack as AndroidAudioTrack
-import kotlin.math.sin
+import kotlin.random.Random
+import com.weblogbook.vhfradio.data.RadioControls
+import com.weblogbook.vhfradio.data.RadioControls.MicMode
+import com.weblogbook.vhfradio.data.radioRetryDelay
 import android.media.AudioManager
 import com.google.gson.Gson
 import com.google.gson.JsonObject
@@ -54,59 +57,146 @@ class CloudflareManager(private val context: Context) {
         PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context.applicationContext).createInitializationOptions())
     }
 
-    suspend fun connectToFrequency(freq: String, participantName: String, accessToken: String) {
+    private val controls = RadioControls()
+    private val _powered = MutableStateFlow(false)
+    val powered: StateFlow<Boolean> = _powered
+    private val _receiveOnly = MutableStateFlow(true)
+    val receiveOnly: StateFlow<Boolean> = _receiveOnly
+    private val _micMode = MutableStateFlow(MicMode.MUTED)
+    val micMode: StateFlow<MicMode> = _micMode
+    private val _preparing = MutableStateFlow(false)
+    val preparing: StateFlow<Boolean> = _preparing
+    private val _volume = MutableStateFlow(0.8f)
+    val volume: StateFlow<Float> = _volume
+    private val _effects = MutableStateFlow(true)
+    val effects: StateFlow<Boolean> = _effects
+    private var micJob: Job? = null
+    private var receiveTail = 0L
+    private var lastEffect = false
+
+    fun connectToFrequency(freq: String, participantName: String, accessToken: String) {
         if (!VhfFrequencies.isValid(freq)) return
         disconnect()
+        _powered.value = true
         _currentFrequency.value = freq
-        _connectionState.value = ConnectionStatus.CONNECTING
-        _connectionError.value = null
-        val session = Session()
-        current = session
         connectionJob = scope.launch {
-            try {
-                val ticket = ApiClient.getCloudflareToken(VhfFrequencies.frequencyToRoomName(freq), participantName, accessToken).getOrThrow()
-                ensureActive()
-                require(!ticket.url.isNullOrBlank() && !ticket.token.isNullOrBlank()) { "Réponse radio invalide" }
-                session.connect(ticket.url!!, ticket.token!!)
-                ensureActive()
-                if (current === session) _connectionState.value = ConnectionStatus.CONNECTED
-            } catch (_: CancellationException) { /* retune or disconnect */ }
-            catch (e: Exception) { fail(session, e.message ?: "Connexion Cloudflare impossible") }
+            var attempt = 0
+            while (isActive && _powered.value) {
+                val session = Session()
+                current = session
+                _connectionState.value = ConnectionStatus.CONNECTING
+                try {
+                    val ticket = ApiClient.getCloudflareToken(VhfFrequencies.frequencyToRoomName(freq), participantName, accessToken).getOrThrow()
+                    ensureActive()
+                    require(!ticket.url.isNullOrBlank() && !ticket.token.isNullOrBlank()) { "Réponse radio invalide" }
+                    session.connect(ticket.url!!, ticket.token!!, ticket.canPublish == true)
+                    ensureActive()
+                    _connectionState.value = ConnectionStatus.CONNECTED
+                    _connectionError.value = null
+                    attempt = 0
+                    session.permissionJob = scope.launch {
+                        while (isActive) {
+                            delay(30_000)
+                            val permission = ApiClient.getCloudflareToken(VhfFrequencies.frequencyToRoomName(freq), participantName, accessToken)
+                            if (permission.isFailure || permission.getOrNull()?.canPublish != session.canPublish) {
+                                fail(session, "Actualisation des droits radio")
+                                break
+                            }
+                        }
+                    }
+                    throw session.lost.await()
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) {
+                    if (current !== session) break
+                    mute()
+                    _receiveOnly.value = true
+                    _participants.value = emptyList()
+                    _collision.value = false
+                    _connectionState.value = ConnectionStatus.ERROR
+                    val wait = radioRetryDelay(attempt++)
+                    _connectionError.value = (error.message ?: "Connexion interrompue") + " · nouvelle tentative dans " + (wait / 1000) + " s."
+                    session.close()
+                    delay(wait)
+                } finally {
+                    session.close()
+                    if (current === session) current = null
+                }
+            }
         }
-        connectionJob?.join()
     }
 
     fun disconnect() {
-        connectionJob?.cancel()
-        connectionJob = null
-        val old = current
-        current = null
-        old?.close()
-        stopCollisionSound()
+        _powered.value = false
+        connectionJob?.cancel(); connectionJob = null
+        mute()
+        val old = current; current = null; old?.close()
         _connectionState.value = ConnectionStatus.DISCONNECTED
         _connectionError.value = null
-        _isTransmitting.value = false
+        _receiveOnly.value = true
         _participants.value = emptyList()
         _collision.value = false
     }
-    fun destroy() { disconnect(); scope.cancel(); http.dispatcher.executorService.shutdown() }
-    suspend fun startTransmit() {
-        if (_connectionState.value != ConnectionStatus.CONNECTED) return
-        current?.microphone?.setEnabled(true)
-        _isTransmitting.value = current?.microphone != null
+    fun destroy() { disconnect(); scope.cancel(); http.dispatcher.executorService.shutdown(); http.connectionPool.evictAll() }
+    fun mute() {
+        micJob?.cancel(); micJob = null
+        controls.reset(); _micMode.value = MicMode.MUTED; _preparing.value = false
+        applyTransmit()
+        current?.recording(false)
+        stopCollisionSound(); lastEffect = false
     }
-    suspend fun stopTransmit() {
-        current?.microphone?.setEnabled(false)
-        _isTransmitting.value = false
+    fun setMicMode(mode: MicMode) {
+        mute()
+        if (mode == MicMode.MUTED || _receiveOnly.value || _connectionState.value != ConnectionStatus.CONNECTED) return
+        val session = current ?: return
+        _preparing.value = true
+        micJob = scope.launch {
+            try {
+                session.prepareMicrophone()
+                ensureActive()
+                if (current !== session) return@launch
+                session.recording(true)
+                controls.arm(true, session.canPublish, session.microphone != null, mode)
+                _micMode.value = controls.mode
+                applyTransmit()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { fail(session, "Microphone indisponible. Vérifie les autorisations et les autres appels.") }
+            finally { _preparing.value = false }
+        }
+    }
+    fun press(source: String) { controls.press(source); applyTransmit() }
+    fun release(source: String) { controls.release(source); applyTransmit() }
+    private fun applyTransmit() {
+        val transmit = controls.transmitting && current?.canPublish == true && _connectionState.value == ConnectionStatus.CONNECTED
+        current?.microphone?.setEnabled(transmit)
+        current?.muteInput(!transmit)
+        _isTransmitting.value = transmit
+        updateSquelch()
+    }
+    fun setVolume(value: Float) {
+        _volume.value = value.coerceIn(0f, 1f)
+        current?.setVolume(_volume.value)
+        collisionAndroidAudioTrack?.setVolume(_volume.value)
+    }
+    fun setEffects(enabled: Boolean) { _effects.value = enabled; updateSquelch() }
+    private fun updateSquelch() {
+        if (_participants.value.any { it.isSpeaking }) receiveTail = android.os.SystemClock.elapsedRealtime() + 400
+        val active = _effects.value && (_isTransmitting.value || android.os.SystemClock.elapsedRealtime() < receiveTail)
+        if (active == lastEffect) return
+        lastEffect = active
+        if (active) playCollisionSound() else stopCollisionSound()
     }
     private fun fail(session: Session, message: String) {
         if (current !== session) return
-        disconnect()
-        _connectionState.value = ConnectionStatus.ERROR
-        _connectionError.value = "$message — reconnectez la radio."
+        mute()
+        session.lost.complete(Exception(message))
     }
 
     private inner class Session {
+        var canPublish = false
+        val lost = CompletableDeferred<Exception>()
+        var permissionJob: Job? = null
+        private lateinit var configuration: PeerConnection.RTCConfiguration
+        private val microphoneLock = Mutex()
         var microphone: AudioTrack? = null
         private var source: AudioSource? = null
         private var factory: PeerConnectionFactory? = null
@@ -137,7 +227,7 @@ class CloudflareManager(private val context: Context) {
             jobs.removeAll { it.isCompleted }
             jobs.add(job)
         }
-        suspend fun connect(url: String, token: String) {
+        suspend fun connect(url: String, token: String, ticketCanPublish: Boolean) {
             require(url.startsWith("wss://")) { "URL radio non sécurisée" }
             val request = Request.Builder().url(url)
                 .header("Sec-WebSocket-Protocol", "weblogbook-radio-v1, ticket.$token").build()
@@ -173,6 +263,8 @@ class CloudflareManager(private val context: Context) {
             })
             withTimeout(15_000) { opened.await() }
             val hello = rpc("hello")
+            canPublish = ticketCanPublish && hello.get("canPublish")?.asBoolean == true
+            _receiveOnly.value = !canPublish
             desired = hello.getAsJsonArray("peers").map { it.asJsonObject }
             val iceServers = hello.getAsJsonArray("iceServers").map { item ->
                 val ice = item.asJsonObject
@@ -186,9 +278,24 @@ class CloudflareManager(private val context: Context) {
             audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             audioModule = JavaAudioDeviceModule.builder(context.applicationContext).createAudioDeviceModule()
             factory = PeerConnectionFactory.builder().setAudioDeviceModule(audioModule).createPeerConnectionFactory()
-            fun configuration() = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
-            publisher = factory!!.createPeerConnection(configuration(), observer(false)) ?: error("WebRTC indisponible")
-            subscriber = factory!!.createPeerConnection(configuration(), observer(true)) ?: error("WebRTC indisponible")
+            configuration = PeerConnection.RTCConfiguration(iceServers).apply { sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN }
+            audioModule?.setMicrophoneMute(true)
+            subscriber = factory!!.createPeerConnection(configuration, observer(true)) ?: error("WebRTC indisponible")
+            reconcile()
+            heartbeat = scope.launch {
+                try { while (isActive && !closed) { delay(25_000); rpc("ping") } }
+                catch (_: CancellationException) { }
+                catch (_: Exception) { fail(this@Session, "Signal radio perdu") }
+            }
+            meterJob = scope.launch {
+                while (isActive && !closed) { delay(300); updateLevels() }
+            }
+        }
+        suspend fun prepareMicrophone() = microphoneLock.withLock {
+            check(canPublish && !closed)
+            if (publisher != null) return@withLock
+            publisher = factory!!.createPeerConnection(configuration, observer(false)) ?: error("WebRTC indisponible")
+            publisher!!.setAudioRecording(false)
             source = factory!!.createAudioSource(MediaConstraints().apply {
                 optional.add(MediaConstraints.KeyValuePair("googEchoCancellation", "true"))
                 optional.add(MediaConstraints.KeyValuePair("googNoiseSuppression", "true"))
@@ -202,16 +309,10 @@ class CloudflareManager(private val context: Context) {
             setDescription(publisher!!, answer.getAsJsonObject("sessionDescription"), false)
             withTimeout(15_000) { while (publisher!!.connectionState() != PeerConnection.PeerConnectionState.CONNECTED) { check(!closed); delay(50) } }
             rpc("published")
-            reconcile()
-            heartbeat = scope.launch {
-                try { while (isActive && !closed) { delay(25_000); rpc("ping") } }
-                catch (_: CancellationException) { }
-                catch (_: Exception) { fail(this@Session, "Signal radio perdu") }
-            }
-            meterJob = scope.launch {
-                while (isActive && !closed) { delay(300); updateLevels() }
-            }
         }
+        fun muteInput(muted: Boolean) { audioModule?.setMicrophoneMute(muted) }
+        fun recording(enabled: Boolean) { publisher?.setAudioRecording(enabled) }
+        fun setVolume(volume: Float) { remoteTracks.values.forEach { it.setVolume(volume.toDouble()) } }
         private suspend fun rpc(action: String, payload: Any = emptyMap<String, String>()): JsonObject {
             check(!closed) { "Radio déconnectée" }
             val id = sequence.incrementAndGet()
@@ -245,6 +346,7 @@ class CloudflareManager(private val context: Context) {
                     if (id != null) (transceiver.receiver.track() as? AudioTrack)?.let { track ->
                         remoteTracks[id] = track
                         track.setEnabled(true)
+                        track.setVolume(_volume.value.toDouble())
                     }
                 }
                 val answer = localDescription(subscriber!!, false)
@@ -271,13 +373,13 @@ class CloudflareManager(private val context: Context) {
                     (transceiver.receiver.track() as? AudioTrack)?.let { track ->
                         remoteTracks[id] = track
                         track.setEnabled(true)
+                        track.setVolume(_volume.value.toDouble())
                     }
                 }
             }
             override fun onConnectionChange(state: PeerConnection.PeerConnectionState) {
                 if (state == PeerConnection.PeerConnectionState.DISCONNECTED || state == PeerConnection.PeerConnectionState.FAILED) {
                     // Never restore a held PTT across a network interruption.
-                    microphone?.setEnabled(false)
                     launchActive { fail(this@Session, "Connexion audio interrompue") }
                 }
             }
@@ -320,10 +422,11 @@ class CloudflareManager(private val context: Context) {
                         ParticipantInfo(id, p.get("name").asString, (levels[subscriptions[id]] ?: 0.0) > 0.01)
                     }
                     _participants.value = list
+                    updateSquelch()
                     val collision = list.count { it.isSpeaking } + (if (isPttActive) 1 else 0) >= 2
                     if (collision != _collision.value) {
                         _collision.value = collision
-                        if (collision) playCollisionSound() else stopCollisionSound()
+                        // Collision is indicated visually; squelch stays a quiet local effect.
                     }
                 }
             }
@@ -332,15 +435,16 @@ class CloudflareManager(private val context: Context) {
             if (closed) return
             closed = true
             microphone?.setEnabled(false)
-            heartbeat?.cancel(); meterJob?.cancel(); jobs.toList().forEach { it.cancel() }
+            permissionJob?.cancel(); heartbeat?.cancel(); meterJob?.cancel(); jobs.toList().forEach { it.cancel() }
             socket?.close(1000, "Radio off")
+            socket?.cancel()
             pending.values.forEach { it.completeExceptionally(CancellationException("Radio off")) }
             pending.clear()
             publisher?.close(); subscriber?.close()
             publisher?.dispose(); subscriber?.dispose()
             microphone?.dispose(); source?.dispose(); factory?.dispose(); audioModule?.release()
             microphone = null
-            previousMode?.let { audioManager.mode = it }
+            previousMode?.let { if (audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) audioManager.mode = it }
         }
     }
     private fun playCollisionSound() {
@@ -348,14 +452,13 @@ class CloudflareManager(private val context: Context) {
 
         try {
             val sampleRate = 44100
-            val frequency = 1200.0
-            val amplitude = 0.15
+            val amplitude = 0.025
 
             // Generate 1 second of tone
             val numSamples = sampleRate
             val samples = ShortArray(numSamples)
             for (i in 0 until numSamples) {
-                val sample = amplitude * sin(2.0 * Math.PI * frequency * i / sampleRate)
+                val sample = amplitude * (Random.nextDouble() * 2 - 1)
                 samples[i] = (sample * Short.MAX_VALUE).toInt().toShort()
             }
 
@@ -368,7 +471,7 @@ class CloudflareManager(private val context: Context) {
             val audioTrack = AndroidAudioTrack.Builder()
                 .setAudioAttributes(
                     AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
                         .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                         .build()
                 )
@@ -385,6 +488,7 @@ class CloudflareManager(private val context: Context) {
 
             audioTrack.write(samples, 0, samples.size)
             audioTrack.setLoopPoints(0, numSamples, -1) // Loop indefinitely
+            audioTrack.setVolume(_volume.value)
             audioTrack.play()
 
             collisionAndroidAudioTrack = audioTrack

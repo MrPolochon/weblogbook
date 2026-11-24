@@ -1,164 +1,83 @@
 package com.weblogbook.vhfradio
 
 import android.Manifest
-import android.content.Intent
+import android.content.*
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
-import android.os.Bundle
+import android.os.*
 import android.provider.Settings
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import com.weblogbook.vhfradio.cloudflare.CloudflareManager
+import com.weblogbook.vhfradio.data.RadioControls.MicMode
 import com.weblogbook.vhfradio.service.VhfOverlayService
-import com.weblogbook.vhfradio.ui.LoginScreen
-import com.weblogbook.vhfradio.ui.RadioMode
-import com.weblogbook.vhfradio.ui.RadioScreen
-import com.weblogbook.vhfradio.ui.UserProfile
+import com.weblogbook.vhfradio.ui.*
 import com.weblogbook.vhfradio.ui.theme.VHFRadioTheme
 
 class MainActivity : ComponentActivity() {
-
-    private var cloudflareManager: CloudflareManager? = null
-
-    // Permission launchers
-    private val requestMicPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (!granted) {
-            Toast.makeText(this, "Le microphone est requis pour la radio VHF", Toast.LENGTH_LONG).show()
-        }
+    private var service by mutableStateOf<VhfOverlayService?>(null)
+    private var bound = false
+    private var pendingMode: MicMode? = null
+    private var pendingOverlay = false
+    private val micPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val requested = pendingMode; pendingMode = null
+        if (granted && requested != null) service?.setMicMode(requested)
+        else service?.message?.value = "Microphone refusé : tu peux toujours écouter la radio."
     }
-
-    private val requestNotifPermission = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { /* optional */ }
-
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    private val overlayPermission = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        if (pendingOverlay && Settings.canDrawOverlays(this)) service?.showOverlay()
+        else service?.message?.value = "Autorisation d'affichage nécessaire pour le PTT au-dessus de Roblox."
+        pendingOverlay = false
+    }
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, binder: IBinder?) { service = (binder as VhfOverlayService.LocalBinder).service }
+        override fun onServiceDisconnected(name: ComponentName?) { service = null }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Request permissions
-        requestPermissions()
-
+        bound = bindService(Intent(this, VhfOverlayService::class.java), connection, BIND_AUTO_CREATE)
         setContent {
             VHFRadioTheme {
-                AppContent()
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        cloudflareManager?.destroy()
-        cloudflareManager = null
-        // Stop overlay service
-        stopService(Intent(this, VhfOverlayService::class.java))
-        super.onDestroy()
-    }
-
-    @Composable
-    private fun AppContent() {
-        var screen by remember { mutableStateOf<AppScreen>(AppScreen.Login) }
-        var profile by remember { mutableStateOf<UserProfile?>(null) }
-        var mode by remember { mutableStateOf(RadioMode.PILOT) }
-        var accessToken by remember { mutableStateOf("") }
-
-        when (screen) {
-            AppScreen.Login -> {
-                LoginScreen { p, m, token ->
-                    profile = p
-                    mode = m
-                    accessToken = token
-
-                    // Initialize CloudflareManager
-                    if (cloudflareManager == null) {
-                        cloudflareManager = CloudflareManager(applicationContext)
-                    }
-
-                    screen = AppScreen.Radio
-                }
-            }
-
-            AppScreen.Radio -> {
-                val lkm = cloudflareManager
-                val prof = profile
-                if (lkm != null && prof != null) {
-                    RadioScreen(
-                        profile = prof,
-                        mode = mode,
-                        accessToken = accessToken,
-                        cloudflareManager = lkm,
-                        onLogout = {
-                            lkm.disconnect()
-                            stopService(Intent(this@MainActivity, VhfOverlayService::class.java))
-                            profile = null
-                            accessToken = ""
-                            screen = AppScreen.Login
+                val current = service
+                if (current == null) CircularProgressIndicator()
+                else {
+                    val user by current.profile.collectAsState()
+                    if (user == null) LoginScreen { profile, mode, token -> current.login(profile, mode, token) }
+                    else RadioScreen(current,
+                        onMicMode = ::selectMicMode,
+                        onSwap = {
+                            current.swap()
+                            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED)
+                                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                         },
-                        onStartOverlay = {
-                            startOverlayService(lkm, mode)
-                        }
-                    )
+                        onOverlay = {
+                            if (current.overlayVisible.value) current.hideOverlay()
+                            else if (Settings.canDrawOverlays(this)) current.showOverlay()
+                            else {
+                                pendingOverlay = true
+                                overlayPermission.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                            }
+                        })
                 }
             }
         }
     }
-
-    private fun requestPermissions() {
-        // Microphone
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-        }
-
-        // Notifications (Android 13+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED
-            ) {
-                requestNotifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-            }
-        }
+    private fun selectMicMode(mode: MicMode) {
+        if (mode != MicMode.MUTED && ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            pendingMode = mode; micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        } else service?.setMicMode(mode)
     }
-
-    private fun startOverlayService(lkm: CloudflareManager, mode: RadioMode) {
-        // Check overlay permission
-        if (!Settings.canDrawOverlays(this)) {
-            Toast.makeText(
-                this,
-                "Active la permission \"Affichage par-dessus d'autres applis\" pour la bulle PTT",
-                Toast.LENGTH_LONG
-            ).show()
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:$packageName")
-            )
-            startActivity(intent)
-            return
-        }
-
-        // Share the CloudflareManager with the service
-        VhfOverlayService.sharedCloudflareManager = lkm
-        VhfOverlayService.sharedIsLocked = mode != RadioMode.PILOT
-
-        // Start the foreground service
-        val serviceIntent = Intent(this, VhfOverlayService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
-        } else {
-            startService(serviceIntent)
-        }
-
-        Toast.makeText(this, "Bulle PTT activée", Toast.LENGTH_SHORT).show()
+    override fun onStop() {
+        service?.radio?.release("screen")
+        super.onStop()
     }
-
-    private sealed class AppScreen {
-        data object Login : AppScreen()
-        data object Radio : AppScreen()
+    override fun onDestroy() {
+        if (bound) unbindService(connection)
+        bound = false; service = null
+        super.onDestroy()
     }
 }

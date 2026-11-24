@@ -62,7 +62,7 @@ object ApiClient {
             val responseBody = response.body?.string() ?: ""
 
             if (!response.isSuccessful) {
-                Log.e(TAG, "Refresh token failed: ${response.code} $responseBody")
+                Log.e(TAG, "Refresh token failed: ${response.code}")
                 return@withContext null
             }
 
@@ -120,6 +120,7 @@ object ApiClient {
     )
 
     data class CloudflareTokenResponse(
+        val canPublish: Boolean?,
         val token: String?,
         val url: String?,
         val error: String?
@@ -271,7 +272,7 @@ object ApiClient {
                     val j = gson.fromJson(responseBody, JsonObject::class.java)
                     j?.get("error")?.asString ?: j?.get("details")?.asString ?: "Erreur ${response.code}"
                 } catch (_: Exception) { "Erreur API Cloudflare: ${response.code}" }
-                Log.e(TAG, "getCloudflareToken failed: ${response.code} $responseBody")
+                Log.e(TAG, "getCloudflareToken failed: ${response.code}")
                 return@withContext Result.failure(Exception(errMsg))
             }
 
@@ -336,7 +337,7 @@ object ApiClient {
                 .post("".toRequestBody(JSON))
                 .build()
 
-            client.newCall(request).execute()
+            client.newCall(request).execute().close()
         } catch (_: Exception) {
             // Silencieux — pas critique
         }

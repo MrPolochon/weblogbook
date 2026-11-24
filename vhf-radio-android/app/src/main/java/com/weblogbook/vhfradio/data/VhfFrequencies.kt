@@ -3,8 +3,8 @@ package com.weblogbook.vhfradio.data
 /**
  * Logique des fréquences VHF aviation — espacement 8.33 kHz.
  *
- * Plage : 118.000 → 132.975
- * MHz   : 118 à 132 (15 valeurs)
+ * Plage : 118.000 → 136.990
+ * MHz   : 118 à 136 (19 valeurs)
  * Décimales : 160 valeurs par MHz (pattern 8.33 kHz)
  *
  * Porte depuis src/lib/vhf-frequencies.ts
@@ -12,7 +12,7 @@ package com.weblogbook.vhfradio.data
 object VhfFrequencies {
 
     const val VHF_MIN_MHZ = 118
-    const val VHF_MAX_MHZ = 132
+    const val VHF_MAX_MHZ = 136
 
     /**
      * Génère les 160 décimales valides par MHz.
@@ -44,7 +44,7 @@ object VhfFrequencies {
             for (dec in ALL_DECIMALS) {
                 if (mhz == VHF_MAX_MHZ) {
                     val decNum = dec.toIntOrNull() ?: 0
-                    if (decNum > 975) continue
+                    if (decNum > 990) continue
                 }
                 add("$mhz.$dec")
             }
@@ -71,16 +71,23 @@ object VhfFrequencies {
     /** Formate une fréquence */
     fun format(mhz: Int, decimal: String): String = "$mhz.$decimal"
 
-    /** Retourne le tableau des MHz valides [118, 119, …, 132] */
+    /** Retourne le tableau des MHz valides [118, 119, …, 136] */
     fun getMhzRange(): List<Int> = (VHF_MIN_MHZ..VHF_MAX_MHZ).toList()
 
     /** Retourne les décimales valides pour un MHz donné */
     fun getDecimalsForMhz(mhz: Int): List<String> {
         return if (mhz == VHF_MAX_MHZ) {
-            ALL_DECIMALS.filter { (it.toIntOrNull() ?: 0) <= 975 }
+            ALL_DECIMALS.filter { (it.toIntOrNull() ?: 0) <= 990 }
         } else {
             ALL_DECIMALS
         }
+    }
+
+    fun step(freq: String, mhz: Boolean, direction: Int): String {
+        val (whole, decimal) = parse(freq) ?: (118 to "000")
+        fun wrap(index: Int, size: Int) = ((index + direction.coerceIn(-1, 1)) % size + size) % size
+        return if (mhz) format(118 + wrap(whole - 118, 19), decimal)
+        else format(whole, ALL_DECIMALS[wrap(ALL_DECIMALS.indexOf(decimal), ALL_DECIMALS.size)])
     }
 
     /** Convertit une fréquence en nom de room Cloudflare. Ex: "118.935" → "vhf-118935" */

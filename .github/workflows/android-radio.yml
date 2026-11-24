@@ -1,0 +1,84 @@
+name: Android radio
+
+on:
+  push:
+    branches: [main]
+    paths: ['vhf-radio-android/**', '.github/workflows/android-radio.yml']
+  pull_request:
+    branches: [main]
+    paths: ['vhf-radio-android/**', '.github/workflows/android-radio.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Android APK, lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: vhf-radio-android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: Install Android SDK
+        run: sdkmanager 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Build and verify
+        run: gradle --no-daemon testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Android 15 lifecycle smoke tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          working-directory: vhf-radio-android
+          script: gradle --no-daemon connectedDebugAndroidTest
+      - name: Prepare beta APK
+        run: |
+          mkdir -p dist
+          cp app/build/outputs/apk/debug/app-debug.apk dist/VHF-Radio-Android-1.2.0-beta.1.apk
+          cd dist
+          sha256sum *.apk > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VHF-Radio-Android
+          path: vhf-radio-android/dist/*
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Android-test-reports
+          path: |
+            vhf-radio-android/app/build/reports/
+            vhf-radio-android/app/build/outputs/androidTest-results/
+  publish:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: VHF-Radio-Android
+          path: dist
+      - name: Publish Android beta
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view android-v1.2.0-beta.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+          gh release create android-v1.2.0-beta.1 dist/*.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title 'VHF Radio Android 1.2.0 beta 1' --notes 'Version de test Android : radio Cloudflare, PTT flottant au-dessus de Roblox, OBS, fréquences VHF et reconnexion automatique. APK signé avec une clé de test Android ; cette bêta est séparée de la future version stable et une réinstallation pourra être nécessaire lors de sa mise à jour. Une recette audio réelle sur téléphone reste nécessaire. Discord et la radio ne peuvent pas partager fiablement le microphone sur le même téléphone.'
