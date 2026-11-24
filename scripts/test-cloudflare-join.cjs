@@ -27,7 +27,7 @@ test('cookie and native bearer requests must authenticate before joining a frequ
   for(const bearer of [false,true]) assert.equal((await route(null)(request({roomName:'vhf-118935'},bearer))).status,401);
 });
 test('invalid frequency, malformed call UUID and rate-limited users cannot get tickets',async()=>{
-  for(const roomName of ['vhf-1000000','vhf-118.935','call-anything','private-channel']) assert.equal((await route({id:'pilot'})(request({roomName}))).status,400);
+  for(const roomName of ['vhf-1000000','vhf-210000','vhf-117990','vhf-137000','vhf-118020','vhf-118.935','call-anything','private-channel']) assert.equal((await route({id:'pilot'})(request({roomName}))).status,400);
   assert.equal((await route({id:'pilot'},null,false)(request({roomName:'vhf-118935'}))).status,429);
 });
 test('private calls require membership and an active call record',async()=>{
@@ -65,12 +65,12 @@ test('server signs a one-minute ticket accepted by the Worker without exposing S
   } finally { keys.forEach((key,i)=>{if(before[i]===undefined) delete process.env[key];else process.env[key]=before[i];}); }
 });
 
-test('OBS cannot request transmission, while flight/post permission is signed and arbitrary frequencies work',async()=>{
+test('OBS cannot request transmission, while flight/post permission is signed and any valid aviation channel works without a station directory',async()=>{
   process.env.CLOUDFLARE_REALTIME_URL='wss://radio.test/connect';
   process.env.CLOUDFLARE_REALTIME_SECRET='test-only-signing-secret-at-least-32-characters';
   try {
     for (const [transmit,observer,expected] of [[false,false,false],[true,false,true],[true,true,false]]) {
-      const response=await route({id:'pilot'},null,true,transmit)(request({roomName:'vhf-999999',observer}));
+      const response=await route({id:'pilot'},null,true,transmit)(request({roomName:'vhf-136990',observer}));
       assert.equal(response.status,200);
       const body=await response.json();
       const claims=JSON.parse(Buffer.from(body.token.split('.')[1],'base64url'));

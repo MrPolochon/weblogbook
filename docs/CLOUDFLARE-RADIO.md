@@ -76,7 +76,7 @@ Ne résilier l'ancien service LiveKit et ne supprimer ses secrets de production 
 
 ## 5. Comportement de la COM box
 
-- La présélection du bas se règle par saisie directe ou molettes MHz/décimales. Tous les canaux virtuels de 000.000 à 999.999 sont disponibles, indépendamment de l'annuaire et du poste ATC.
+- La présélection du bas se règle par saisie directe ou molettes MHz/décimales. Tous les canaux aviation valides de 118.000 à 136.990 (25 / 8,33 kHz) sont disponibles, indépendamment de l'annuaire et du poste ATC. La roue de la souris règle la molette survolée sans faire défiler la page.
 - Le bouton d'échange place la présélection en haut et lance la connexion. Modifier la présélection ne change pas la liaison active.
 - Après une coupure, les tentatives continuent après 5, 10, 20 puis 30 secondes, sans limite de nombre. OFF annule les tentatives et ferme la liaison.
 - Sans vol actif, l'espace pilote affiche une COM box OBS. Avec un vol actif, la COM box est sous le transpondeur. Les contrôleurs y accèdent uniquement en service.

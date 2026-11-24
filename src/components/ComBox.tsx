@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
+import FrequencyKnob from '@/components/FrequencyKnob';
 import { radioDesktop } from '@/lib/radio-desktop';
 import { ConnectionState } from '@/lib/cloudflare/client';
 import { ArrowLeftRight, ChevronDown, Mic, MicOff, Radio } from 'lucide-react';
@@ -129,7 +130,7 @@ export default function ComBox({ participantName, station, placement = 'floating
           </div>
           <label htmlFor={`${id}-freq`} className="mb-1 text-xs text-slate-400">Fréquence en attente</label>
           <div className="mb-2 flex gap-2">
-            <input id={`${id}-freq`} type="text" inputMode="decimal" value={standby} maxLength={7}
+            <input id={`${id}-freq`} type="text" inputMode="decimal" value={standby} maxLength={7} aria-invalid={!isValidVhfFrequency(selected)} aria-describedby={`${id}-freq-help`}
               placeholder="118.000" onChange={e => setStandby(e.target.value)} className="min-w-0 flex-1 rounded-lg border border-slate-600 bg-slate-900 px-3 py-2 font-mono text-lg" />
             <button type="button" className={button} disabled={!isValidVhfFrequency(selected) || (radio.powered && selected === radio.frequency)} onClick={tune} aria-label="Basculer la présélection en fréquence active et connecter">
               <ArrowLeftRight size={20} />
@@ -139,17 +140,12 @@ export default function ComBox({ participantName, station, placement = 'floating
           <div className="mb-3 grid grid-cols-2 gap-3" aria-label="Réglage de la fréquence">
             {(['mhz', 'decimal'] as const).map(part => <div key={part} className="flex items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900 p-2">
               <div className="text-xs text-slate-400">{part === 'mhz' ? 'MHz' : 'Décimales'}<div className="font-mono text-lg text-sky-200">{isValidVhfFrequency(selected) ? (part === 'mhz' ? selected.slice(0, 3) : selected.slice(4)) : '---'}</div></div>
-              <div role="spinbutton" tabIndex={0} aria-label={part === 'mhz' ? 'Molette MHz' : 'Molette décimales'}
-                aria-valuemin={0} aria-valuemax={999} aria-valuenow={isValidVhfFrequency(selected) ? Number(part === 'mhz' ? selected.slice(0, 3) : selected.slice(4)) : 0}
-                onWheel={e => { if (!e.currentTarget.contains(document.activeElement) || !e.deltaY) return; setStandby(value => stepFrequency(value, part, e.deltaY < 0 ? 1 : -1)); }}
-                onKeyDown={e => { if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return; e.preventDefault(); setStandby(value => stepFrequency(value, part, ['ArrowUp', 'ArrowRight'].includes(e.key) ? 1 : -1)); }}
-                className="flex h-14 w-14 flex-col items-center justify-center rounded-full border-4 border-double border-slate-500 bg-gradient-to-br from-slate-500 to-slate-900 shadow-inner outline-none focus:ring-2 focus:ring-sky-400">
-                <button type="button" aria-label={part === 'mhz' ? 'Augmenter les MHz' : 'Augmenter les décimales'} onClick={() => setStandby(value => stepFrequency(value, part, 1))} className="w-full rounded-t-full text-sm leading-5 hover:text-sky-300">+</button>
-                <button type="button" aria-label={part === 'mhz' ? 'Diminuer les MHz' : 'Diminuer les décimales'} onClick={() => setStandby(value => stepFrequency(value, part, -1))} className="w-full rounded-b-full text-sm leading-5 hover:text-sky-300">−</button>
-              </div>
+              <FrequencyKnob part={part}
+                value={isValidVhfFrequency(selected) ? Number(part === 'mhz' ? selected.slice(0, 3) : selected.slice(4)) : part === 'mhz' ? 118 : 0}
+                onStep={direction => setStandby(value => stepFrequency(value, part, direction))} />
             </div>)}
           </div>
-          <p className="mb-3 text-xs text-slate-400">Toutes les fréquences de 000.000 à 999.999. Clique sur une molette puis utilise la roue ou les flèches.</p>
+          <p id={`${id}-freq-help`} className="mb-3 text-xs text-slate-400">Canaux VHF de 118.000 à 136.990. Survole une molette et tourne la roue, ou utilise les boutons et les flèches.</p>
           {receiveOnly && <p role="status" className="mb-3 rounded-lg bg-sky-950 p-2 text-xs text-sky-200">OBS : écoute uniquement. Un plan de vol actif est nécessaire pour émettre depuis l’espace pilote.</p>}
           <div role="group" aria-label="Mode du microphone radio" className="mb-3 grid grid-cols-3 gap-1">
             {MODES.map(item => <button key={item.mode} type="button" aria-pressed={radio.mode === item.mode}

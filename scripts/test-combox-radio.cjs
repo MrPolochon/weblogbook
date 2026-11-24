@@ -177,7 +177,7 @@ test('permission granted after cancellation never publishes or reopens microphon
 
 test('OBS never acquires the microphone or opens the PTT gate',async()=>withMedia(async media=>{
   const h=hookHarness({observer:true});
-  await h.render().connect('999.123');
+  await h.render().connect('136.990');
   await h.render().setMicMode('open'); h.render().press('keyboard');
   assert.equal(media.captures.length,0); assert.equal(h.render().transmitting,false);
   assert.equal(h.render().receiveOnly,true); h.render().disconnect();
@@ -200,13 +200,20 @@ test('retries persist after repeated failures; OFF cancels all future attempts',
   });
   t.mock.timers.reset();
 });
-test('frequency wheels wrap independently and all six-digit virtual channels are accepted',()=>{
-  assert.equal(frequencies.stepFrequency('121.999','decimal',1),'121.000');
-  assert.equal(frequencies.stepFrequency('999.123','mhz',1),'000.123');
-  assert.equal(frequencies.stepFrequency('000.123','mhz',-1),'999.123');
-  for(const f of ['000.000','118.020','136.975','999.999']) assert.equal(frequencies.isValidVhfFrequency(f),true);
-  for(const f of ['1000.000','118.1','-01.000']) assert.equal(frequencies.isValidVhfFrequency(f),false);
+test('aviation knobs stay inside the COM band and skip nonexistent channels',()=>{
+  assert.equal(frequencies.stepFrequency('121.990','decimal',1),'121.000');
+  assert.equal(frequencies.stepFrequency('121.000','decimal',-1),'121.990');
+  assert.equal(frequencies.stepFrequency('136.935','mhz',1),'118.935');
+  assert.equal(frequencies.stepFrequency('118.935','mhz',-1),'136.935');
+  assert.equal(frequencies.stepFrequency('121.015','decimal',1),'121.025');
+  assert.equal(frequencies.stepFrequency('121.025','decimal',-1),'121.015');
+  assert.equal(frequencies.stepFrequency('121,015','decimal',1),'121.025');
+  assert.equal(frequencies.isValidVhfFrequency(frequencies.stepFrequency('210.000','mhz',1)),true);
+  for(const f of ['118.000','118.005','121.500','132.990','136.975','136.990']) assert.equal(frequencies.isValidVhfFrequency(f),true,f);
+  for(const f of ['000.000','117.990','137.000','210.000','999.999','118.020','121.045','118.001','118.1']) assert.equal(frequencies.isValidVhfFrequency(f),false,f);
+  assert.equal(frequencies.TOTAL_VHF_FREQUENCIES,3040);
 });
+
 test('blur preserves native global PTT, while native release and reset always close it',()=>{
   const gate=new RadioTransmission(()=>{}); gate.setReady(true); gate.setMode('ptt');
   gate.press('desktop'); gate.press('keyboard'); gate.releaseLocal();
