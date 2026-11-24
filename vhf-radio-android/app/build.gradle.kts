@@ -11,8 +11,8 @@ android {
         applicationId = "com.weblogbook.vhfradio.beta"
         minSdk = 26
         targetSdk = 36
-        versionCode = providers.gradleProperty("radioVersionCode").orElse("5").get().toInt()
-        versionName = providers.gradleProperty("radioVersionName").orElse("1.2.0-beta.3").get()
+        versionCode = providers.gradleProperty("radioVersionCode").orElse("6").get().toInt()
+        versionName = providers.gradleProperty("radioVersionName").orElse("1.2.0-beta.4").get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         // Config values

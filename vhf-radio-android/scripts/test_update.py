@@ -24,7 +24,7 @@ def run_tests(*arguments, expected):
 # the initial test and the update. Retaining the existing data is the test.
 subprocess.run(["adb", "install", "-r", apk], check=True)
 subprocess.run(["adb", "install", "-r", test_apk], check=True)
-run_tests(expected="OK (4 tests)")
+run_tests(expected="OK (6 tests)")
 aapt = Path(os.environ["ANDROID_HOME"]) / "build-tools/36.0.0/aapt"
 badging = subprocess.check_output([str(aapt), "dump", "badging", apk], text=True)
 next_code = int(re.search(r"versionCode='([0-9]+)'", badging)[1]) + 1

@@ -60,6 +60,9 @@ class MainActivity : ComponentActivity() {
                 val current = service
                 val updateState by updater.state.collectAsState()
                 val powered = if (current == null) false else current.radio.powered.collectAsState().value
+                LaunchedEffect(powered) {
+                    volumeControlStream = if (powered) android.media.AudioManager.STREAM_VOICE_CALL else android.media.AudioManager.USE_DEFAULT_STREAM_TYPE
+                }
                 Column(Modifier.fillMaxSize().safeDrawingPadding()) {
                     Box(Modifier.weight(1f)) {
                     if (current == null) CircularProgressIndicator()
