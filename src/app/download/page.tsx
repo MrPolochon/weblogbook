@@ -20,13 +20,13 @@ export default function DownloadPage() {
     {
       platform: 'Android',
       icon: Smartphone,
-      description: 'Application pour smartphones et tablettes Android',
-      version: 'Bientôt disponible',
-      downloadUrl: null,
+      description: 'Radio VHF avec bulle push-to-talk au-dessus de Roblox. Android 8 et plus.',
+      version: 'v1.2.0 bêta 1',
+      downloadUrl: 'https://github.com/MrPolochon/weblogbook/releases/download/android-v1.2.0-beta.1/VHF-Radio-Android-1.2.0-beta.1.apk',
       color: 'from-green-500 to-emerald-600',
       bgColor: 'bg-emerald-950/30',
       borderColor: 'border-emerald-800',
-      available: false,
+      available: true,
       maintenance: false,
     },
     {
@@ -135,6 +135,13 @@ export default function DownloadPage() {
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-6 rounded-xl border border-emerald-800 bg-emerald-950/20 p-5 text-sm text-slate-300">
+            <h3 className="font-semibold text-emerald-200 mb-2">Radio Android — version bêta</h3>
+            <p>Connecte-toi avec ton compte WebLogBook, règle la fréquence en attente puis bascule-la pour te connecter. Sans plan de vol actif, tu peux écouter en OBS.</p>
+            <p className="mt-2">Pour parler depuis Roblox, active PTT dans la radio, autorise le microphone puis la bulle flottante. Utilise un autre appareil pour le cockpit Discord.</p>
+            <p className="mt-2 text-slate-400">Les essais audio sur téléphone restent à valider. Cette bêta pourra nécessiter une réinstallation lors d&apos;une mise à jour. <a href="https://github.com/MrPolochon/weblogbook/releases/tag/android-v1.2.0-beta.1" className="text-emerald-300 underline hover:text-emerald-200">Détails de la version</a></p>
           </div>
 
           {apps[0].available && <>
