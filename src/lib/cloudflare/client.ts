@@ -66,12 +66,24 @@ async function description(pc: RTCPeerConnection, offer: boolean) {
   // Mono Opus speech: cap bandwidth, preserve FEC, suppress silent transmission.
   if (sdp.sdp) sdp.sdp = sdp.sdp.replace(/(a=fmtp:\d+ .*minptime[^\r\n]*)/g, '$1;usedtx=1;maxaveragebitrate=24000');
   await pc.setLocalDescription(sdp);
-  await waitFor(pc, 'icegatheringstatechange', () => pc.iceGatheringState === 'complete', 12_000);
+  // Keep TURN available, but do not wait for every redundant TURN URL to time out
+  // after a relay has already been allocated and candidates have settled.
+  const started = Date.now();
+  let candidates = '', changedAt = started;
+  while (pc.iceGatheringState !== 'complete') {
+    if (pc.connectionState === 'closed' || pc.connectionState === 'failed') throw new Error('Connexion audio interrompue.');
+    const next = (pc.localDescription?.sdp.match(/^a=candidate:.*$/gm) || []).join('\n');
+    if (next !== candidates) { candidates = next; changedAt = Date.now(); }
+    if (/\btyp relay(?:\s|$)/m.test(candidates) && Date.now() - changedAt >= 350) break;
+    if (Date.now() - started >= 12_000) throw new Error('Délai de préparation du réseau audio dépassé.');
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
   return { type: pc.localDescription!.type, sdp: pc.localDescription!.sdp };
 }
 
 export class Room {
   state = ConnectionState.Disconnected;
+  connectionError = '';
   canPlaybackAudio = true;
   canPublish = false;
   remoteParticipants = new Map<string, RemoteParticipant>();
@@ -180,7 +192,14 @@ export class Room {
       this.assertOpen();
       this.canPublish = options?.canPublish !== false && hello.canPublish !== false;
       this.desired = hello.peers || [];
-      const configuration = { iceServers: hello.iceServers };
+      const configuration: RTCConfiguration = {
+        bundlePolicy: 'max-bundle',
+        iceServers: (hello.iceServers || []).flatMap(server => {
+          // Cloudflare's alternate port 53 is blocked by browsers and delays ICE.
+          const urls = (Array.isArray(server.urls) ? server.urls : [server.urls]).filter(url => !/:53(?:\?|$)/.test(url));
+          return urls.length ? [{ ...server, urls }] : [];
+        }),
+      };
       this.subscriber = new RTCPeerConnection(configuration);
       this.subscriber.onconnectionstatechange = () => this.checkConnection();
       this.subscriber.ontrack = event => this.receiveTrack(event);
@@ -205,7 +224,7 @@ export class Room {
       this.emit('connected');
     } catch (error) { await this.disconnect(); throw error; }
   }
-  private assertOpen() { if (this.closed) throw new Error('Radio déconnectée.'); }
+  private assertOpen() { if (this.closed) throw new Error(this.connectionError || 'Radio déconnectée.'); }
   private checkConnection() {
     if (this.closed) return;
     const states = [this.publisher?.connectionState, this.subscriber?.connectionState];
@@ -244,8 +263,14 @@ export class Room {
         }
         const answer = await description(this.subscriber!, false);
         await this.rpc('answer', { sessionDescription: answer });
+        // A third participant can arrive while the first receiver's ICE/DTLS
+        // transport is still connecting. SDP acceptance alone is not readiness.
+        await waitFor(this.subscriber!, 'connectionstatechange', () => this.subscriber?.connectionState === 'connected', 15_000);
       }
-    }).catch(() => { void this.disconnect(); });
+    }).catch(error => {
+      if (!this.closed) this.connectionError = error instanceof Error ? error.message : 'Connexion audio interrompue.';
+      void this.disconnect();
+    });
     return this.reconcileQueue;
   }
   private receiveTrack(event: Pick<RTCTrackEvent, 'transceiver' | 'track'>) {

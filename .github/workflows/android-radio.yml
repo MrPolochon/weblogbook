@@ -53,7 +53,7 @@ jobs:
       - name: Prepare beta APK
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/debug/app-debug.apk dist/VHF-Radio-Android-1.2.0-beta.1.apk
+          cp app/build/outputs/apk/debug/app-debug.apk dist/VHF-Radio-Android-1.2.0-beta.2.apk
           cd dist
           sha256sum *.apk > SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
@@ -82,5 +82,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view android-v1.2.0-beta.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
-          gh release create android-v1.2.0-beta.1 dist/*.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title 'VHF Radio Android 1.2.0 beta 1' --notes 'Version de test Android : radio Cloudflare, PTT flottant au-dessus de Roblox, OBS, fréquences VHF et reconnexion automatique. APK signé avec une clé de test Android ; cette bêta est séparée de la future version stable et une réinstallation pourra être nécessaire lors de sa mise à jour. Une recette audio réelle sur téléphone reste nécessaire. Discord et la radio ne peuvent pas partager fiablement le microphone sur le même téléphone.'
+          if gh release view android-v1.2.0-beta.2 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+          gh release create android-v1.2.0-beta.2 dist/*.apk dist/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease --latest=false --title 'VHF Radio Android 1.2.0 beta 2' --notes 'Version de test Android : radio Cloudflare, PTT flottant au-dessus de Roblox, OBS, fréquences VHF et reconnexion automatique. APK signé avec une clé de test Android ; cette bêta est séparée de la future version stable et une réinstallation pourra être nécessaire lors de sa mise à jour. Une recette audio réelle sur téléphone reste nécessaire. Discord et la radio ne peuvent pas partager fiablement le microphone sur le même téléphone.'
