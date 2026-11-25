@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AudioPresets, ConnectionState, LocalAudioTrack, Room, RoomEvent, Track } from '@/lib/cloudflare/client';
 import { frequencyToRoomName, isValidVhfFrequency } from '@/lib/vhf-frequencies';
+import { RadioPlayback } from '@/lib/radio-playback';
+import { radioDesktop } from '@/lib/radio-desktop';
 import { RadioSquelch } from '@/lib/radio-squelch';
 import { RadioMicMode, RadioTransmission } from '@/lib/radio-transmission';
 
@@ -39,6 +41,7 @@ export function useVhfRadio(participantName: string, observer = false) {
   const micRequest = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const audio = useRef(new Map<string, HTMLAudioElement>());
+  const playback = useRef(new RadioPlayback());
   const volumeRef = useRef(0.8);
   const [connection, setConnection] = useState<ConnectionState>(ConnectionState.Disconnected);
   const [frequency, setFrequency] = useState('');
@@ -80,6 +83,7 @@ export function useVhfRadio(participantName: string, observer = false) {
     if (room) void room.disconnect(true).catch(() => {});
     audio.current.forEach(el => { el.pause(); el.srcObject = null; el.remove(); });
     audio.current.clear();
+    playback.current.close();
     setConnection(ConnectionState.Disconnected);
     setParticipants([]);
     setAudioBlocked(false);
@@ -260,7 +264,8 @@ export function useVhfRadio(participantName: string, observer = false) {
       room.on(RoomEvent.TrackSubscribed, track => {
         if (track.kind !== Track.Kind.Audio) return;
         const el = track.attach() as HTMLAudioElement;
-        el.volume = volumeRef.current;
+        playback.current.attach(el, volumeRef.current, Boolean(radioDesktop()));
+        void playback.current.resume().catch(() => setAudioBlocked(true));
         el.setAttribute('playsinline', '');
         el.style.display = 'none';
         document.body.appendChild(el);
@@ -268,7 +273,7 @@ export function useVhfRadio(participantName: string, observer = false) {
         void el.play().catch(() => setAudioBlocked(true));
       });
       room.on(RoomEvent.TrackUnsubscribed, track => {
-        track.detach().forEach(el => el.remove());
+        track.detach().forEach(el => { playback.current.detach(el as HTMLAudioElement); el.remove(); });
         audio.current.delete(track.sid!);
       });
       room.on(RoomEvent.AudioPlaybackStatusChanged, () => setAudioBlocked(!activeRoom.canPlaybackAudio));
@@ -293,6 +298,7 @@ export function useVhfRadio(participantName: string, observer = false) {
   const resumeAudio = useCallback(async () => {
     try {
       await soundRef.current?.resume();
+      await playback.current.resume();
       await roomRef.current?.startAudio();
       await Promise.all(Array.from(audio.current.values(), el => el.play()));
       setAudioBlocked(false);
@@ -300,11 +306,11 @@ export function useVhfRadio(participantName: string, observer = false) {
   }, []);
 
   const setVolume = useCallback((value: number) => {
-    value = Math.max(0, Math.min(1, value));
+    value = Number.isFinite(value) ? Math.max(0, Math.min(radioDesktop() ? 2 : 1, value)) : 0;
     soundRef.current?.setVolume(value);
     volumeRef.current = value;
     setVolumeState(value);
-    audio.current.forEach(el => { el.volume = value; });
+    audio.current.forEach(el => playback.current.setVolume(el, value));
   }, []);
 
   useEffect(() => {

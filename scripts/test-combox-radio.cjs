@@ -87,6 +87,8 @@ function hookHarness({ joinError, observer=false } = {}) {
       ConnectionState: { Connected: 'connected', Disconnected: 'disconnected', Connecting: 'connecting', Reconnecting: 'reconnecting' },
       RoomEvent: Object.fromEntries(['ParticipantConnected', 'ParticipantDisconnected', 'ActiveSpeakersChanged', 'ConnectionStateChanged', 'Disconnected', 'TrackSubscribed', 'TrackUnsubscribed', 'AudioPlaybackStatusChanged'].map(x => [x, x])) },
     '@/lib/vhf-frequencies': frequencies,
+    '@/lib/radio-playback': load('src/lib/radio-playback.ts'),
+    '@/lib/radio-desktop': { radioDesktop: () => undefined },
     '@/lib/radio-transmission': { RadioTransmission },
     '@/lib/radio-squelch': { RadioSquelch: class { setEnabled(){} setTransmit(){} setReceive(){} close(){} setVolume(){} async resume(){} } },
   });

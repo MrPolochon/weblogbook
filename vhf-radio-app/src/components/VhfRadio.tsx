@@ -1,3 +1,4 @@
+import { RadioPlayback } from '../../../src/lib/radio-playback';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Radio, Mic, MicOff, Volume2, Settings2, Users, AlertTriangle, Power, ArrowLeftRight, RefreshCw, AlertCircle } from 'lucide-react';
 import VhfDial from './VhfDial';
@@ -113,6 +114,9 @@ export default function VhfRadio({
   const [connectionState, setConnectionState] = useState<string>('disconnected');
   const [participants, setParticipants] = useState<ParticipantInfo[]>([]);
   const audioContainerRef = useRef<HTMLDivElement>(null);
+  const playback = useRef(new RadioPlayback());
+  const [volume, setVolume] = useState(1);
+  const volumeRef = useRef(1);
   const attachedAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
 
   /* ── PTT ── */
@@ -124,6 +128,7 @@ export default function VhfRadio({
 
   /* ── Collision ── */
   const [collision, setCollision] = useState(false);
+  const collisionGainRef = useRef<GainNode | null>(null);
   const collisionOscRef = useRef<OscillatorNode | null>(null);
   const collisionCtxRef = useRef<AudioContext | null>(null);
 
@@ -222,10 +227,13 @@ export default function VhfRadio({
       try { collisionOscRef.current.stop(); } catch { /* */ }
       collisionOscRef.current = null;
     }
+    collisionGainRef.current?.disconnect(); collisionGainRef.current = null;
+    void collisionCtxRef.current?.close().catch(() => {}); collisionCtxRef.current = null;
     attachedAudioRef.current.forEach((el) => {
       try { el.pause(); el.remove(); } catch { /* */ }
     });
     attachedAudioRef.current.clear();
+    playback.current.close();
     const room = roomRef.current;
     if (room) {
       room.removeAllListeners();
@@ -361,7 +369,9 @@ export default function VhfRadio({
         room.on(RoomEvent.TrackSubscribed, (track) => {
           if (track.kind !== Track.Kind.Audio) return;
           const audioElement = track.attach() as HTMLAudioElement;
-          audioElement.volume = 1.0;
+          playback.current.attach(audioElement, volumeRef.current, true);
+          void playback.current.setSinkId(selectedOutput).catch(() => {});
+          void playback.current.resume().catch(() => {});
           if (selectedOutput && 'setSinkId' in audioElement) {
             (audioElement as HTMLAudioElement & { setSinkId: (id: string) => Promise<void> })
               .setSinkId(selectedOutput).catch(() => {});
@@ -373,7 +383,7 @@ export default function VhfRadio({
         room.on(RoomEvent.TrackUnsubscribed, (track) => {
           const sid = track.sid ?? '';
           const el = attachedAudioRef.current.get(sid);
-          if (el) { el.pause(); el.remove(); attachedAudioRef.current.delete(sid); }
+          if (el) { playback.current.detach(el); el.pause(); el.remove(); attachedAudioRef.current.delete(sid); }
         });
         room.on(RoomEvent.ParticipantConnected, () => updateParticipants(room));
         room.on(RoomEvent.ParticipantDisconnected, () => updateParticipants(room));
@@ -500,7 +510,8 @@ export default function VhfRadio({
         const ctx = collisionCtxRef.current;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine'; osc.frequency.value = 1200; gain.gain.value = 0.15;
+        osc.type = 'sine'; osc.frequency.value = 1200; gain.gain.value = 0.15 * volumeRef.current;
+        collisionGainRef.current = gain;
         osc.connect(gain).connect(ctx.destination); osc.start();
         collisionOscRef.current = osc;
       } catch { /* */ }
@@ -539,6 +550,7 @@ export default function VhfRadio({
 
   function handleOutputChange(deviceId: string) {
     setSelectedOutput(deviceId);
+    void playback.current.setSinkId(deviceId).catch(() => {});
     localStorage.setItem(AUDIO_OUTPUT_KEY, deviceId);
     attachedAudioRef.current.forEach((el) => {
       if ('setSinkId' in el) {
@@ -713,6 +725,14 @@ export default function VhfRadio({
         </div>
       )}
 
+      <label className="px-4 pb-3 flex items-center gap-2 text-xs text-slate-300">Volume radio
+        <input aria-label="Volume radio" type="range" min="0" max="2" step="0.05" value={volume} onChange={e => {
+          const value = Number(e.target.value); volumeRef.current = value; setVolume(value);
+          if (collisionGainRef.current) collisionGainRef.current.gain.value = 0.15 * value;
+          attachedAudioRef.current.forEach(el => playback.current.setVolume(el, value));
+          void playback.current.resume().catch(() => {});
+        }} /><span>{Math.round(volume * 100)} %</span>
+      </label>
       {/* Settings toggle */}
       {radioOn && (
         <div className="px-4 pb-3">
@@ -785,3 +805,4 @@ export default function VhfRadio({
     </div>
   );
 }
+
