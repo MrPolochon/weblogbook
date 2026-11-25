@@ -7,12 +7,13 @@ import type { DesktopUpdateState } from './update-state';
 
 /** Updates continue independently of the current page, COM panel and microphone state. */
 export function installDesktopUpdates(window: BrowserWindow, onState: (state: DesktopUpdateState) => void = () => {}) {
+  const contents = window.webContents;
   let state: DesktopUpdateState = { status: 'idle', currentVersion: app.getVersion() };
   let checking = false, closed = false;
   let retry: ReturnType<typeof setTimeout> | undefined;
   const classicUrl = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href;
   const trusted = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => {
-    if (event.sender !== window.webContents || event.senderFrame !== event.sender.mainFrame) return false;
+    if (event.sender !== contents || event.senderFrame !== event.sender.mainFrame) return false;
     try {
       const url = new URL(event.senderFrame.url);
       if (['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com'].includes(url.origin)) return true;
@@ -22,11 +23,11 @@ export function installDesktopUpdates(window: BrowserWindow, onState: (state: De
   };
   const send = () => {
     if (closed || window.isDestroyed()) return;
-    window.webContents.send('updater:state', { ...state });
+    contents.send('updater:state', { ...state });
     // Preserve the classic radio and previously installed web bridge.
-    window.webContents.send('updater:status', state.status === 'downloading' ? 'available' : state.status);
-    if (state.version) window.webContents.send('updater:info', { version: state.version, releaseDate: '' });
-    if (state.percent != null) window.webContents.send('updater:progress', { percent: state.percent, transferred: 0, total: 0 });
+    contents.send('updater:status', state.status === 'downloading' ? 'available' : state.status);
+    if (state.version) contents.send('updater:info', { version: state.version, releaseDate: '' });
+    if (state.percent != null) contents.send('updater:progress', { percent: state.percent, transferred: 0, total: 0 });
     onState({ ...state });
   };
   const setState = (patch: Partial<DesktopUpdateState>) => { state = { ...state, ...patch }; send(); };
@@ -66,14 +67,14 @@ export function installDesktopUpdates(window: BrowserWindow, onState: (state: De
   ipcMain.handle('updater:get-state', event => trusted(event) ? { ...state } : null);
   const resume = () => { void check(); };
   powerMonitor.on('resume', resume);
-  window.webContents.on('did-finish-load', send);
+  contents.on('did-finish-load', send);
   const startup = setTimeout(resume, 5000);
   const periodic = setInterval(resume, 30 * 60_000);
   window.once('closed', () => {
     closed = true;
     clearTimeout(startup); clearTimeout(retry); clearInterval(periodic);
     powerMonitor.removeListener('resume', resume);
-    window.webContents.removeListener('did-finish-load', send);
+    contents.removeListener('did-finish-load', send);
     ipcMain.removeListener('updater:check', checkRequest);
     ipcMain.removeListener('updater:install', installRequest);
     ipcMain.removeHandler('updater:get-state');
