@@ -2,6 +2,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const ts = require('typescript');
+const lib = { exports: {} };
+new Function('exports', ts.transpileModule(fs.readFileSync('src/lib/youtube-player.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(lib.exports);
 
 async function harness({ reduced = false, delayed = false } = {}) {
   let effect, options, resolveApi, destroyed = 0, muted = true, playing = 0, refs = 0;
@@ -11,7 +13,7 @@ async function harness({ reduced = false, delayed = false } = {}) {
   const player = { playVideo() { playing++; }, pauseVideo() {}, mute() { muted = true; }, unMute() { muted = false; }, setVolume() {}, destroy() { destroyed++; }, getIframe: () => ({}) };
   const api = { Player: function(_mount, opts) { options = opts; return player; } };
   const promise = delayed ? new Promise(r => { resolveApi = r; }) : Promise.resolve(api);
-  const deps = { react, 'react/jsx-runtime': { jsx, jsxs: jsx }, '@/lib/youtube-player': { loadYoutubePlayer: () => promise } };
+  const deps = { react, 'react/jsx-runtime': { jsx, jsxs: jsx }, '@/lib/youtube-player': { ...lib.exports, loadYoutubePlayer: () => promise } };
   const mod = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync('src/components/LoginChristmasVideo.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
   new Function('require','module','exports','window','document','Element',code)(n => deps[n], mod, mod.exports,
@@ -44,4 +46,14 @@ test('YouTube CSP permissions are restricted to the login route', async () => {
   const csp = row => row.headers.find(h => h.key === 'Content-Security-Policy').value;
   assert.match(csp(headers.find(h => h.source === '/login')), /https:\/\/www.youtube-nocookie.com/);
   assert.doesNotMatch(csp(headers.find(h => h.source.includes('(?!docs/'))), /youtube/);
+});
+
+
+test('caption modules are unloaded when available without interrupting unsupported players', () => {
+  let loaded = true, calls = 0;
+  const player = { getOptions: () => loaded ? ['captions'] : [], unloadModule(module) { assert.equal(module, 'captions'); loaded = false; calls++; } };
+  lib.exports.disableYoutubeCaptions(player); lib.exports.disableYoutubeCaptions(player);
+  assert.equal(calls, 1);
+  assert.doesNotThrow(() => lib.exports.disableYoutubeCaptions({}));
+  assert.doesNotThrow(() => lib.exports.disableYoutubeCaptions({ getOptions() { throw Error(); } }));
 });
