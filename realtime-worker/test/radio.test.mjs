@@ -52,6 +52,51 @@ function harness() {
   async function send(ws, action, payload) { await room.webSocketMessage(ws, JSON.stringify({ id: ++request, action, payload })); return ws.sent.findLast(m => m.id === request); }
   return { room, member, send, calls };
 }
+test('unavailable tracks preserve working subscriptions and can be retried', async () => {
+  const h = harness(), receiver = h.member('receiver');
+  h.member('healthy', true); h.member('silent', true);
+  const original = h.room.provider;
+  let unavailable = true;
+  h.room.provider = async (path, body, ...args) => {
+    const result = await original(path, body, ...args);
+    if (unavailable && path.endsWith('tracks/new')) {
+      result.tracks = result.tracks.map(t => t.trackName === 'silent'
+        ? { sessionId: t.sessionId, trackName: t.trackName, errorCode: 'empty_track_error' } : t);
+    }
+    return result;
+  };
+  const first = await h.send(receiver, 'subscribe', { peers: ['healthy', 'silent'] });
+  assert.deepEqual(first.result.tracks, [{ peerId: 'healthy', mid: '0' }]);
+  assert.equal(h.room.state(receiver).closed, false);
+  await h.send(receiver, 'answer', { sessionDescription: { type: 'answer', sdp: 'answer' } });
+  unavailable = false;
+  const retry = await h.send(receiver, 'subscribe', { peers: ['healthy', 'silent'] });
+  assert.deepEqual(retry.result.tracks.map(t => t.peerId), ['silent']);
+  assert.equal(h.calls.filter(c => c.path.endsWith('sessions/new')).length, 1);
+});
+test('subscription provider retains per-track errors but rejects top-level errors', async () => {
+  const h = harness(), originalFetch = globalThis.fetch;
+  const result = { tracks: [{ errorCode: 'empty_track_error' }] };
+  try {
+    globalThis.fetch = async () => Response.json(result);
+    assert.deepEqual(await RadioRoom.prototype.provider.call(h.room, 'tracks/new', {}, 'POST', false, true), result);
+    globalThis.fetch = async () => Response.json({ errorCode: 'invalid_params', errorDescription: 'private data' });
+    await assert.rejects(RadioRoom.prototype.provider.call(h.room, 'tracks/new', {}, 'POST', false, true),
+      { message: 'Cloudflare negotiation refused (invalid_params)' });
+  } finally { globalThis.fetch = originalFetch; }
+});
+test('all unavailable tracks without an offer keep the station connected', async () => {
+  const h = harness(), receiver = h.member('receiver'); h.member('gone', true);
+  const original = h.room.provider;
+  h.room.provider = async (path, body) => path.endsWith('tracks/new')
+    ? { tracks: body.tracks.map(t => ({ ...t, errorCode: 'not_found_track_error' })) }
+    : original(path, body);
+  const reply = await h.send(receiver, 'subscribe', { peers: ['gone'] });
+  assert.deepEqual(reply.result, { tracks: [] });
+  assert.equal(h.room.state(receiver).pending, false);
+  assert.equal(h.room.state(receiver).closed, false);
+  assert.deepEqual((await h.send(receiver, 'ping')).result, {});
+});
 test('subscriptions resolve only participants inside the authenticated room', async () => {
   const h = harness(), receiver = h.member('receiver');
   h.member('allowed', true);
@@ -162,3 +207,4 @@ test('server rejects OBS publication before contacting SFU but still allows rece
   assert.match(reply.error,/OBS/);
   assert.ok(!h.calls.slice(before).some(c=>c.path.endsWith('sessions/new')));
 });
+
