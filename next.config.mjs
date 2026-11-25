@@ -2,17 +2,17 @@
 const isDev = process.env.NODE_ENV !== 'production';
 const realtimeOrigin = process.env.CLOUDFLARE_REALTIME_URL ? new URL(process.env.CLOUDFLARE_REALTIME_URL).origin : '';
 
-function buildCsp(frameAncestors) {
+function buildCsp(frameAncestors, loginVideo = false) {
   return [
     "default-src 'self'",
     `connect-src 'self' ${realtimeOrigin} https://*.supabase.co wss://*.supabase.co https://*.supabase.in https://api.elevenlabs.io`,
     "img-src 'self' data: blob: https://*.supabase.co https://*.supabase.in https://cdn.project-flight.com",
-    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
+    `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}${loginVideo ? ' https://www.youtube.com https://s.ytimg.com' : ''}`,
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self' data:",
     "media-src 'self' blob: https://api.elevenlabs.io",
     "worker-src 'self' blob:",
-    "frame-src 'self'",
+    `frame-src 'self'${loginVideo ? ' https://www.youtube-nocookie.com https://www.youtube.com' : ''}`,
     `frame-ancestors ${frameAncestors}`,
     "base-uri 'self'",
     "form-action 'self'",
@@ -57,6 +57,7 @@ const nextConfig = {
   },
   async headers() {
     return [
+      { source: '/login', headers: securityHeaders.map(header => header.key === 'Content-Security-Policy' ? { ...header, value: buildCsp("'none'", true) } : header) },
       {
         source: '/api/pftester-odw/tiles/:z/:x/:y',
         headers: [
@@ -71,7 +72,7 @@ const nextConfig = {
         headers: embeddableDocHeaders,
       },
       {
-        source: '/((?!docs/).*)',
+        source: '/((?!docs/|login$).*)',
         headers: securityHeaders,
       },
     ];
@@ -79,3 +80,4 @@ const nextConfig = {
 };
 
 export default nextConfig;
+

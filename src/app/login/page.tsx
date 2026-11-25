@@ -1,4 +1,5 @@
 'use client';
+import LoginChristmasVideo from '@/components/LoginChristmasVideo';
 import MajorEventBanner from '@/components/MajorEventBanner';
 
 import React, { Suspense, useEffect, useRef, useState, useMemo, useTransition } from 'react';
@@ -422,19 +423,17 @@ function LoginPageContent() {
       style={{ backgroundImage: 'url(/mixou-bg.png)' }}
     />
   );
-  const overlay = (
-    <div className="absolute inset-0 bg-slate-950/90" />
-  );
+
 
   return (
     <div className="login-shell min-h-dvh relative flex items-center justify-center px-4 py-3 overflow-x-hidden bg-slate-950">
       <MajorEventBanner login />
       {fond}
-      {overlay}
+      <LoginChristmasVideo />
       
 
       
-      <div className="login-content relative z-10 w-full max-w-lg">
+      <div className="login-content relative z-10 w-full max-w-lg" style={{ paddingBottom: 90 }}>
         {messageParam === 'discord-not-linked' && <p role="alert" className="rounded-lg bg-red-950/70 p-3 text-sm text-red-200">Ce Discord n’est lié à aucun compte. Connectez-vous avec votre identifiant puis liez Discord depuis votre profil.</p>}
         {/* Logo / Titre */}
         <div className="login-heading text-center mb-3">
@@ -1093,3 +1092,4 @@ export default function LoginPage() {
     </Suspense>
   );
 }
+
