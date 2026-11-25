@@ -61,14 +61,19 @@ export class RadioRoom {
     this.queues.set(ws, settled);
     return task.finally(() => { if (this.queues.get(ws) === settled) this.queues.delete(ws); });
   }
-  async provider(path, body, method = 'POST', turn = false) {
+  async provider(path, body, method = 'POST', turn = false, allowTrackErrors = false) {
     const response = await fetch(`${base}/${path}`, {
       method, headers: { Authorization: `Bearer ${turn ? this.env.TURN_API_TOKEN : this.env.SFU_APP_SECRET}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body), signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) throw new Error('Cloudflare transport unavailable');
     const result = await response.json();
-    if (result.errorCode || result.tracks?.some(t => t.errorCode)) throw new Error('Cloudflare negotiation refused');
+    if (result.errorCode || (!allowTrackErrors && result.tracks?.some(t => t.errorCode))) {
+      const code = result.errorCode || result.tracks.find(t => t.errorCode).errorCode;
+      // Never expose provider descriptions, SDP, credentials or session locators.
+      const publicCodes = ['not_found_track_error', 'empty_track_error', 'session_error', 'invalid_session_description', 'invalid_params', 'unauthorized'];
+      throw new Error(`Cloudflare negotiation refused (${publicCodes.includes(code) ? code : 'provider_error'})`);
+    }
     return result;
   }
   sessionPath(id, suffix) { return `apps/${encodeURIComponent(this.env.SFU_APP_ID)}/sessions/${encodeURIComponent(id)}/${suffix}`; }
@@ -148,15 +153,27 @@ export class RadioRoom {
       this.save(ws, s);
       const result = await this.provider(this.sessionPath(s.subSession, 'tracks/new'), {
         tracks: peers.map(other => ({ location: 'remote', sessionId: other.pubSession, trackName: other.id })),
-      });
-      if (!result.sessionDescription || result.sessionDescription.type !== 'offer') throw new Error('Missing subscription offer');
-      const tracks = (result.tracks || []).map(track => {
+      }, 'POST', false, true);
+      const seen = new Set();
+      const tracks = [];
+      for (const track of result.tracks || []) {
         const peer = peers.find(other => other.id === track.trackName && other.pubSession === track.sessionId);
-        if (!peer || typeof track.mid !== 'string') throw new Error('Unexpected subscription');
+        if (!peer || seen.has(peer.id)) throw new Error('Unexpected subscription');
+        seen.add(peer.id);
+        // A silent/expired source must not tear down other working subscriptions.
+        // Retry these specific failures on a later client reconciliation.
+        if (['not_found_track_error', 'empty_track_error'].includes(track.errorCode)) continue;
+        if (track.errorCode) throw new Error('Cloudflare subscription refused');
+        if (typeof track.mid !== 'string') throw new Error('Unexpected subscription');
         s.subscriptions[peer.id] = track.mid;
-        return { peerId: peer.id, mid: track.mid };
-      });
-      if (tracks.length !== peers.length) throw new Error('Incomplete subscription');
+        tracks.push({ peerId: peer.id, mid: track.mid });
+      }
+      if (seen.size !== peers.length) throw new Error('Incomplete subscription');
+      if (!tracks.length && !result.sessionDescription) {
+        s.pending = false;
+        return { tracks: [] };
+      }
+      if (result.sessionDescription?.type !== 'offer') throw new Error('Missing subscription offer');
       return { sessionDescription: result.sessionDescription, tracks };
     }
     if (action === 'answer') {
@@ -203,3 +220,4 @@ export class RadioRoom {
     if (this.members().length || tickets.size) await this.ctx.storage.setAlarm(Date.now() + 60_000);
   }
 }
+

@@ -216,7 +216,10 @@ export class Room {
       await this.rpc('published');
       }
       this.assertOpen();
-      this.heartbeat = setInterval(() => { void this.rpc('ping').catch(() => this.disconnect()); }, 25_000);
+      this.heartbeat = setInterval(() => {
+        // Retry unavailable remote tracks without dropping healthy audio or PTT.
+        void this.rpc('ping').then(() => this.reconcile()).catch(() => this.disconnect());
+      }, 25_000);
       this.meterTimer = setInterval(() => this.measure(), 150);
       await this.reconcile();
       this.assertOpen();
