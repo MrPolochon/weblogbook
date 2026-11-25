@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { redirect } from 'next/navigation';
 import GroundNavBar from '@/components/GroundNavBar';
 import InactivityLogout from '@/components/InactivityLogout';
+import GroundInactivityGuard from '@/components/GroundInactivityGuard';
 
 export const dynamic = 'force-dynamic';
 
@@ -72,7 +73,8 @@ export default async function GroundLayout({
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#070b14]" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-      <InactivityLogout />
+      {!groundSession && <InactivityLogout />}
+      <GroundInactivityGuard userId={user.id} sessionId={groundSession?.id ?? null}>
       <GroundNavBar
         isAdmin={isAdmin}
         sessionInfo={groundSession ? { aeroport: groundSession.aeroport, started_at: groundSession.started_at } : null}
@@ -82,6 +84,8 @@ export default async function GroundLayout({
       <main className="flex-1 mx-auto w-full max-w-7xl px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8">
         {children}
       </main>
+      </GroundInactivityGuard>
     </div>
   );
 }
+

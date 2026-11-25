@@ -74,24 +74,32 @@ export async function POST(request: Request) {
   return NextResponse.json({ session });
 }
 
-export async function DELETE() {
+export async function DELETE(request: Request) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
   const admin = createAdminClient();
 
-  // Récupérer la session avant suppression
-  const { data: session } = await admin
+  // Scope automatic expiry to the original duty session, never a newer replacement.
+  const sessionId = new URL(request.url).searchParams.get('sessionId');
+  if (sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(sessionId)) {
+    return NextResponse.json({ error: 'Session invalide' }, { status: 400 });
+  }
+  let query = admin
     .from('ground_sessions')
-    .select('aeroport')
-    .eq('user_id', user.id)
-    .maybeSingle();
+    .select('id, aeroport')
+    .eq('user_id', user.id);
+  if (sessionId) query = query.eq('id', sessionId);
+  const { data: session, error: sessionError } = await query.maybeSingle();
+  if (sessionError) return NextResponse.json({ error: 'Impossible de vérifier le service' }, { status: 500 });
+  if (!session) return NextResponse.json({ success: true });
+  const aeroport = session.aeroport;
 
-  const aeroport = session?.aeroport;
-
-  // Supprimer la session
-  await admin.from('ground_sessions').delete().eq('user_id', user.id);
+  const { data: deleted, error: deleteError } = await admin.from('ground_sessions').delete()
+    .eq('user_id', user.id).eq('id', session.id).select('id').maybeSingle();
+  if (deleteError) return NextResponse.json({ error: 'Impossible de fermer le service' }, { status: 500 });
+  if (!deleted) return NextResponse.json({ success: true });
 
   if (!aeroport) return NextResponse.json({ success: true });
 
@@ -132,3 +140,4 @@ export async function DELETE() {
 
   return NextResponse.json({ success: true });
 }
+
