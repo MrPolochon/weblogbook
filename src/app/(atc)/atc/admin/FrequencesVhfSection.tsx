@@ -11,9 +11,10 @@ interface FreqEntry {
   aeroport: string;
   position: string;
   frequency: string;
+  official?: boolean;
 }
 
-const POSITIONS = [...ATC_POSITIONS, 'AFIS'] as const;
+const POSITIONS = [...ATC_POSITIONS, 'AFIS', 'RAMP'] as const;
 const AEROPORTS = Array.from(CODES_OACI_VALIDES).sort();
 
 export default function FrequencesVhfSection() {
@@ -151,8 +152,9 @@ export default function FrequencesVhfSection() {
         Fréquences VHF
       </h2>
       <p className="text-sm text-slate-600 mb-4">
-        Assignez une fréquence VHF unique à chaque position ATC/AFIS par aéroport.
-        Chaque fréquence ne peut être attribuée qu&apos;à une seule position.
+        Fréquences officielles ATC / AFIS et canaux RAMP du Ground Crew.
+        Les postes officiels suivent la fiche publiée ; les autres attributions restent modifiables ici.
+        Le changement temporaire de fréquence reste libre dans chaque COM box.
       </p>
 
       {error && (
@@ -269,7 +271,8 @@ export default function FrequencesVhfSection() {
                         <span className="text-sm font-mono text-emerald-600 font-semibold">{f.frequency}</span>
                       )}
                     </div>
-                    {editingId !== f.id && (
+                    {f.official && <span className="text-xs text-slate-500">Officielle</span>}
+                    {!f.official && editingId !== f.id && (
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => { setEditingId(f.id); setEditFrequency(f.frequency); }}

@@ -33,8 +33,8 @@ export default function DownloadPage() {
       platform: 'Windows',
       icon: Monitor,
       description: 'WebLogBook et radio VHF avec push-to-talk global pour Windows 10/11',
-      version: 'v1.5.1 — Disponible',
-      downloadUrl: 'https://github.com/MrPolochon/weblogbook/releases/download/v1.5.1/VHF-Radio-Setup-1.5.1.exe',
+      version: 'v1.5.2 — Disponible',
+      downloadUrl: 'https://github.com/MrPolochon/weblogbook/releases/download/v1.5.2/VHF-Radio-Setup-1.5.2.exe',
       color: 'from-blue-500 to-indigo-600',
       bgColor: 'bg-blue-950/30',
       borderColor: 'border-blue-800',
@@ -242,3 +242,4 @@ export default function DownloadPage() {
     </div>
   );
 }
+

@@ -7,6 +7,7 @@ import { Flame, FileText, Mail, LogOut, Clock, Plane, MapPin, User, LayoutDashbo
 import { createClient } from '@/lib/supabase/client';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import SpaceNavHeader, { SPACE_NAV_BUTTON } from '@/components/SpaceNavHeader';
+import StationComBox from '@/components/StationComBox';
 import { SIAVI_WORKSPACES } from '@/lib/siavi/workspaces';
 import { cn } from '@/lib/utils';
 
@@ -78,7 +79,7 @@ export default function SiaviNavBar({ isAdmin, isChief, enService, estAfis, sess
   return (
     <SpaceNavHeader className="border-slate-700/50 bg-[#0b0e1a] shadow-lg">
       <div className="mx-auto flex min-h-14 max-w-screen-2xl flex-wrap items-center justify-between gap-2 px-3 py-2 sm:px-4">
-        <nav aria-label="Navigation SIAVI" className="flex min-w-0 items-center gap-2">
+        <nav aria-label="Navigation SIAVI" className="flex flex-wrap min-w-0 items-center gap-2">
           <Link href="/siavi" aria-label="Accueil et choix de fonction SIAVI" className="flex shrink-0 items-center gap-2 rounded-xl border border-red-800/40 bg-red-950/40 px-3 py-2 text-sm font-bold text-red-200">
             <Flame className="h-4 w-4" /><span>Accueil SIAVI</span>
           </Link>
@@ -95,6 +96,7 @@ export default function SiaviNavBar({ isAdmin, isChief, enService, estAfis, sess
             </div>}
           </div>
 
+          {enService && estAfis && sessionInfo && <StationComBox aeroport={sessionInfo.aeroport} position="AFIS" />}
         </nav>
         <div className="order-3 flex w-full items-center justify-center gap-2 text-xs sm:order-none sm:w-auto" aria-label="État du service">
           {isMedevac ? <span className="rounded-xl border border-rose-500/40 bg-rose-950/50 px-3 py-1.5 text-rose-200">Équipage de vol · MEDEVAC</span> : enService && sessionInfo ? <div className="flex items-center gap-2 rounded-xl border border-emerald-800/60 bg-emerald-950/50 px-3 py-1.5 text-emerald-200">

@@ -10,6 +10,7 @@ import {
   MapPin, Clock, ChevronDown, Power, Loader2, CalendarDays,
 } from 'lucide-react';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
+import StationComBox from '@/components/StationComBox';
 import { cn } from '@/lib/utils';
 
 // ── Minuterie session ─────────────────────────────────────────────────────────
@@ -99,14 +100,16 @@ export default function GroundNavBar({
 
   return (
     <SpaceNavHeader className={headerBg}>
-      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 sm:gap-5 flex-wrap sm:flex-nowrap py-2 sm:py-0 sm:h-14">
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between gap-3 px-4 sm:px-5 xl:px-6 flex-wrap py-2 min-h-14">
 
         {/* Logo + navigation */}
-        <nav className="flex flex-nowrap items-center gap-3 overflow-x-auto overflow-y-visible sm:overflow-visible whitespace-nowrap scrollbar-hide">
+        <nav className="flex flex-wrap items-center gap-2 min-w-0" aria-label="Navigation Ground Crew">
           <div className="flex items-center gap-2 rounded-xl border border-emerald-800/40 bg-emerald-900/30 px-3 py-2 flex-shrink-0">
             <Wrench className="h-4 w-4 text-emerald-400" />
             <span className="text-sm font-bold text-emerald-200 hidden sm:inline">Ground Crew</span>
           </div>
+
+          {sessionInfo && <StationComBox aeroport={sessionInfo.aeroport} position="RAMP" />}
 
           <Link
             href="/ground"

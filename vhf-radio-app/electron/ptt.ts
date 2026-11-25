@@ -1,8 +1,8 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron';
 import * as path from 'node:path';
+import { PTT_KEY_ARGUMENTS, isPttKeyCode } from './ptt-keys';
 
-const keys: Record<string, number> = { Space: 32, ControlRight: 163, KeyV: 86 };
 const origins = new Set(['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com']);
 export function installPtt(window: BrowserWindow) {
   let child: ChildProcessWithoutNullStreams | null = null;
@@ -15,9 +15,9 @@ export function installPtt(window: BrowserWindow) {
         !origins.has(new URL(event.senderFrame.url).origin)) return false;
     stop();
     if (code === '') return true;
-    if (process.platform !== 'win32' || typeof code !== 'string' || !Object.prototype.hasOwnProperty.call(keys, code)) return false;
+    if (process.platform !== 'win32' || typeof code !== 'string' || !isPttKeyCode(code)) return false;
     const executable = path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, '..'), 'native-bin', 'PttKey.exe');
-    const processHandle = spawn(executable, [String(keys[code]), String(process.pid)], { windowsHide: true, stdio: 'pipe' });
+    const processHandle = spawn(executable, [PTT_KEY_ARGUMENTS[code], String(process.pid)], { windowsHide: true, stdio: 'pipe' });
     child = processHandle;
     let buffer = '';
     last = Date.now();

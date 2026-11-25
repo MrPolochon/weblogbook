@@ -1,3 +1,4 @@
+import { lookupRadioFrequency } from '@/lib/radio-directory';
 export const dynamic = 'force-dynamic';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -648,11 +649,7 @@ export async function POST(request: Request) {
 
     // Infos pour le BRIA : nom ATC, position, fréquence (ex: "Contactez Jean-Marie ITKO Tour sur 118 décimal 750")
     const { data: holderProfile } = await admin.from('profiles').select('identifiant').eq('id', holder.user_id).single();
-    const { data: vhfFreq } = await admin.from('vhf_position_frequencies')
-      .select('frequency')
-      .eq('aeroport', holder.aeroport)
-      .eq('position', holder.position)
-      .maybeSingle();
+    const vhfFreq = { frequency: await lookupRadioFrequency(admin, holder.aeroport, holder.position) };
     const POSITION_LABELS: Record<string, string> = {
       Delivery: 'Livraison', Clairance: 'Clairance', Ground: 'Sol', Tower: 'Tour',
       DEP: 'Départs', APP: 'Approche', Center: 'Centre', AFIS: 'AFIS',

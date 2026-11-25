@@ -3,6 +3,10 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 const fs = require('node:fs');
 const ts = require('typescript');
+const keyModule = { exports: {} };
+new Function('module','exports',ts.transpileModule(fs.readFileSync('vhf-radio-app/electron/ptt-keys.ts','utf8'),{
+  compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022},
+}).outputText)(keyModule,keyModule.exports);
 
 function harness() {
   const children = [], states = [], timers = new Set();
@@ -14,16 +18,16 @@ function harness() {
   const electron = { app: { isPackaged: true }, powerMonitor, ipcMain: {
     handle: (_name, callback) => { configure = callback; }, removeHandler() {},
   } };
-  const spawn = () => {
+  const spawn = (_executable, args) => {
     const child = Object.assign(new EventEmitter(), { stdout: Object.assign(new EventEmitter(), { setEncoding() {} }), kill() { this.killed = true; } });
-    children.push(child); queueMicrotask(() => child.emit('spawn')); return child;
+    child.args = args; children.push(child); queueMicrotask(() => child.emit('spawn')); return child;
   };
   const code = ts.transpileModule(fs.readFileSync('vhf-radio-app/electron/ptt.ts','utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
   }).outputText;
   const mod = { exports: {} };
   new Function('require','module','exports','__dirname','process','setInterval','clearInterval','Date',code)(
-    name => name === 'electron' ? electron : name === 'node:child_process' ? { spawn } : require(name),
+    name => name === './ptt-keys' ? keyModule.exports : name === 'electron' ? electron : name === 'node:child_process' ? { spawn } : require(name),
     mod,mod.exports,'C:/test/electron',{platform:'win32',pid:123,resourcesPath:'C:/test/resources'},
     fn => { timers.add(fn); return fn; }, fn => timers.delete(fn), { now: () => now });
   mod.exports.installPtt(window);
@@ -55,4 +59,15 @@ test('untrusted frames, unsupported keys and malformed signals cannot arm global
   assert.equal(await h.configure('shell-command'),false); assert.equal(h.children.length,0);
   await h.configure('KeyV'); h.children[0].stdout.emit('data','invalid\n');
   assert.equal(h.children[0].killed,true); assert.equal(h.states.at(-1),false);
+});
+
+test('custom keys use physical letter positions and support function, modifier and keypad keys',async()=>{
+  const h=harness();
+  for (const [code,arg] of [['KeyQ','scan:16'],['Digit1','scan:2'],['F12','123'],['F24','135'],['ShiftRight','161'],['Numpad8','104'],['IntlBackslash','scan:86']]) {
+    assert.equal(await h.configure(code),true,code);
+    assert.equal(h.children.at(-1).args[0],arg);
+  }
+  assert.equal(await h.configure('Escape'),false);
+  assert.equal(await h.configure('MetaLeft'),false);
+  assert.equal(await h.configure('__proto__'),false);
 });

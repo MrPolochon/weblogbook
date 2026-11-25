@@ -1,6 +1,6 @@
 {
   "name": "vhf-radio",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "WebLogbook VHF Radio — Application radio standalone",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -34,3 +34,4 @@
     "wait-on": "^8.0.3"
   }
 }
+
