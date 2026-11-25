@@ -6,11 +6,11 @@ const lib = { exports: {} };
 new Function('exports', ts.transpileModule(fs.readFileSync('src/lib/youtube-player.ts','utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText)(lib.exports);
 
 async function harness({ reduced = false, delayed = false } = {}) {
-  let effect, options, resolveApi, destroyed = 0, muted = true, playing = 0, refs = 0;
+  let effect, options, resolveApi, destroyed = 0, muted = true, playing = 0, refs = 0, volume = 0;
   const listeners = new Map();
   const react = { useRef: value => ({ current: refs++ === 0 ? { appendChild() {} } : value }), useState: value => [value, () => {}], useCallback: fn => fn, useEffect: fn => { effect = fn; } };
   const jsx = (type, props) => ({ type, props });
-  const player = { playVideo() { playing++; }, pauseVideo() {}, mute() { muted = true; }, unMute() { muted = false; }, setVolume() {}, destroy() { destroyed++; }, getIframe: () => ({}) };
+  const player = { playVideo() { playing++; }, pauseVideo() {}, mute() { muted = true; }, unMute() { muted = false; }, setVolume(value) { volume = value; }, destroy() { destroyed++; }, getIframe: () => ({}) };
   const api = { Player: function(_mount, opts) { options = opts; return player; } };
   const promise = delayed ? new Promise(r => { resolveApi = r; }) : Promise.resolve(api);
   const deps = { react, 'react/jsx-runtime': { jsx, jsxs: jsx }, '@/lib/youtube-player': { ...lib.exports, loadYoutubePlayer: () => promise } };
@@ -19,10 +19,10 @@ async function harness({ reduced = false, delayed = false } = {}) {
   new Function('require','module','exports','window','document','Element',code)(n => deps[n], mod, mod.exports,
     { matchMedia: () => ({ matches: reduced }), location: { origin: 'https://site.test' } },
     { createElement: () => ({}), addEventListener: (k,v) => listeners.set(k,v), removeEventListener: k => listeners.delete(k) }, class Element {});
-  mod.exports.default(); const dispose = effect(); await Promise.resolve();
+  const tree = mod.exports.default(); const dispose = effect(); await Promise.resolve();
   return { ready: () => options.events.onReady({ target: player }), click: () => listeners.get('click')({ isTrusted: true }),
     options: () => options, playing: () => playing, muted: () => muted, destroyed: () => destroyed,
-    dispose, listeners, resolve: async () => { resolveApi(api); await Promise.resolve(); } };
+    tree, volume: () => volume, dispose, listeners, resolve: async () => { resolveApi(api); await Promise.resolve(); } };
 }
 test('first page interaction enables music once; later clicks never pause and ending repeats the same video', async () => {
   const h = await harness(); h.ready(); assert.equal(h.muted(), true);
@@ -56,4 +56,17 @@ test('caption modules are unloaded when available without interrupting unsupport
   assert.equal(calls, 1);
   assert.doesNotThrow(() => lib.exports.disableYoutubeCaptions({}));
   assert.doesNotThrow(() => lib.exports.disableYoutubeCaptions({ getOptions() { throw Error(); } }));
+});
+
+
+test('the only playback control is a volume slider bounded to 10–100 percent', async () => {
+  const h = await harness(); h.ready(); const nodes = [];
+  function walk(n) { if (Array.isArray(n)) return n.forEach(walk); if (!n || typeof n !== 'object') return; nodes.push(n); walk(n.props?.children); }
+  walk(h.tree);
+  assert.equal(nodes.filter(n => n.type === 'button' || n.type === 'a').length, 0);
+  const slider = nodes.find(n => n.type === 'input');
+  assert.equal(slider.props.min, '10'); assert.equal(slider.props.max, '100');
+  slider.props.onChange({ target: { value: '0' } }); assert.equal(h.volume(), 10); assert.equal(h.muted(), false);
+  slider.props.onChange({ target: { value: '200' } }); assert.equal(h.volume(), 100);
+  slider.props.onChange({ target: { value: '42' } }); assert.equal(h.volume(), 42); h.dispose();
 });

@@ -433,7 +433,7 @@ function LoginPageContent() {
       
 
       
-      <div className="login-content relative z-10 w-full max-w-lg">
+      <div className="login-content relative z-10 w-full max-w-lg" style={{ paddingBottom: 64 }}>
         {messageParam === 'discord-not-linked' && <p role="alert" className="rounded-lg bg-red-950/70 p-3 text-sm text-red-200">Ce Discord n’est lié à aucun compte. Connectez-vous avec votre identifiant puis liez Discord depuis votre profil.</p>}
         {/* Logo / Titre */}
         <div className="login-heading text-center mb-3">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { disableYoutubeCaptions, loadYoutubePlayer, type YoutubePlayer } from '@/lib/youtube-player';
 
 export const LOGIN_CHRISTMAS_VIDEO = 'vf4ZXBzbAio';
@@ -10,6 +10,8 @@ export default function LoginChristmasVideo() {
   const player = useRef<YoutubePlayer | null>(null);
   const activated = useRef(false);
   const paused = useRef(false);
+  const volumeRef = useRef(35);
+  const [volume, setVolume] = useState(35);
 
   const startSound = useCallback(() => {
     const current = player.current;
@@ -44,7 +46,7 @@ export default function LoginChristmasVideo() {
             const frame = event.target.getIframe();
             frame.title = 'Darlene Love — Christmas (Baby Please Come Home)';
             frame.tabIndex = -1;
-            event.target.setVolume(35); event.target.mute();
+            event.target.setVolume(volumeRef.current); event.target.mute();
             if (clicked) startSound();
             else if (!reducedMotion) event.target.playVideo();
             else { paused.current = true; }
@@ -77,12 +79,23 @@ export default function LoginChristmasVideo() {
     };
   }, [startSound]);
 
-  return (
+  return <>
     <div className="pointer-events-none fixed inset-0 overflow-hidden" aria-hidden="true">
       <div ref={container} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{ width: 'max(100vw, 177.78vh)', height: 'max(100vh, 56.25vw)' }} />
       <div className="absolute inset-0 bg-gradient-to-b from-slate-950/45 via-slate-950/55 to-slate-950/80" />
     </div>
-  );
+    <label className="fixed bottom-3 right-3 z-30 flex items-center gap-3 rounded-xl border border-white/15 bg-slate-950/85 px-4 py-3 text-xs text-white shadow-lg backdrop-blur-md">
+      <span>Volume</span>
+      <input aria-label="Volume de la musique" type="range" min="10" max="100" step="1" value={volume}
+        className="w-28 accent-emerald-400 sm:w-36" onChange={event => {
+          const requested = Number(event.target.value);
+          const next = Number.isFinite(requested) ? Math.max(10, Math.min(100, requested)) : 10;
+          volumeRef.current = next; setVolume(next); player.current?.setVolume(next);
+          if (!activated.current) startSound();
+        }} />
+      <span className="w-9 text-right tabular-nums">{volume} %</span>
+    </label>
+  </>;
 }
 
