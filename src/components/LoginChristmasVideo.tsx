@@ -10,8 +10,8 @@ export default function LoginChristmasVideo() {
   const player = useRef<YoutubePlayer | null>(null);
   const activated = useRef(false);
   const paused = useRef(false);
-  const volumeRef = useRef(35);
-  const [volume, setVolume] = useState(35);
+  const volumeRef = useRef(10);
+  const [volume, setVolume] = useState(10);
 
   const startSound = useCallback(() => {
     const current = player.current;

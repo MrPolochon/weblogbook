@@ -60,7 +60,7 @@ test('caption modules are unloaded when available without interrupting unsupport
 
 
 test('the only playback control is a volume slider bounded to 10–100 percent', async () => {
-  const h = await harness(); h.ready(); const nodes = [];
+  const h = await harness(); h.ready(); assert.equal(h.volume(), 10); const nodes = [];
   function walk(n) { if (Array.isArray(n)) return n.forEach(walk); if (!n || typeof n !== 'object') return; nodes.push(n); walk(n.props?.children); }
   walk(h.tree);
   assert.equal(nodes.filter(n => n.type === 'button' || n.type === 'a').length, 0);
