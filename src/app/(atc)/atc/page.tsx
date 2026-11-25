@@ -1,3 +1,4 @@
+import { publishedRadioAssignments } from '@/lib/official-vhf';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { Radio, Plane, Clock, MapPin, Flame } from 'lucide-react';
@@ -225,10 +226,11 @@ export default async function AtcPage({ searchParams: searchParamsPromise }: { s
   // Récupérer TOUTES les fréquences VHF pour affichage dans la liste des positions
   const { data: allVhfFreqs } = await admin
     .from('vhf_position_frequencies')
-    .select('aeroport, position, frequency');
+    .select('id, aeroport, position, frequency');
   const vhfFreqMap = new Map<string, string>();
-  (allVhfFreqs || []).forEach(f => {
+  publishedRadioAssignments(allVhfFreqs || []).forEach(f => {
     vhfFreqMap.set(`${f.aeroport}-${f.position}`, f.frequency);
+    if (f.position === 'Delivery') vhfFreqMap.set(`${f.aeroport}-Clairance`, f.frequency);
   });
 
   // Grouper les sessions par aéroport

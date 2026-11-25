@@ -1,3 +1,4 @@
+import { lookupRadioFrequency } from '@/lib/radio-directory';
 import { medevacRoutingError } from '@/lib/siavi/mission-routing';
 export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
@@ -348,11 +349,7 @@ export async function POST(request: Request) {
       .eq('id', siavi_avion_id);
 
     const { data: holderProfile } = await admin.from('profiles').select('identifiant').eq('id', holder.user_id).single();
-    const { data: vhfFreq } = await admin.from('vhf_position_frequencies')
-      .select('frequency')
-      .eq('aeroport', holder.aeroport)
-      .eq('position', holder.position)
-      .maybeSingle();
+    const vhfFreq = { frequency: await lookupRadioFrequency(admin, holder.aeroport, holder.position) };
 
     const POSITION_LABELS: Record<string, string> = {
       Delivery: 'Livraison', Clairance: 'Clairance', Ground: 'Sol', Tower: 'Tour',

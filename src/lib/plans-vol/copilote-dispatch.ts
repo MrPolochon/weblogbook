@@ -1,3 +1,4 @@
+import { lookupRadioFrequency } from '@/lib/radio-directory';
 import { atcStationLabel } from '@/lib/atc-positions';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { notifyUser } from '@/lib/notifications';
@@ -165,12 +166,7 @@ export async function dispatchAfterCopiloteValidation(
   }
 
   const { data: holderProfile } = await admin.from('profiles').select('identifiant').eq('id', holder.user_id).single();
-  const { data: vhfFreq } = await admin
-    .from('vhf_position_frequencies')
-    .select('frequency')
-    .eq('aeroport', holder.aeroport)
-    .eq('position', holder.position)
-    .maybeSingle();
+  const vhfFreq = { frequency: await lookupRadioFrequency(admin, holder.aeroport, holder.position) };
   const posLabel = POSITION_LABELS[holder.position] || holder.position;
   return {
     kind: 'atc',

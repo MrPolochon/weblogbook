@@ -20,6 +20,7 @@ export default async function AtcDocumentsPage() {
   return (
     <div className="space-y-6">
       <TribunalJournalLink />
+      <Link href="/frequences-radio" className="block rounded-xl border border-sky-300 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-900">Fiche des fréquences officielles ATC / AFIS / RAMP · Lire / PDF</Link>
       <div>
         <h1 className="text-2xl font-semibold text-slate-900">Documents</h1>
         <p className="text-sm text-slate-500 mt-1">{totalFiles} document(s) disponible(s)</p>

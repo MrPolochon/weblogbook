@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import AtcPhonebookButton from '@/components/AtcPhonebookButton';
 import AtcTelephone from '@/components/AtcTelephone';
+import StationComBox from '@/components/StationComBox';
 import AtcAtisButton from '@/components/AtcAtisButton';
 import AdminSpaceSelector from '@/components/AdminSpaceSelector';
 import { cn } from '@/lib/utils';
@@ -135,8 +136,8 @@ export default function AtcNavBar({
 
   return (
     <SpaceNavHeader className={cn('atc-header', headerBg)}>
-      <div className="flex items-center justify-between gap-3 px-3 sm:px-4 h-14">
-        <nav className="flex items-center gap-1.5 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 sm:px-4 min-h-14">
+        <nav aria-label="Navigation ATC" className="flex flex-wrap items-center gap-1.5 min-w-0">
           <Link href="/atc" className="hidden sm:flex items-center gap-2 pr-2 mr-1 border-r border-slate-700/30 shrink-0">
             <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')}>
               <Radio className="h-4 w-4" />
@@ -188,6 +189,10 @@ export default function AtcNavBar({
               </div>
             )}
           </div>
+
+          {enService && sessionInfo && (
+            <StationComBox aeroport={sessionInfo.aeroport} position={sessionInfo.position} isDark={isDark} />
+          )}
 
           <Link href="/atc/notams" className={cn(linkBase, pathname.startsWith('/atc/notams') ? linkActive : linkInactive)}>
             <ScrollText className="h-4 w-4" />

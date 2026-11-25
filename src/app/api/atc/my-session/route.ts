@@ -1,3 +1,4 @@
+import { lookupRadioFrequency } from '@/lib/radio-directory';
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createBrowserClient } from '@supabase/supabase-js';
@@ -34,8 +35,8 @@ async function getAuthUser(request: NextRequest): Promise<{ id: string } | null>
 
 /**
  * GET /api/atc/my-session
- * Returns the current user's active ATC or AFIS session with its VHF frequency.
- * Query params: ?mode=atc or ?mode=afis
+ * Returns the current user's active ATC, AFIS or Ground Crew session with its VHF frequency.
+ * Query params: ?mode=atc, ?mode=afis or ?mode=ground
  */
 export async function GET(request: NextRequest) {
   try {
@@ -59,12 +60,7 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ session: null, frequency: null, noSession: true }, { headers: corsHeaders });
       }
 
-      const { data: vhfData } = await admin
-        .from('vhf_position_frequencies')
-        .select('frequency')
-        .eq('aeroport', atcSession.aeroport)
-        .eq('position', atcSession.position)
-        .maybeSingle();
+      const vhfData = { frequency: await lookupRadioFrequency(admin, atcSession.aeroport, atcSession.position) };
 
       return NextResponse.json({
         session: { aeroport: atcSession.aeroport, position: atcSession.position },
@@ -83,18 +79,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ session: null, frequency: null, noSession: true }, { headers: corsHeaders });
       }
 
-      const { data: vhfData } = await admin
-        .from('vhf_position_frequencies')
-        .select('frequency')
-        .eq('aeroport', afisSession.aeroport)
-        .eq('position', 'AFIS')
-        .maybeSingle();
+      const vhfData = { frequency: await lookupRadioFrequency(admin, afisSession.aeroport, 'AFIS') };
 
       return NextResponse.json({
         session: { aeroport: afisSession.aeroport, position: 'AFIS' },
         frequency: vhfData?.frequency || null,
         noSession: false,
       }, { headers: corsHeaders });
+    }
+
+    if (mode === 'ground') {
+      const { data: groundSession } = await admin.from('ground_sessions').select('aeroport').eq('user_id', user.id).maybeSingle();
+      if (!groundSession) return NextResponse.json({ session: null, frequency: null, noSession: true }, { headers: corsHeaders });
+      return NextResponse.json({ session: { aeroport: groundSession.aeroport, position: 'RAMP' },
+        frequency: await lookupRadioFrequency(admin, groundSession.aeroport, 'RAMP'), noSession: false }, { headers: corsHeaders });
     }
 
     // Pilot mode

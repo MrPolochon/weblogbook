@@ -9,11 +9,12 @@ export async function hasRadioFlight(userId: string): Promise<boolean> {
 }
 export async function canTransmitRadio(userId: string): Promise<boolean> {
   const admin = createAdminClient();
-  const [flight, atc, afis] = await Promise.all([
+  const [flight, atc, afis, ground] = await Promise.all([
     hasRadioFlight(userId),
     admin.from('atc_sessions').select('id').eq('user_id', userId).limit(1),
     admin.from('afis_sessions').select('id').eq('user_id', userId).eq('est_afis', true).limit(1),
+    admin.from('ground_sessions').select('id').eq('user_id', userId).limit(1),
   ]);
-  if (atc.error || afis.error) throw new Error('Vérification du poste radio indisponible.');
-  return flight || Boolean(atc.data?.length || afis.data?.length);
+  if (atc.error || afis.error || ground.error) throw new Error('Vérification du poste radio indisponible.');
+  return flight || Boolean(atc.data?.length || afis.data?.length || ground.data?.length);
 }

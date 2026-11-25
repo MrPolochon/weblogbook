@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient as createBrowserClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { isValidVhfFrequency } from '@/lib/vhf-frequencies';
+import { isOfficialAssignment, publishedRadioAssignments } from '@/lib/official-vhf';
 
 export const dynamic = 'force-dynamic';
 
@@ -58,9 +59,11 @@ export async function GET(request: Request) {
     }
 
     const { data, error } = await query;
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    if (error) return NextResponse.json({ error: error.message }, { status: 500, headers: corsHeaders });
 
-    return NextResponse.json(data || []);
+    const assignments = publishedRadioAssignments(data || []);
+    return NextResponse.json(aeroport ? assignments.filter(row => row.aeroport === aeroport.toUpperCase()) : assignments,
+      { headers: { ...corsHeaders, 'Cache-Control': 'no-store' } });
   } catch (e) {
     console.error('VHF frequencies GET:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
@@ -86,13 +89,20 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { aeroport, position, frequency } = body;
 
-    if (!aeroport || !position || !frequency) {
+    if (typeof aeroport !== 'string' || !aeroport.trim() || typeof position !== 'string' || !position.trim() || typeof frequency !== 'string' || !frequency) {
       return NextResponse.json({ error: 'aeroport, position et frequency requis' }, { status: 400 });
+    }
+
+    if (isOfficialAssignment(aeroport, position)) {
+      return NextResponse.json({ error: 'Ce poste suit la fiche officielle. Le réglage manuel reste disponible dans la COM box.' }, { status: 409 });
+    }
+    if (publishedRadioAssignments([]).some(row => row.frequency === frequency)) {
+      return NextResponse.json({ error: 'Cette fréquence est déjà réservée par la fiche officielle.' }, { status: 409 });
     }
 
     // Valider la fréquence
     if (!isValidVhfFrequency(frequency)) {
-      return NextResponse.json({ error: `Fréquence invalide : ${frequency}. Format attendu : XXX.YYY (118.000 à 132.975)` }, { status: 400 });
+      return NextResponse.json({ error: `Fréquence invalide : ${frequency}. Format attendu : XXX.YYY (118.000 à 136.990)` }, { status: 400 });
     }
 
     const { data, error } = await admin
@@ -142,8 +152,17 @@ export async function PATCH(request: Request) {
     const body = await request.json();
     const { id, frequency } = body;
 
-    if (!id || !frequency) {
+    if (typeof id !== 'string' || !id || typeof frequency !== 'string' || !frequency) {
       return NextResponse.json({ error: 'id et frequency requis' }, { status: 400 });
+    }
+
+    if (String(id).startsWith('official:')) {
+      return NextResponse.json({ error: 'Cette attribution appartient à la fiche officielle.' }, { status: 409 });
+    }
+    const { data: assignment } = await adminClient.from('vhf_position_frequencies').select('aeroport, position').eq('id', id).maybeSingle();
+    if (!assignment) return NextResponse.json({ error: 'Attribution introuvable' }, { status: 404 });
+    if (isOfficialAssignment(assignment.aeroport, assignment.position) || publishedRadioAssignments([]).some(row => row.frequency === frequency)) {
+      return NextResponse.json({ error: 'Ce poste ou cette fréquence est réservé par la fiche officielle.' }, { status: 409 });
     }
 
     if (!isValidVhfFrequency(frequency)) {
@@ -190,6 +209,15 @@ export async function DELETE(request: Request) {
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     if (!id) return NextResponse.json({ error: 'id requis' }, { status: 400 });
+
+    if (id.startsWith('official:')) {
+      return NextResponse.json({ error: 'Cette attribution appartient à la fiche officielle.' }, { status: 409 });
+    }
+    const { data: assignment } = await adminDel.from('vhf_position_frequencies').select('aeroport, position').eq('id', id).maybeSingle();
+    if (!assignment) return NextResponse.json({ error: 'Attribution introuvable' }, { status: 404 });
+    if (isOfficialAssignment(assignment.aeroport, assignment.position)) {
+      return NextResponse.json({ error: 'Cette attribution appartient à la fiche officielle.' }, { status: 409 });
+    }
 
     const { error } = await adminDel
       .from('vhf_position_frequencies')
