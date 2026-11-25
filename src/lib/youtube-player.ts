@@ -6,6 +6,8 @@ export interface YoutubePlayer {
   setVolume(volume: number): void;
   destroy(): void;
   getIframe(): HTMLIFrameElement;
+  getOptions?(): string[];
+  unloadModule?(module: string): void;
 }
 export interface YoutubeApi {
   Player: new (element: HTMLElement, options: {
@@ -16,8 +18,16 @@ export interface YoutubeApi {
       onStateChange: (event: { data: number }) => void;
       onError: () => void;
       onAutoplayBlocked: () => void;
+      onApiChange?: () => void;
     };
   }) => YoutubePlayer;
+}
+
+/** Caption modules can load after ready or again when the video loops. */
+export function disableYoutubeCaptions(player: YoutubePlayer | null) {
+  try {
+    if (player?.getOptions?.().includes('captions')) player.unloadModule?.('captions');
+  } catch { /* Optional player capabilities must never interrupt playback. */ }
 }
 type YoutubeWindow = Window & { YT?: YoutubeApi; onYouTubeIframeAPIReady?: () => void };
 let pending: Promise<YoutubeApi> | null = null;
