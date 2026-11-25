@@ -1,0 +1,29 @@
+const {test}=require('node:test');
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const ts=require('typescript');
+function receiver(t){
+ const oscillators=[];
+ const param=()=>({value:0,setValueAtTime(v){this.value=v},linearRampToValueAtTime(v){this.value=v},exponentialRampToValueAtTime(v){this.value=v},cancelScheduledValues(){}});
+ const node=()=>({gain:param(),frequency:param(),Q:param(),connect(target){this.target=target;return target},disconnect(){this.disconnected=true},start(){this.started=true},stop(){this.stopped=true;this.onended?.()}});
+ class AudioContext {state='running';currentTime=0;sampleRate=8000;destination={};createGain(){return node()}createOscillator(){const n=node();oscillators.push(n);return n}createBiquadFilter(){return node()}createBufferSource(){return node()}createBuffer(_,size){return{getChannelData:()=>new Float32Array(size)}}async resume(){}async close(){this.state='closed'}}
+ const code=ts.transpileModule(fs.readFileSync('src/lib/radio-squelch.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;
+ const m={exports:{}};new Function('module','exports','AudioContext',code)(m,m.exports,AudioContext);
+ const sound=new m.exports.RadioSquelch(0.8);t.after(()=>sound.close());return{sound,oscillators};
+}
+test('one voice is clean; overlapping voices add one tone and leave the voice graph untouched',t=>{
+ const {sound,oscillators}=receiver(t);sound.setReceive(true,1);assert.equal(oscillators.length,0);
+ sound.setReceive(true,2);assert.equal(oscillators.length,1);assert.equal(oscillators[0].frequency.value,2100);
+ sound.setReceive(true,3);assert.equal(oscillators.length,1,'do not stack tones with more speakers');
+ sound.setReceive(true,1);assert.equal(oscillators[0].stopped,true);
+});
+test('local transmission counts once and the tone ends on release',t=>{
+ const {sound,oscillators}=receiver(t);sound.setTransmit(true);assert.equal(oscillators.length,0);
+ sound.setReceive(true,1);assert.equal(oscillators.length,1);sound.setTransmit(false);assert.equal(oscillators[0].stopped,true);
+});
+test('effects switch, radio volume and disconnect control collision audio',t=>{
+ const {sound,oscillators}=receiver(t);sound.setEnabled(false);sound.setReceive(true,2);assert.equal(oscillators.length,0);
+ sound.setEnabled(true);assert.equal(oscillators.length,1);sound.setVolume(0);assert.equal(oscillators[0].target.target.gain.value,0);
+ sound.setEnabled(false);assert.equal(oscillators[0].stopped,true);
+ sound.setEnabled(true);sound.close();assert.equal(oscillators[1].stopped,true);
+});
