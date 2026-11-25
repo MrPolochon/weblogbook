@@ -235,7 +235,8 @@ export function useVhfRadio(participantName: string, observer = false) {
       const updateParticipants = () => {
         const peers = Array.from(activeRoom.remoteParticipants.values());
         setParticipants(peers.map(p => ({ id: p.identity, name: p.name || p.identity, speaking: p.isSpeaking })));
-        soundRef.current?.setReceive(peers.some(p => p.isSpeaking));
+        const speakers = peers.filter(p => p.isSpeaking).length;
+        soundRef.current?.setReceive(speakers > 0, speakers);
       };
       room.on(RoomEvent.ParticipantConnected, updateParticipants);
       room.on(RoomEvent.ParticipantDisconnected, updateParticipants);
@@ -243,6 +244,7 @@ export function useVhfRadio(participantName: string, observer = false) {
       room.on(RoomEvent.ConnectionStateChanged, state => {
         setConnection(state);
         if (state !== ConnectionState.Connected) {
+            soundRef.current?.setReceive(false, 0);
           // A reconnect never restores an open mic or a held PTT automatically.
           void setMicMode('muted');
         }
@@ -334,3 +336,4 @@ export function useVhfRadio(participantName: string, observer = false) {
     press, release, releaseAll,
   };
 }
+
