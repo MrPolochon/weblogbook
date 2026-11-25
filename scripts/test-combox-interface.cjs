@@ -78,6 +78,7 @@ function harness(t, { defaultFrequency = '118.925', desktop = null } = {}) {
   const ComBox = load('src/components/ComBox.tsx', {
     react, 'react/jsx-runtime': { jsx, jsxs: jsx }, 'react-dom': { createPortal: child => child },
     'next/navigation': { usePathname: () => '/atc' }, 'lucide-react': {}, '@/components/FrequencyKnob': () => null,
+    '@/components/DesktopUpdateStatus': () => null,
     '@/lib/radio-desktop': { radioDesktop: () => desktop }, '@/lib/cloudflare/client': { ConnectionState: { Connected: 'connected', Disconnected: 'disconnected' } },
     '@/hooks/useVhfRadio': { useVhfRadio: () => radio }, '@/lib/vhf-frequencies': load('src/lib/vhf-frequencies.ts'),
     '@/lib/radio-transmission': { isRadioTypingTarget: target => target?.tagName === 'INPUT' }, '@/lib/radio-shortcut': shortcuts,

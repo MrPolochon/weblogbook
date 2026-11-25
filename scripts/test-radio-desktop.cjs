@@ -71,3 +71,14 @@ test('custom keys use physical letter positions and support function, modifier a
   assert.equal(await h.configure('MetaLeft'),false);
   assert.equal(await h.configure('__proto__'),false);
 });
+
+test('reported B F G T Y U O P keys all arm native PTT and forward press/release',async()=>{
+  const h=harness();
+  for(const [letter,scan] of Object.entries({B:48,F:33,G:34,T:20,Y:21,U:22,O:24,P:25})){
+    assert.equal(await h.configure('Key'+letter),true,letter);
+    const child=h.children.at(-1);
+    assert.equal(child.args[0],'scan:'+scan);
+    child.stdout.emit('data','1\n'); assert.equal(h.states.at(-1),true,letter+' down');
+    child.stdout.emit('data','0\n'); assert.equal(h.states.at(-1),false,letter+' up');
+  }
+});
