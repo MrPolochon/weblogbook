@@ -70,6 +70,8 @@ export default function AtcNavBar({
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
 
+  useEffect(() => { setAccountMenuOpen(false); }, [pathname]);
+
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       const targetNode = event.target as Node | null;
@@ -136,7 +138,7 @@ export default function AtcNavBar({
 
   return (
     <SpaceNavHeader className={cn('atc-header', headerBg)}>
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3 py-2 sm:px-4 min-h-14">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 sm:px-4 min-h-14">
         <nav aria-label="Navigation ATC" className="flex flex-wrap items-center gap-1.5 min-w-0">
           <Link href="/atc" className="hidden sm:flex items-center gap-2 pr-2 mr-1 border-r border-slate-700/30 shrink-0">
             <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg', isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-100 text-emerald-700')}>
@@ -218,61 +220,31 @@ export default function AtcNavBar({
           )}
         </nav>
 
-        <div className="hidden md:flex justify-center min-w-0">
+        <div className="hidden xl:flex justify-center min-w-0 shrink-0">
           {sessionInfo && (
             <AtcSessionCompte aeroport={sessionInfo.aeroport} position={sessionInfo.position} startedAt={sessionInfo.started_at} isDark={isDark} />
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={toggleTheme}
-            className={cn('p-2 rounded-lg hidden sm:inline-flex', isDark ? 'text-amber-300 hover:bg-slate-800' : 'text-slate-600 hover:bg-slate-100')}
-            title={isDark ? 'Mode jour' : 'Mode nuit'}
-          >
-            {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </button>
-          {gradeNom && (
-            <span className={cn('hidden lg:inline text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-md', isDark ? 'bg-slate-800 text-slate-300' : 'bg-slate-100 text-slate-600')}>
-              {gradeNom}
-            </span>
-          )}
-          <div className="hidden sm:flex items-center gap-1">
-            <Link href="/atc/compte" className={cn(linkBase, pathname === '/atc/compte' ? linkActive : linkInactive)} title="Mon compte">
-              <User className="h-4 w-4" />
-            </Link>
-            <Link href="/carte-atc" className={cn(linkBase, isDark ? 'text-emerald-300 hover:bg-emerald-950' : 'text-emerald-700 hover:bg-emerald-50')} title="Carte œil du web">
-              <span className="text-[11px] font-black tracking-widest">ODW</span>
-            </Link>
-            {isAdmin && (
-              <AdminSpaceSelector triggerClassName={cn(linkBase, isDark ? 'text-purple-300 hover:bg-purple-950' : 'text-purple-700 hover:bg-purple-50')} />
-            )}
-            {!enService && (
-              <button type="button" onClick={handleLogout} className={cn(linkBase, isDark ? 'text-slate-300 hover:text-red-400' : 'text-slate-700 hover:text-red-600')}>
-                <LogOut className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-          <button
-            type="button"
-            onClick={() => setAccountMenuOpen((prev) => !prev)}
-            className={cn('sm:hidden p-2 rounded-lg', isDark ? 'text-slate-300' : 'text-slate-700')}
-            aria-label="Menu compte"
-          >
-            <ChevronDown className={cn('h-5 w-5 transition-transform', accountMenuOpen && 'rotate-180')} />
-          </button>
-        </div>
+        <button type="button" onClick={() => setAccountMenuOpen(value => !value)}
+          aria-label="Options du poste ATC" aria-expanded={accountMenuOpen} aria-controls="atc-options"
+          className={cn(linkBase, 'shrink-0', accountMenuOpen ? linkActive : linkInactive)}>
+          <User className="h-4 w-4" /><span className="hidden 2xl:inline">Options</span>
+          <ChevronDown className={cn('h-3 w-3 transition-transform', accountMenuOpen && 'rotate-180')} />
+        </button>
       </div>
 
       {sessionInfo && (
-        <div className="md:hidden px-3 pb-2">
+        <div className="xl:hidden px-3 pb-2 overflow-x-auto">
           <AtcSessionCompte aeroport={sessionInfo.aeroport} position={sessionInfo.position} startedAt={sessionInfo.started_at} isDark={isDark} />
         </div>
       )}
 
       {accountMenuOpen && (
-        <div className="sm:hidden px-3 pb-3 grid gap-1.5">
+        <div id="atc-options" className="mx-3 mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-slate-500/30 p-2" aria-label="Options du poste">
+          {gradeNom && <span className="px-2 text-xs font-semibold">{gradeNom}</span>}
+          <Link href="/carte-atc" className={cn(linkBase, linkInactive)}>ODW</Link>
+          {isAdmin && <AdminSpaceSelector triggerClassName={cn(linkBase, linkInactive)} />}
           <button type="button" onClick={toggleTheme} className={cn('flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium', isDark ? 'bg-slate-800 text-amber-300' : 'bg-slate-100 text-slate-700')}>
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             {isDark ? 'Mode jour' : 'Mode nuit'}
