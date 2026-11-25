@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { usePathname } from 'next/navigation';
 import FrequencyKnob from '@/components/FrequencyKnob';
+import DesktopUpdateStatus from '@/components/DesktopUpdateStatus';
 import { radioDesktop } from '@/lib/radio-desktop';
 import { ConnectionState } from '@/lib/cloudflare/client';
 import { ArrowLeftRight, ChevronDown, Mic, MicOff, Radio, X } from 'lucide-react';
@@ -324,7 +325,8 @@ export default function ComBox({ participantName, station, placement = 'floating
             {shortcutError && <p role="alert" className="mt-2 text-amber-300">{shortcutError}</p>}
             <p className="mt-2 text-slate-400">{desktop ? 'PTT global Windows : garde cette fenêtre ouverte, même réduite, puis utilise la touche dans Roblox. Relâche-la pour couper la radio.' : 'Dans le navigateur, la touche fonctionne lorsque le site a le focus. Pour parler depuis Roblox, ouvre le site avec l’application Windows. Le micro ouvert reste actif en arrière-plan.'}</p>
             {desktopError && <p role="alert" className="mt-2 text-amber-300">{desktopError}</p>}
-            {!desktop && <a className="mt-2 inline-block text-sky-300 underline" href="https://github.com/MrPolochon/weblogbook/releases/tag/v1.5.2" target="_blank" rel="noreferrer">Application Windows · PTT global</a>}
+            {desktop && <DesktopUpdateStatus />}
+            {!desktop && <a className="mt-2 inline-block text-sky-300 underline" href="https://github.com/MrPolochon/weblogbook/releases/tag/v1.5.3" target="_blank" rel="noreferrer">Application Windows · PTT global</a>}
           </details>}
           {!toolbar && <p className="mt-3 text-xs text-slate-500">Discord reste ton cockpit. Le PTT n’ouvre que la radio du site. Utilise un casque pour éviter de retransmettre le son des haut-parleurs.</p>}
         </section>
