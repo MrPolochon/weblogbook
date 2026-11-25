@@ -4,8 +4,8 @@ const fs = require('node:fs');
 const { EventEmitter } = require('node:events');
 const ts = require('typescript');
 
-function harness(t) {
-  let checks = 0, installs = 0, reject = false;
+function harness(t, startupUrl) {
+  let checks = 0, installs = 0, reject = false, installFailure = false;
   const timers = new Set(), sent = [], handlers = new Map();
   const later = (fn, ms) => { const timer = { fn, ms }; timers.add(timer); return timer; };
   const ipcMain = Object.assign(new EventEmitter(), { handle: (name, fn) => handlers.set(name, fn), removeHandler: name => handlers.delete(name) });
@@ -18,7 +18,7 @@ function harness(t) {
   window.on('closed', () => { destroyed = true; });
   const autoUpdater = Object.assign(new EventEmitter(), {
     checkForUpdates: async () => { checks++; if (reject) throw Error('offline'); },
-    quitAndInstall: () => installs++,
+    quitAndInstall: () => { if (installFailure) throw Error('install failed'); installs++; },
   });
   const mod = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync('vhf-radio-app/electron/updates.ts', 'utf8'), {
@@ -27,11 +27,11 @@ function harness(t) {
   new Function('require', 'module', 'exports', '__dirname', 'process', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', code)(
     name => name === 'electron' ? { app: { getVersion: () => '1.5.3' }, ipcMain, powerMonitor } : name === 'electron-updater' ? { autoUpdater } : require(name),
     mod, mod.exports, '/app/dist-electron', { env: {} }, later, timer => timers.delete(timer), later, timer => timers.delete(timer));
-  const api = mod.exports.installDesktopUpdates(window);
+  const api = mod.exports.installDesktopUpdates(window, undefined, startupUrl);
   const event = { sender: webContents, senderFrame: frame };
   t.after(() => window.emit('closed'));
   return { api, autoUpdater, window, powerMonitor, ipcMain, sent, timers, event,
-    checks: () => checks, installs: () => installs, offline: value => { reject = value; },
+    failInstall: () => { installFailure = true; }, checks: () => checks, installs: () => installs, offline: value => { reject = value; },
     snapshot: event => handlers.get('updater:get-state')(event),
     async fire(ms) { const timer = [...timers].find(t => t.ms === ms); assert.ok(timer, 'scheduled timer exists'); timer.fn(); await Promise.resolve(); await Promise.resolve(); },
   };
@@ -109,4 +109,18 @@ test('the COM updater supports older installed clients and exposes the restart a
   function walk(value) { if (Array.isArray(value)) return value.forEach(walk); if (!value || typeof value !== 'object') return; nodes.push(value); walk(value.props?.children); }
   walk(tree);
   nodes.find(node => node.type === 'button').props.onClick(); assert.equal(installs, 1);
+});
+
+
+test('startup page can retry but arbitrary local/data pages cannot invoke updates', async t => {
+  const url = 'data:text/html;charset=utf-8,startup'; const h = harness(t, url);
+  h.event.senderFrame.url = url;
+  assert.ok(h.snapshot(h.event));
+  h.ipcMain.emit('updater:check', h.event); await Promise.resolve(); assert.equal(h.checks(), 1);
+  h.event.senderFrame.url = 'data:text/html,foreign'; assert.equal(h.snapshot(h.event), null);
+  h.ipcMain.emit('updater:check', h.event); assert.equal(h.checks(), 1);
+});
+test('installation exception becomes a recoverable error instead of a main-process crash', t => {
+  const h = harness(t); h.autoUpdater.emit('update-downloaded', { version: '1.5.7' }); h.failInstall();
+  assert.equal(h.api.install(), false); assert.equal(h.api.getState().status, 'error');
 });

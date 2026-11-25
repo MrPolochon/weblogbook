@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import type { DesktopUpdateState } from './update-state';
 
 /** Updates continue independently of the current page, COM panel and microphone state. */
-export function installDesktopUpdates(window: BrowserWindow, onState: (state: DesktopUpdateState) => void = () => {}) {
+export function installDesktopUpdates(window: BrowserWindow, onState: (state: DesktopUpdateState) => void = () => {}, startupUrl?: string) {
   const contents = window.webContents;
   let state: DesktopUpdateState = { status: 'idle', currentVersion: app.getVersion() };
   let checking = false, closed = false;
@@ -14,6 +14,7 @@ export function installDesktopUpdates(window: BrowserWindow, onState: (state: De
   const classicUrl = pathToFileURL(path.join(__dirname, '..', 'dist', 'index.html')).href;
   const trusted = (event: Electron.IpcMainEvent | Electron.IpcMainInvokeEvent) => {
     if (event.sender !== contents || event.senderFrame !== event.sender.mainFrame) return false;
+    if (startupUrl && event.senderFrame.url === startupUrl) return true;
     try {
       const url = new URL(event.senderFrame.url);
       if (['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com'].includes(url.origin)) return true;
@@ -32,7 +33,7 @@ export function installDesktopUpdates(window: BrowserWindow, onState: (state: De
   };
   const setState = (patch: Partial<DesktopUpdateState>) => { state = { ...state, ...patch }; send(); };
   const failed = () => {
-    if (closed || state.status === 'downloaded') return;
+    if (closed) return;
     setState({ status: 'error' });
     clearTimeout(retry);
     retry = setTimeout(() => { void check(); }, 5 * 60_000);
@@ -46,8 +47,7 @@ export function installDesktopUpdates(window: BrowserWindow, onState: (state: De
   }
   function install() {
     if (closed || state.status !== 'downloaded') return false;
-    autoUpdater.quitAndInstall(false, true);
-    return true;
+    try { autoUpdater.quitAndInstall(false, true); return true; } catch { failed(); return false; }
   }
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;

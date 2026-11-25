@@ -296,7 +296,7 @@ export default function ComBox({ participantName, station, placement = 'floating
           {radio.mode === 'open' && <p className="mb-3 rounded-lg bg-red-950 p-2 text-xs text-red-200">Micro ouvert : toutes tes paroles partent vers la fréquence, y compris celles destinées au cockpit Discord.</p>}
           {radio.preparingMic && <p role="status" className="mb-2 text-xs text-sky-300">Activation du microphone…</p>}
           <label className="mb-3 flex items-center gap-3 text-xs">Volume radio
-            <input aria-label="Volume radio" className="min-w-0 flex-1" type="range" min="0" max="1" step="0.05" value={radio.volume} onChange={e => radio.setVolume(Number(e.target.value))} />
+            <input aria-label="Volume radio" className="min-w-0 flex-1" type="range" min="0" max={desktop ? 2 : 1} step="0.05" value={radio.volume} onChange={e => radio.setVolume(Number(e.target.value))} />
             <span>{Math.round(radio.volume * 100)} %</span>
           </label>
           <label className="mb-3 flex items-center gap-2 text-xs"><input type="checkbox" checked={radio.effects} onChange={e => radio.setEffects(e.target.checked)} />Effets radio : grésillement et brouillage</label>
@@ -326,7 +326,7 @@ export default function ComBox({ participantName, station, placement = 'floating
             <p className="mt-2 text-slate-400">{desktop ? 'PTT global Windows : garde cette fenêtre ouverte, même réduite, puis utilise la touche dans Roblox. Relâche-la pour couper la radio.' : 'Dans le navigateur, la touche fonctionne lorsque le site a le focus. Pour parler depuis Roblox, ouvre le site avec l’application Windows. Le micro ouvert reste actif en arrière-plan.'}</p>
             {desktopError && <p role="alert" className="mt-2 text-amber-300">{desktopError}</p>}
             {desktop && <DesktopUpdateStatus />}
-            {!desktop && <a className="mt-2 inline-block text-sky-300 underline" href="https://github.com/MrPolochon/weblogbook/releases/tag/v1.5.6" target="_blank" rel="noreferrer">Application Windows · PTT global</a>}
+            {!desktop && <a className="mt-2 inline-block text-sky-300 underline" href="https://github.com/MrPolochon/weblogbook/releases/tag/v1.5.7" target="_blank" rel="noreferrer">Application Windows · PTT global</a>}
           </details>}
           {!toolbar && <p className="mt-3 text-xs text-slate-500">Discord reste ton cockpit. Le PTT n’ouvre que la radio du site. Utilise un casque pour éviter de retransmettre le son des haut-parleurs.</p>}
         </section>
