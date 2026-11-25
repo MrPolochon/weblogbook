@@ -12,7 +12,10 @@ function harness(t) {
   const powerMonitor = new EventEmitter();
   const frame = { url: 'https://www.mixouairlinesptfsweblogbook.com/atc' };
   const webContents = Object.assign(new EventEmitter(), { mainFrame: frame, send: (channel, state) => sent.push({ channel, state }) });
-  const window = Object.assign(new EventEmitter(), { webContents, isDestroyed: () => false });
+  let destroyed = false;
+  const window = Object.assign(new EventEmitter(), { isDestroyed: () => destroyed });
+  Object.defineProperty(window, 'webContents', { get() { if (destroyed) throw new TypeError('Object has been destroyed'); return webContents; } });
+  window.on('closed', () => { destroyed = true; });
   const autoUpdater = Object.assign(new EventEmitter(), {
     checkForUpdates: async () => { checks++; if (reject) throw Error('offline'); },
     quitAndInstall: () => installs++,
