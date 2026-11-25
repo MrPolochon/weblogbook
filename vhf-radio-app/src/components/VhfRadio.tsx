@@ -128,6 +128,7 @@ export default function VhfRadio({
 
   /* ── Collision ── */
   const [collision, setCollision] = useState(false);
+  const collisionGainRef = useRef<GainNode | null>(null);
   const collisionOscRef = useRef<OscillatorNode | null>(null);
   const collisionCtxRef = useRef<AudioContext | null>(null);
 
@@ -226,6 +227,8 @@ export default function VhfRadio({
       try { collisionOscRef.current.stop(); } catch { /* */ }
       collisionOscRef.current = null;
     }
+    collisionGainRef.current?.disconnect(); collisionGainRef.current = null;
+    void collisionCtxRef.current?.close().catch(() => {}); collisionCtxRef.current = null;
     attachedAudioRef.current.forEach((el) => {
       try { el.pause(); el.remove(); } catch { /* */ }
     });
@@ -507,7 +510,8 @@ export default function VhfRadio({
         const ctx = collisionCtxRef.current;
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.type = 'sine'; osc.frequency.value = 1200; gain.gain.value = 0.15;
+        osc.type = 'sine'; osc.frequency.value = 1200; gain.gain.value = 0.15 * volumeRef.current;
+        collisionGainRef.current = gain;
         osc.connect(gain).connect(ctx.destination); osc.start();
         collisionOscRef.current = osc;
       } catch { /* */ }
@@ -724,6 +728,7 @@ export default function VhfRadio({
       <label className="px-4 pb-3 flex items-center gap-2 text-xs text-slate-300">Volume radio
         <input aria-label="Volume radio" type="range" min="0" max="2" step="0.05" value={volume} onChange={e => {
           const value = Number(e.target.value); volumeRef.current = value; setVolume(value);
+          if (collisionGainRef.current) collisionGainRef.current.gain.value = 0.15 * value;
           attachedAudioRef.current.forEach(el => playback.current.setVolume(el, value));
           void playback.current.resume().catch(() => {});
         }} /><span>{Math.round(volume * 100)} %</span>
