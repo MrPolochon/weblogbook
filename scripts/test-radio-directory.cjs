@@ -7,16 +7,16 @@ const directory=load('src/lib/official-vhf.ts');
 const frequencies=load('src/lib/vhf-frequencies.ts');
 const airports=load('src/lib/aeroports-ptfs.ts').AEROPORTS_PTFS;
 
-test('official assignments reproduce the supplied ATC and AFIS list',()=>{
+test('official assignments match the current ATC and AFIS allocations',()=>{
  const expected={
   IRFD:['Center=125.050','APP=120.775','Tower=118.925','DEP=121.985','Ground=121.700','Delivery=118.455'],
   IMLR:['APP=125.700','Tower=125.800','Ground=125.225'],ITRC:['Tower=119.075','Ground=121.725'],
-  IBTH:['AFIS=127.825'],ITKO:['Center=124.850','APP=124.200','Tower=118.100','Ground=121.700'],IDCS:['AFIS=127.825'],
-  IPPH:['Center=125.455','APP=118.700','Tower=127.400','Ground=121.700'],ILKL:['AFIS=127.825'],
-  IZOL:['Center=125.640','APP=124.300','Tower=119.150','Ground=121.750'],IJAF:['AFIS=127.825'],ISCM:['AFIS=127.925'],
+  IBTH:['AFIS=127.825'],ITKO:['Center=124.850','APP=124.200','Tower=118.100','Ground=121.700'],IDCS:['AFIS=127.850'],
+  IPPH:['Center=125.455','APP=118.700','Tower=127.400','Ground=121.700'],ILKL:['AFIS=127.875'],
+  IZOL:['Center=125.640','APP=124.300','Tower=119.150','Ground=121.750'],IJAF:['AFIS=127.900'],ISCM:['AFIS=127.925'],
   ILAR:['Center=127.525','APP=119.950','Tower=122.900','Ground=122.225'],IPAP:['APP=120.150','Tower=118.575','Ground=121.650'],
   IIAB:['APP=120.850','Tower=118.100','Ground=121.300'],IHEN:['AFIS=124.975'],
-  ISAU:['Center=123.000','APP=123.100','Tower=123.200','Ground=123.300'],IKFL:['Center=126.100','APP=126.700','Tower=126.800','Ground=126.225'],ITEY:['AFIS=127.925']
+  ISAU:['Center=123.000','APP=123.100','Tower=123.200','Ground=123.300'],IKFL:['Center=126.100','APP=126.700','Tower=126.800','Ground=126.225'],ITEY:['AFIS=127.950']
  };
  for(const [airport,entries] of Object.entries(expected))for(const entry of entries){const [position,freq]=entry.split('=');assert.equal(directory.getOfficialFrequency(airport,position),freq);}
  assert.equal(directory.getOfficialFrequency(' irfd ','CLAIRANCE'),'118.455');
@@ -58,5 +58,15 @@ test('an active Ground Crew session grants transmit permission; no session and A
    return{data:matches?[{id:'s'}]:[],error:null};}};return query;}};
   const {canTransmitRadio}=load('src/lib/radio-access.ts',{'@/lib/supabase/admin':{createAdminClient:()=>admin}});
   assert.equal(await canTransmitRadio('user'),active!==null&&active!=='siavi_only');
+ }
+});
+
+test('AFIS channels are unique and separate from every other published station',()=>{
+ const rows=directory.OFFICIAL_VHF_ASSIGNMENTS;
+ const afis=rows.filter(row=>row.position==='AFIS');
+ assert.equal(afis.length,7);
+ for(const row of afis){
+  assert.ok(frequencies.isValidVhfFrequency(row.frequency));
+  assert.equal(rows.filter(other=>other.frequency===row.frequency).length,1,row.aeroport);
  }
 });
