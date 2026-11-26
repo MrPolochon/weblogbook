@@ -1,16 +1,17 @@
 /** Official community assignments supplied on 24 November 2026 (PTFS network). */
 export type RadioAssignment = { id: string; aeroport: string; position: string; frequency: string; official?: boolean };
+// AFIS duplicates separated on 26 November 2026; each AFIS has its own channel.
 const stations: Record<string, Record<string, string>> = {
   IRFD: { Center: '125.050', APP: '120.775', Tower: '118.925', DEP: '121.985', Ground: '121.700', Delivery: '118.455' },
   IMLR: { APP: '125.700', Tower: '125.800', Ground: '125.225' },
   ITRC: { Tower: '119.075', Ground: '121.725' },
   IBTH: { AFIS: '127.825' },
   ITKO: { Center: '124.850', APP: '124.200', Tower: '118.100', Ground: '121.700' },
-  IDCS: { AFIS: '127.825' },
+  IDCS: { AFIS: '127.850' },
   IPPH: { Center: '125.455', APP: '118.700', Tower: '127.400', Ground: '121.700' },
-  ILKL: { AFIS: '127.825' },
+  ILKL: { AFIS: '127.875' },
   IZOL: { Center: '125.640', APP: '124.300', Tower: '119.150', Ground: '121.750' },
-  IJAF: { AFIS: '127.825' },
+  IJAF: { AFIS: '127.900' },
   ISCM: { AFIS: '127.925' },
   ILAR: { Center: '127.525', APP: '119.950', Tower: '122.900', Ground: '122.225' },
   IPAP: { APP: '120.150', Tower: '118.575', Ground: '121.650' },
@@ -18,7 +19,7 @@ const stations: Record<string, Record<string, string>> = {
   IHEN: { AFIS: '124.975' },
   ISAU: { Center: '123.000', APP: '123.100', Tower: '123.200', Ground: '123.300' },
   IKFL: { Center: '126.100', APP: '126.700', Tower: '126.800', Ground: '126.225' },
-  ITEY: { AFIS: '127.925' },
+  ITEY: { AFIS: '127.950' },
 };
 
 // Dedicated RAMP allocation: 131.000–131.625, 25 kHz spacing. Keep this order stable.
