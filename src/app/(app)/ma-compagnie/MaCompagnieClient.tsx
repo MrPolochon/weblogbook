@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useTransition } from 'react';
 import CompanyPerformance from '@/components/CompanyPerformance';
+import PilotSalaryEditor from '@/components/PilotSalaryEditor';
 import CompanyIdentityRequests from '@/components/CompanyIdentityRequests';
 import CompanyDevelopment from '@/components/company/CompanyDevelopment';
 import styles from './CompanyWorkspace.module.css';
@@ -43,6 +44,7 @@ interface Compagnie {
 }
 
 interface Employe {
+  pourcentage_salaire: number | null;
   id: string;
   piloteId: string;
   identifiant: string;
@@ -860,6 +862,17 @@ export default function MaCompagnieClient({
       {/* === SECTION : FINANCES === */}
       {isLeader && (
         <section hidden={activeSection !== 'finances'} data-company-panel id="finances" className="space-y-6 scroll-mt-28">
+          <div className="card space-y-4">
+            <h2 className="text-lg font-semibold text-slate-100">Salaires des pilotes</h2>
+            <p className="text-sm text-slate-400">Par défaut, chaque pilote utilise le taux général de la compagnie ({compagnie.pourcentage_salaire} %). Le PDG et les co-PDG peuvent définir un taux individuel ou vider le champ pour rétablir le taux général. Les devis déjà établis conservent leur salaire convenu.</p>
+            {employes.length === 0 && <p className="text-sm text-slate-400">Aucun pilote employé.</p>}
+            {employes.map(emp => (
+              <div key={emp.id} className="space-y-2 rounded-lg border border-slate-700 bg-slate-800/30 p-3">
+                <p className="font-medium text-slate-200">{emp.identifiant} <span className="text-xs text-slate-400">{emp.pourcentage_salaire == null ? `Taux compagnie · ${compagnie.pourcentage_salaire} %` : `Taux personnalisé · ${emp.pourcentage_salaire} %`}</span></p>
+                <PilotSalaryEditor key={`${emp.id}:${emp.pourcentage_salaire}`} id={emp.id} name={emp.identifiant} value={emp.pourcentage_salaire} fallback={compagnie.pourcentage_salaire} />
+              </div>
+            ))}
+          </div>
           <CompagniePretClient compagnieId={compagnie.id} />
 
           <Link

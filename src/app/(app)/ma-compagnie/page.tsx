@@ -138,6 +138,7 @@ export default async function MaCompagniePage({ searchParams: searchParamsPromis
       id: emp.id,
       piloteId: pilote?.id || '',
       identifiant: pilote?.identifiant || '—',
+      pourcentage_salaire: emp.pourcentage_salaire ?? null,
       heures: pilote ? heuresParPilote[pilote.id] || 0 : 0,
       role: (emp.role as string) || 'employe',
     };

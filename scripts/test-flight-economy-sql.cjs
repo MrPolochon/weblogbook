@@ -46,6 +46,23 @@ const activate=()=>db.exec('UPDATE economy_release_settings SET enabled=true,act
 const ready=async(p,changes='')=>db.query(`UPDATE plans_vol SET statut='en_attente_cloture',accepted_at=now()-interval '18 minutes',demande_cloture_at=now()${changes} WHERE id=$1`,[p.id]);
 const isolated=async(fn)=>{await db.exec('BEGIN');try{await fn();}finally{await db.exec('ROLLBACK');}};
 try{
+await t.test('individual salary: frozen quote, actual settlement, zero and company fallback',()=>isolated(async()=>{
+  const migration=fs.readFileSync('supabase/pilot_salary_20261126.sql','utf8').replace(/^BEGIN;$/m,'').replace(/^COMMIT;$/m,'');
+  await db.exec(migration); await db.exec(migration);
+  await query('INSERT INTO compagnie_employes(compagnie_id,pilote_id,pourcentage_salaire) VALUES($1,$2,30)',[company,actor]);
+  await activate(); const q=await quote(); assert.equal(q.salaire_pilote,1560);
+  await query('UPDATE compagnie_employes SET pourcentage_salaire=0 WHERE pilote_id=$1',[actor]);
+  assert.deepEqual(await quote(),q);
+  const p=await submit(q);await ready(p);assert.equal((await settle(p)).salary_total,1560);
+  const price=async()=> (await query('SELECT flight_submission_pricing($1,$2,$3) p',[scope(),draw(),actor]))[0].p;
+  assert.equal((await price()).salaire_pilote,0);
+  await query('UPDATE compagnie_employes SET pourcentage_salaire=NULL WHERE pilote_id=$1',[actor]);
+  assert.equal((await price()).salaire_pilote,520);
+  await assert.rejects(query('UPDATE compagnie_employes SET pourcentage_salaire=101'),/check constraint/);
+  await db.exec('GRANT SELECT,UPDATE ON compagnie_employes TO authenticated; SET LOCAL ROLE authenticated');
+  await assert.rejects(query('UPDATE compagnie_employes SET pourcentage_salaire=90'),/authorized company salary/);
+  await db.exec('RESET ROLE');
+}));
 await t.test('disabled mode leaves existing daily quotes and plans legacy after activation',()=>isolated(async()=>{const q=await quote();assert.equal(q.economy_version,undefined);await activate();const q2=await quote();assert.equal(q2.economy_version,undefined);const p=await submit(q);assert.equal((await query('SELECT economy_version v FROM plans_vol WHERE id=$1',[p.id]))[0].v,1);await assert.rejects(settle(p),/non éligible/);}));
 await t.test('new quote freezes salary, money, load and effects, without rerolls or caller duration dependence',()=>isolated(async()=>{await activate();const q=await quote();assert.equal(q.economy_version,2);assert.equal(q.salaire_pilote,520);assert.equal(q.economy_snapshot.reference_minutes,18);await db.exec(`UPDATE compagnies SET prix_billet_pax=999,pourcentage_salaire=100;UPDATE test_effects SET value='{"revenue_percent":30,"fuel_percent":100}'`);const repeat=await quote(scope(),draw({nb_pax_genere:100,cargo_kg_genere:999}));assert.deepEqual(repeat,q);const p=await submit(q,{revenue_brut:999999,salaire_pilote:999999,temps_prev_min:1});const stored=(await query('SELECT * FROM plans_vol WHERE id=$1',[p.id]))[0];assert.equal(Number(stored.revenue_brut),q.revenue_brut);assert.equal(Number(stored.salaire_pilote),520);await assert.rejects(query('UPDATE plans_vol SET salaire_pilote=0 WHERE id=$1',[p.id]),/immuable/);}));
 await t.test('normal flight retains legacy net, closes and applies wear exactly once, balances match ledger',()=>isolated(async()=>{await activate();const q=await quote(),p=await submit(q);await ready(p);const s=await settle(p);assert.equal(s.company_net,4680);assert.equal(s.salary_total,520);assert.equal(s.airport_tax,0);assert.equal(s.delay_discount_percent,0);const balances=await query('SELECT type,solde,id FROM felitz_comptes');for(const a of balances){const lines=(await query('SELECT coalesce(sum(CASE WHEN type=\'credit\' THEN montant ELSE -montant END),0)::integer n FROM felitz_transactions WHERE compte_id=$1',[a.id]))[0].n;assert.equal(a.solde,lines);}assert.equal((await query('SELECT statut,usure_percent FROM compagnie_avions'))[0].usure_percent,98);const n=(await query('SELECT count(*)::integer n FROM felitz_transactions'))[0].n;assert.deepEqual(await settle(p),s);assert.equal((await query('SELECT count(*)::integer n FROM felitz_transactions'))[0].n,n);assert.equal((await query('SELECT count(*)::integer n FROM test_reviews'))[0].n,1);}));

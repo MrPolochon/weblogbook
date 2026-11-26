@@ -539,7 +539,16 @@ export async function envoyerChequesVol(
   const pctSalaireCompagnie = Math.min(100, Math.max(0, Number(compagnie.pourcentage_salaire) || 0));
   const revBrut = Number(plan.revenue_brut) || 0;
   let salairePlanning = 0;
-  if (pctSalaireCompagnie === 0) {
+  // A signed server quote already includes the pilot's individual salary.
+  const { data: quotedPlan, error: quoteError } = await admin.from('plans_vol')
+    .select('flight_submission_quote_id').eq('id', plan.id).single();
+  if (quoteError) return { success: false, message: 'Salaire convenu indisponible' };
+  if (quotedPlan?.flight_submission_quote_id) {
+    const { data: quote, error } = await admin.from('flight_submission_quotes')
+      .select('pricing').eq('id', quotedPlan.flight_submission_quote_id).single();
+    if (error || !quote) return { success: false, message: 'Devis de salaire indisponible' };
+    salairePlanning = Math.max(0, Math.round(Number(quote.pricing?.salaire_pilote) || 0));
+  } else if (pctSalaireCompagnie === 0) {
     console.warn(`${logRef} pourcentage_salaire=0% pour la compagnie → pas de salaire pilote`);
     salairePlanning = 0;
   } else if (revBrut > 0) {
