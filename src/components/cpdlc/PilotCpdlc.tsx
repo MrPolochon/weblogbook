@@ -60,6 +60,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const unread = messages.filter(message => message.incoming && !message.acknowledged);
   const alarm = useCpdlcAlarm(unread.length > 0);
   const [selected, setSelected] = useState<string | null>(null);
+  const [closed, setClosed] = useState(false);
   const [messagePage, setMessagePage] = useState(0);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [brightness, setBrightness] = useState(1);
@@ -83,16 +84,16 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const island = useRef<HTMLDivElement>(null);
   const [mcduScale, setMcduScale] = useState(1);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
-  const message = messages.find(item => item.id === selected) ?? messages[0];
+  const message = closed ? undefined : (messages.find(item => item.id === selected) ?? messages[0]);
   const messageIndex = message ? messages.findIndex(item => item.id === message.id) : -1;
   const messagePages = useMemo(() => pagesFor(draft?.body || message?.body || ''), [draft?.body, message?.body]);
   const unavailable = !data?.available;
 
   useEffect(() => {
     const newest = unread[0];
-    if (newest && newest.id !== newestSeen.current) { newestSeen.current = newest.id; setSelected(newest.id); setMessagePage(0); }
+    if (newest && newest.id !== newestSeen.current) { newestSeen.current = newest.id; setClosed(false); setSelected(newest.id); setMessagePage(0); }
   }, [unread]);
-  useEffect(() => { setMessagePage(0); setSelectedAction(null); }, [message?.id, message?.status, message?.acknowledged, draft]);
+  useEffect(() => { setMessagePage(0); setSelectedAction(null); }, [message?.id, message?.status, message?.acknowledged, draft, closed]);
   const close = useCallback(() => { setOpen(false); trigger.current?.focus(); }, []);
   const clamp = useCallback((x: number, y: number) => ({
     x: Math.max(8, Math.min(x, window.innerWidth - (island.current?.getBoundingClientRect().width || Math.min(480, window.innerWidth - 16)) - 8)),
@@ -202,7 +203,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       left[2] = editLine('MESSAGE', 'text', freeText);
     } else {
       history.slice(historyPage * 5, historyPage * 5 + 5).forEach((item, index) => {
-        left[index] = { label: time(item.created_at) + ' ' + (item.incoming ? item.from_station : item.to_station), value: item.kind.replace('_', ' '), action: () => { setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); } };
+        left[index] = { label: time(item.created_at) + ' ' + (item.incoming ? item.from_station : item.to_station), value: item.kind.replace('_', ' '), action: () => { setClosed(false); setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); } };
       });
       right[4] = { label: 'PREV PAGE', disabled: historyPage === 0, action: () => setHistoryPage(value => value - 1) };
       right[5] = { label: 'NEXT PAGE', disabled: historyPage + 1 >= historyPages, action: () => setHistoryPage(value => value + 1) };
@@ -212,6 +213,8 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   if (draft) {
     dcduLeft[0] = { label: '*CANCEL', disabled: busy, action: () => { setDraft(null); setNotice('MESSAGE CANCELLED'); } };
     dcduRight[1] = { label: busy ? 'SENDING' : 'SEND*', disabled: busy || unavailable, action: () => void sendDraft() };
+  } else if (!message && messages.length > 0) {
+    dcduRight[1] = { label: 'RECALL*', action: () => { setClosed(false); setSelected(messages[0]?.id ?? null); setMessagePage(0); } };
   } else if (message?.incoming) {
     if (!message.acknowledged) dcduRight[1] = { label: 'ACK*', disabled: busy, action: () => void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED') };
     else if (message.response_required && !['WILCO', 'UNABLE', 'ROGER', 'REFUSED'].includes(message.status)) {
@@ -219,6 +222,9 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => response('STANDBY') };
       dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => response('WILCO') };
     } else if (message.kind === 'FREE_TEXT' && !message.response_required && message.status !== 'ROGER') dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => response('ROGER') };
+    else dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
+  } else if (message) {
+    dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
   }
   const physicalKey = (line: Line | undefined, name: string) => <button type="button" aria-label={name + (line ? ': ' + line.label : '')} aria-pressed={name.startsWith('DCDU') ? selectedAction === name + ':' + line?.label : undefined} disabled={!line || line.disabled} onClick={() => {
     if (!line || line.disabled) return;
@@ -241,8 +247,8 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     <div className={styles.dcdu}>
       <div className={styles.hardwareColumn}>
         <div className={styles.brightnessKeys}><button type="button" aria-label="Increase DCDU brightness" onClick={() => setBrightness(value => Math.min(1, value + .1))}>BRT</button><button type="button" aria-label="Decrease DCDU brightness" onClick={() => setBrightness(value => Math.max(.5, value - .1))}>DIM</button></div>
-        <button type="button" disabled={Boolean(draft) || messageIndex <= 0} onClick={() => setSelected(messages[messageIndex - 1]?.id)}>MSG−</button>
-        <button type="button" disabled={Boolean(draft) || messageIndex < 0 || messageIndex >= messages.length - 1} onClick={() => setSelected(messages[messageIndex + 1]?.id)}>MSG+</button>
+        <button type="button" disabled={Boolean(draft) || (closed ? messages.length === 0 : messageIndex <= 0)} onClick={() => { if (closed) { setClosed(false); setSelected(messages[0]?.id ?? null); } else setSelected(messages[messageIndex - 1]?.id); }}>MSG−</button>
+        <button type="button" disabled={Boolean(draft) || (closed ? messages.length === 0 : (messageIndex < 0 || messageIndex >= messages.length - 1))} onClick={() => { if (closed) { setClosed(false); setSelected(messages[0]?.id ?? null); } else setSelected(messages[messageIndex + 1]?.id); }}>MSG+</button>
         {dcduLeft.map((line, index) => <div className={styles.physicalSlot} key={index}>{physicalKey(line, 'DCDU L' + (index + 1))}</div>)}
       </div>
       <div className={styles.dcduScreen} style={{ filter: 'brightness(' + brightness + ')' }} aria-label={draft ? 'DCDU outgoing preview' : 'DCDU display'}>
@@ -250,7 +256,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
         <pre className={styles.messageBody}>{draft || message ? messagePages[Math.min(messagePage, messagePages.length - 1)] : error ? 'DATALINK UNAVAILABLE' : 'NO MESSAGES'}</pre>
         <div className={styles.dcduLower}>
           <div>{dcduLeft.map((line, index) => <span key={index} className={selectedAction === "DCDU L" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
-          <div className={styles.dcduCenter}><span>{message?.late && !draft ? 'LATE RESPONSE' : ''}</span><span>{messagePage + 1}/{messagePages.length} PGE</span></div>
+          <div className={styles.dcduCenter}><span>{message?.late && !draft ? 'LATE RESPONSE' : !draft && message && messages.length > 0 ? `MSG ${messageIndex + 1}/${messages.length}` : ''}</span><span>{messagePage + 1}/{messagePages.length} PGE</span></div>
           <div>{dcduRight.map((line, index) => <span key={index} className={selectedAction === "DCDU R" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
         </div>
       </div>
