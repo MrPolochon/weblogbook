@@ -7,6 +7,7 @@ import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcInit } from '@/lib/cpdlc/types';
 import styles from './pilot.module.css';
+import { validateInit } from '@/lib/cpdlc/policy';
 
 type Page = 'MENU' | 'INIT' | 'WX' | 'ATIS' | 'FREE' | 'RECEIVED' | 'SENT';
 const emptyInit: CpdlcInit = { flight_no: '', dep: '', dest: '', altn: '', ete: '', utc: '', date: '' };
@@ -72,6 +73,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const [scratch, setScratch] = useState('');
   const [target, setTarget] = useState('');
   const [notice, setNotice] = useState('');
+  const [draft, setDraft] = useState<{ command: CpdlcCommand; body: string; success: string } | null>(null);
   const [historyPage, setHistoryPage] = useState(0);
   const trigger = useRef<HTMLButtonElement>(null);
   const scratchInput = useRef<HTMLInputElement>(null);
@@ -108,7 +110,29 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const navigate = (next: Page) => { setPage(next); setTarget(''); setScratch(''); setNotice(''); setHistoryPage(0); };
   const execute = async (command: CpdlcCommand, success = 'MESSAGE SENT') => {
     setNotice('');
+    if (command.action !== 'ack') {
+      if (draft) { setNotice('SEND OR CANCEL THE CURRENT DCDU DRAFT FIRST'); return; }
+      try {
+        let body = '';
+        if (command.action === 'clearance') {
+          const fields = validateInit(command.init);
+          command = { ...command, init: fields };
+          body = 'CLEARANCE REQUEST\n' + Object.entries(fields).filter(([, value]) => value).map(([key, value]) => `${key.replace('flight_no', 'FLT NO').toUpperCase()} ${value}`).join('\n');
+        } else if (command.action === 'weather') body = `${command.wx_type} REQUEST\nFROM ${command.flight_no}\nAIRPORTS ${command.airports.join(' ')}`;
+        else if (command.action === 'atis') body = `ATIS REQUEST\nFROM ${command.flight_no}\nFOR ${command.airport}`;
+        else if (command.action === 'free_text') body = `TO ${command.to}\n${command.text}`;
+        else if (command.action === 'respond') body = `${command.response}\nIN REPLY TO ${message?.from_station || ''}`;
+        setDraft({ command, body: upper(body), success }); setOpen(false);
+        setNotice('REVIEW ON DCDU - SEND OR CANCEL');
+      } catch (reason) { setNotice(upper(reason instanceof Error ? reason.message : 'INVALID FORMAT')); }
+      return;
+    }
     try { await act(command); setNotice(success); } catch (reason) { setNotice(upper(reason instanceof Error ? reason.message : 'TRANSMISSION FAILED')); }
+  };
+  const sendDraft = async () => {
+    if (!draft || busy) return;
+    try { await act(draft.command); setNotice(draft.success); setDraft(null); }
+    catch (reason) { setNotice(upper(reason instanceof Error ? reason.message : 'TRANSMISSION FAILED')); }
   };
   const submit = async () => {
     const client_request_id = crypto.randomUUID();
@@ -148,7 +172,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   return <section className={styles.root} aria-label="CPDLC datalink">
     <div className={styles.sectionHeader}><div><span className={styles.eyebrow}>DATALINK COMMUNICATIONS</span><h2>DCDU <span>{data?.station || 'NOT CONNECTED'}</span></h2></div><button ref={trigger} type="button" className={styles.openButton} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}>MCDU {open ? '−' : '+'}</button></div>
     {alarm.blocked && <button className={styles.audioWarning} type="button" onClick={() => void alarm.enable()}>ENABLE MESSAGE SOUND — {unread.length} UNACKNOWLEDGED</button>}
-    <div className={styles.dcdu}>
+    {draft && <div className={styles.dcduScreen} aria-label="DCDU outgoing preview"><div className={styles.messageMeta}>OUTGOING MESSAGE — NOT SENT</div><pre className={styles.messageBody}>{draft.body}</pre><div className={styles.dcduActions}><button type="button" disabled={busy} onClick={() => { setDraft(null); setNotice('MESSAGE CANCELLED'); }}>CANCEL*</button><button type="button" disabled={busy || unavailable} onClick={() => void sendDraft()}>{busy ? 'SENDING…' : 'SEND*'}</button></div></div>}<div className={styles.dcdu} hidden={Boolean(draft)} style={draft ? { display: 'none' } : undefined}>
       <div className={styles.hardwareColumn}><span className={styles.screw}>✕</span><button type="button" aria-label="Increase DCDU brightness" onClick={() => setBrightness(value => Math.min(1, value + .1))}>BRT</button><button type="button" aria-label="Decrease DCDU brightness" onClick={() => setBrightness(value => Math.max(.5, value - .1))}>DIM</button><button type="button" disabled={messageIndex <= 0} onClick={() => setSelected(messages[messageIndex - 1]?.id)}>MSG−</button><button type="button" disabled={messageIndex < 0 || messageIndex >= messages.length - 1} onClick={() => setSelected(messages[messageIndex + 1]?.id)}>MSG+</button><span className={styles.screw}>✕</span></div>
       <div className={styles.dcduScreen} style={{ filter: `brightness(${brightness})` }}>
         <div className={styles.messageMeta}><span>{message ? `${time(message.created_at)} ${message.incoming ? 'FROM' : 'TO'} ${message.incoming ? message.from_station : message.to_station}` : 'CPDLC'}</span><span>{message?.status.replace('_', ' ') || (loading ? 'CONNECTING' : 'READY')}</span></div>

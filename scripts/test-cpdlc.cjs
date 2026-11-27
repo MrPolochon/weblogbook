@@ -44,6 +44,24 @@ test('manual init and clearance validation preserves exact squawk and uppercase 
   assert.throws(()=>policy.validateInit({flight_no:'DLH324',dep:'IRFD',dest:'ITKO',altn:'',ete:'0130',utc:'1200',date:'31/02/2026'}));
 });
 const uid=n=>`${String(n).padStart(8,'0')}-1111-4111-8111-111111111111`;
+test('optional INIT fields stay optional but provided formats remain checked',()=>{
+  const init={flight_no:'DLH324',dep:'IRFD',dest:'ITKO',altn:'',ete:'',utc:'',date:''};
+  assert.deepEqual(policy.validateInit(init),init);
+  assert.throws(()=>policy.validateInit({...init,utc:'2560'}));
+  assert.throws(()=>policy.validateInit({...init,ete:'ABCD'}));
+});
+test('weather routes covered airports to ATC and uncovered airports to automatic source independently',async()=>{
+  const service=load('src/lib/cpdlc/service.ts');
+  const plan={id:uid(10),numero_vol:'DLH324',pilote_id:uid(1),copilote_id:null,statut:'depose'};
+  const admin=fakeAdmin({plans_vol:[plan],atc_sessions:[{id:uid(20),user_id:uid(2),aeroport:'IRFD',position:'APP',started_at:new Date().toISOString()}]});
+  const context=await service.contextFor(admin,uid(1),plan.id);
+  await service.executeCommand(admin,context,{action:'weather',flight_no:'DLH324',airports:['IBTH','ITKO'],wx_type:'TAF',client_request_id:uid(310)});
+  assert.equal(admin.calls.length,2);
+  assert.equal(admin.calls[0].p_data.payload.request_type,'TAF');
+  assert.deepEqual(admin.calls[0].p_data.recipient_user_ids,[uid(2)]);
+  assert.match(admin.calls[1].p_data.body,/TAF NOT AVAILABLE/);
+  assert.notEqual(admin.calls[0].p_data.client_request_id,admin.calls[1].p_data.client_request_id);
+});
 function fakeAdmin(tables, unavailable) {
   const calls=[];
   return { calls, rpc:async(name,args)=>{calls.push({name,...args});return {data:uid(999),error:null};}, from(table){

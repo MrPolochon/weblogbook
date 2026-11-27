@@ -146,7 +146,7 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
   const requestId = uuid(body.client_request_id);
   // Retry existing committed operations before rechecking a now-transferred row.
   const previous = await admin.from('cpdlc_messages').select('id').eq('sender_user_id', context.userId).eq('client_request_id', requestId).maybeSingle(); checked(previous.error);
-  if (previous.data) return previous.data.id;
+  if (previous.data && !['weather', 'atis'].includes(String(action))) return previous.data.id;
   if (action === 'transfer') {
     if (!context.station) throw new CpdlcError('ATC ONLY', 403);
     const operation = await admin.from('cpdlc_operations').select('message_id').eq('actor_id', context.userId).eq('request_id', requestId).maybeSingle(); checked(operation.error);
@@ -165,6 +165,20 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
   const from = context.plan ? await assertCallsign(admin, context.plan, init?.flight_no ?? body.flight_no) : context.station!.code;
   const base = { from_station: from, sender_user_ids: context.plan ? crew(context.plan) : [context.userId], plan_id: context.plan?.id ?? null, client_request_id: requestId };
   if (action === 'atis' || action === 'weather') {
+    if (action === 'weather' && (!Array.isArray(body.airports) || body.airports.length < 1 || body.airports.length > 4 || !['METAR', 'TAF'].includes(String(body.wx_type)))) throw new CpdlcError('SELECT METAR OR TAF AND ONE TO FOUR AIRPORTS');
+    const requestedAirports = action === 'atis' ? [airportCode(body.airport)] : [...new Set((body.airports as unknown[]).map(airportCode))];
+    let result = '';
+    for (const airport of requestedAirports) {
+      const key = `${requestId}:${airport}`;
+      const existing = await admin.from('cpdlc_messages').select('id').eq('sender_user_id', context.userId).eq('client_request_id', key).maybeSingle(); checked(existing.error);
+      if (existing.data) { result = existing.data.id; continue; }
+      const target = routeStation(context.stations, airport, false);
+      if (target) {
+        result = await apply(admin, context, 'send', { ...base, client_request_id: key, to_station: airport, recipient_user_ids: [target.user_id], assigned_session_id: target.session_id,
+          kind: 'FREE_TEXT', body: `${action === 'atis' ? 'ATIS' : body.wx_type} REQUEST FOR ${airport}`, response_required: true,
+          deadline_at: new Date(Date.now() + 300_000).toISOString(), payload: { sender_mode: 'pilot', recipient_mode: 'atc', airport, request_type: action === 'atis' ? 'ATIS' : body.wx_type, fallback_frequency: await frequencyFallback(admin, airport, target) } });
+        continue;
+      }
     let text: string; let to: string;
     if (action === 'atis') {
       to = airportCode(body.airport);
@@ -176,12 +190,14 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
       }
     } else {
       if (!Array.isArray(body.airports) || body.airports.length < 1 || body.airports.length > 4 || !['METAR', 'TAF'].includes(String(body.wx_type))) throw new CpdlcError('SELECT METAR OR TAF AND ONE TO FOUR AIRPORTS');
-      const airports = [...new Set(body.airports.map(airportCode))];
+      const airports = [airport];
       to = 'WX'; text = await requestWeather(airports, body.wx_type as 'METAR' | 'TAF');
     }
     // Automated responses are addressed to the crew; displayed source is ATS/WX.
-    return apply(admin, context, 'send', { ...base, from_station: to, to_station: from, recipient_user_ids: crew(context.plan!), kind: action === 'atis' ? 'ATIS' : 'WX',
+    result = await apply(admin, context, 'send', { ...base, client_request_id: key, from_station: to, to_station: from, recipient_user_ids: crew(context.plan!), kind: action === 'atis' ? 'ATIS' : 'WX',
       body: displayText(text).slice(0, 12000), response_required: false, payload: { sender_mode: 'system', recipient_mode: 'pilot', automatic: true } });
+    }
+    return result;
   }
   const to = init ? init.dep : stationCode(requiredText(body.to, 'DESTINATION STATION', 16));
   const text = init ? `CLEARANCE REQUEST\nFLT NO ${init.flight_no}\nDEP ${init.dep}\nDEST ${init.dest}\nALTN ${init.altn || 'NONE'}\nETE ${init.ete}\nUTC ${init.utc}\nDATE ${init.date}` : requiredText(body.text, 'TEXT');

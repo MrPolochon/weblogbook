@@ -16,7 +16,7 @@ type Editor = 'choice' | 'clearance' | 'preview' | 'text' | 'transfer' | 'compos
 const upper = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 const emptyClearance: Clearance = { destination: '', departure: '', altitude: '', squawk: '', frequency: '', text: '' };
 const time = (value: string) => new Date(value).toISOString().slice(11, 16) + 'Z';
-const kindLabel = (message: CpdlcMessage) => message.kind.replace('_', ' ');
+const kindLabel = (message: CpdlcMessage) => typeof message.payload.request_type === 'string' ? message.payload.request_type + ' REQUEST' : message.kind.replace('_', ' ');
 
 export function clearancePreview(clearance: Clearance): string {
   return clearanceText(clearance);
