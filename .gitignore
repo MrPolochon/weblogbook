@@ -50,6 +50,7 @@ radar-capture/output/
 /output/
 /tmp/
 /reference-note.png
+/.cpdlc-preview/
 
 # Local Blender generation runtime
 .tools/blender311/

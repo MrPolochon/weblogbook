@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import ComBox from '@/components/ComBox';
+import PilotCpdlc from '@/components/cpdlc/PilotCpdlc';
 import { Radio, Clock, AlertTriangle, Plane, ArrowRight, CheckCircle2, Headphones, MapPin } from 'lucide-react';
 
 // Codes d'urgence
@@ -378,7 +379,7 @@ export default function TranspondeurInterface({
       </div>
     </section>
     {['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(statut) && (
-      <ComBox key={planId} participantName={numeroVol || 'Pilote'} placement="inline" />
+      <div><ComBox key={planId} participantName={numeroVol || 'Pilote'} placement="inline" /><PilotCpdlc key={`cpdlc-${planId}`} planId={planId} /></div>
     )}
     </div>
   );

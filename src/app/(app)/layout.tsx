@@ -1,4 +1,4 @@
-import ComBox from '@/components/ComBox';
+import PilotObserverRadio from '@/components/cpdlc/PilotObserverRadio';
 import { hasRadioFlight } from '@/lib/radio-access';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -55,6 +55,7 @@ export default async function AppLayout({
     reparateurResult,
     ifsaResult,
     radioFlight,
+    depositedRadioPlan,
   ] = await Promise.all([
     // 1) Compagnie / PDG / co-PDG
     Promise.all([
@@ -94,6 +95,8 @@ export default async function AppLayout({
       ? Promise.resolve(admin.from('ifsa_signalements').select('*', { count: 'exact', head: true }).eq('statut', 'nouveau')).then(r => r.count ?? 0).catch(() => 0)
       : Promise.resolve(0),
     hasRadioFlight(uid).catch(() => true),
+    admin.from('plans_vol').select('id').or(`pilote_id.eq.${uid},copilote_id.eq.${uid}`)
+      .in('statut', ['depose', 'en_attente', 'en_attente_copilote']).limit(1),
   ]);
 
   // Extract compagnie info
@@ -182,7 +185,7 @@ export default async function AppLayout({
         </div>
       )}
       <main id="main-content" className="flex-1 mx-auto w-full max-w-7xl px-3 sm:px-5 lg:px-6 py-4 sm:py-6 lg:py-8"><PilotWorkspace>{children}</PilotWorkspace></main>
-      {!radioFlight && <ComBox participantName={profile?.identifiant || 'Pilote'} observer />}
+      {!radioFlight && <PilotObserverRadio participantName={profile?.identifiant || 'Pilote'} hasDepositedPlan={Boolean(depositedRadioPlan.data?.length)} />}
     </div>
   );
 }

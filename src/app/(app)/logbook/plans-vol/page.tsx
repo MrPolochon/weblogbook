@@ -10,6 +10,8 @@ import PlanVolAnnulerButton from './PlanVolAnnulerButton';
 import PlanVolCopiloteActions from './PlanVolCopiloteActions';
 import NePasEnregistrerPlanButton from '../NePasEnregistrerPlanButton';
 import TranspondeurInterface from './TranspondeurInterface';
+import ComBox from '@/components/ComBox';
+import PilotCpdlc from '@/components/cpdlc/PilotCpdlc';
 import MedevacPauseBanner from './MedevacPauseBanner';
 import ServicesAuSolPanel from './ServicesAuSolPanel';
 import type { PlanVol } from '@/lib/types';
@@ -72,6 +74,7 @@ export default async function MesPlansVolPage() {
   const plansEnCours = plans.filter(p => ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture'].includes(p.statut));
 
   const planActif = plans.find(p => ['accepte', 'en_cours', 'automonitoring', 'en_attente_cloture'].includes(p.statut)) as PlanVol | undefined;
+  const planDepose = !planActif ? plans.find(p => ['depose', 'en_attente', 'en_attente_copilote'].includes(p.statut)) : undefined;
 
   // Détection d'une mission MEDEVAC en pause : segment 'en_pause' avec un segment suivant 'planifie_suivant'
   const segmentsEnPause = allPlans.filter(p => p.statut === 'en_pause' && p.medevac_next_plan_id);
@@ -182,6 +185,7 @@ export default async function MesPlansVolPage() {
       )}
 
       {/* Interface Transpondeur - Vol actif */}
+      {planDepose && <div className="space-y-3"><ComBox participantName={planDepose.numero_vol || 'Pilote'} placement="inline" observer /><PilotCpdlc key={planDepose.id} planId={planDepose.id} /></div>}
       {planActif && (
         <TranspondeurInterface
           planId={planActif.id}
