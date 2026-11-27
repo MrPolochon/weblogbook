@@ -397,7 +397,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
         {dcduLeft.map((line, index) => <div className={styles.physicalSlot} key={index}>{physicalKey(line, 'DCDU L' + (index + 1))}</div>)}
       </div>
       <div className={styles.dcduScreen} style={{ filter: 'brightness(' + brightness + ')' }} aria-label={draft ? 'DCDU outgoing preview' : 'DCDU display'}>
-        <div className={styles.messageMeta}>{draft ? 'OUTGOING MESSAGE — NOT SENT' : message ? time(message.created_at) + ' ' + (message.incoming ? 'FROM ' + message.from_station : 'TO ' + message.to_station) + ' ' + message.status.replace('_', ' ') : currentAtc ? `CPDLC READY · ATC ${currentAtc}` : 'CPDLC READY'}</div>
+        <div className={styles.messageMeta}>{draft ? 'OUTGOING MESSAGE — NOT SENT' : message ? `${time(message.created_at)} ${message.incoming ? `FROM ${message.from_station}` : `TO ${message.to_station}`} ${message.incoming && message.status === 'SENT' ? (message.acknowledged ? 'OPEN' : 'NEW') : message.status.replace('_', ' ')}` : currentAtc ? `CPDLC READY · ATC ${currentAtc}` : 'CPDLC READY'}</div>
         <pre className={styles.messageBody}>{draft || message ? messagePages[Math.min(messagePage, messagePages.length - 1)] : error ? 'DATALINK UNAVAILABLE' : 'NO MESSAGES'}</pre>
         <div className={styles.dcduLower}>
           <div>{dcduLeft.map((line, index) => <span key={index} className={selectedAction === "DCDU L" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
