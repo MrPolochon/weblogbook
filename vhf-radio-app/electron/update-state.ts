@@ -1,11 +1,9 @@
 ﻿export type DesktopUpdateStatus =
   | 'idle'
   | 'checking'
-  | 'available'
-  | 'up-to-date'
-  | 'not-available'
   | 'downloading'
   | 'downloaded'
+  | 'up-to-date'
   | 'error';
 
 export interface DesktopUpdateState {
@@ -13,8 +11,5 @@ export interface DesktopUpdateState {
   version?: string;
   currentVersion?: string;
   percent?: number;
-  progress?: number;
-  releaseNotes?: string;
   error?: string;
-  checkedAt?: string;
 }
