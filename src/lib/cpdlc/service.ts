@@ -2,7 +2,7 @@ import type { createAdminClient } from '@/lib/supabase/admin';
 import { CODES_OACI_VALIDES } from '@/lib/aeroports-ptfs';
 import { lookupRadioFrequency } from '@/lib/radio-directory';
 import { fetchAtisBot, type BotOverviewResponse } from '@/lib/atis-bot-api';
-import { ACTIVE_PLANS, airportCode, clearanceText, coversAirport, CpdlcError, displayText, requiredText, routeStation, stationCode, uuid, validateInit } from './policy';
+import { departureRequestText, ACTIVE_PLANS, airportCode, clearanceText, coversAirport, CpdlcError, displayText, requiredText, routeStation, stationCode, uuid, validateInit } from './policy';
 import type { CpdlcInbox, CpdlcMessage, CpdlcStation } from './types';
 import { requestWeather } from './weather';
 
@@ -199,8 +199,8 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
     }
     return result;
   }
-  const to = init ? init.dep : stationCode(requiredText(body.to, 'DESTINATION STATION', 16));
-  const text = init ? `CLEARANCE REQUEST\nFLT NO ${init.flight_no}\nDEP ${init.dep}\nDEST ${init.dest}\nALTN ${init.altn || 'NONE'}\nETE ${init.ete}\nUTC ${init.utc}\nDATE ${init.date}` : requiredText(body.text, 'TEXT');
+  const to = init ? (init.station || init.dep) : stationCode(requiredText(body.to, 'DESTINATION STATION', 16));
+  const text = init ? departureRequestText(init) : requiredText(body.text, 'TEXT');
   if (init || CODES_OACI_VALIDES.has(to)) {
     const target = routeStation(context.stations, to, Boolean(init));
     const fallback = await frequencyFallback(admin, to, target);

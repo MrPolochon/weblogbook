@@ -16,7 +16,7 @@ export type CpdlcInbox = {
   station: string | null; plan_id: string | null; messages: CpdlcMessage[];
   stations: CpdlcStation[]; error?: string;
 };
-export type CpdlcInit = { flight_no: string; dep: string; dest: string; altn: string; ete: string; utc: string; date: string };
+export type CpdlcInit = { flight_no: string; dep: string; dest: string; altn: string; ete: string; utc: string; date: string; gate?: string; atis_id?: string; aircraft_type?: string; station?: string; text?: string };
 export type CpdlcCommand =
   | { action: 'clearance'; plan_id: string; init: CpdlcInit; client_request_id: string }
   | { action: 'free_text'; plan_id?: string; flight_no?: string; to: string; text: string; client_request_id: string }

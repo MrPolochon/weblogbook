@@ -7,10 +7,10 @@ import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcInit } from '@/lib/cpdlc/types';
 import styles from './pilot.module.css';
-import { validateInit } from '@/lib/cpdlc/policy';
+import { departureRequestText, validateInit } from '@/lib/cpdlc/policy';
 
 type Page = 'MENU' | 'INIT' | 'WX' | 'ATIS' | 'FREE' | 'RECEIVED' | 'SENT';
-const emptyInit: CpdlcInit = { flight_no: '', dep: '', dest: '', altn: '', ete: '', utc: '', date: '' };
+const emptyInit: CpdlcInit = { flight_no: '', dep: '', dest: '', altn: '', ete: '', utc: '', date: '', gate: '', atis_id: '', aircraft_type: '', station: '', text: '' };
 const upper = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 const time = (value: string) => new Date(value).toISOString().slice(11, 16).replace(':', '') + 'Z';
 function pagesFor(body: string): string[] {
@@ -117,7 +117,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
         if (command.action === 'clearance') {
           const fields = validateInit(command.init);
           command = { ...command, init: fields };
-          body = 'CLEARANCE REQUEST\n' + Object.entries(fields).filter(([, value]) => value).map(([key, value]) => `${key.replace('flight_no', 'FLT NO').toUpperCase()} ${value}`).join('\n');
+          body = departureRequestText(fields);
         } else if (command.action === 'weather') body = `${command.wx_type} REQUEST\nFROM ${command.flight_no}\nAIRPORTS ${command.airports.join(' ')}`;
         else if (command.action === 'atis') body = `ATIS REQUEST\nFROM ${command.flight_no}\nFOR ${command.airport}`;
         else if (command.action === 'free_text') body = `TO ${command.to}\n${command.text}`;
@@ -143,7 +143,8 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   };
   const put = (key: string, value: string) => {
     const text = upper(value).trim();
-    if (key.startsWith('init.')) setInit(previous => ({ ...previous, [key.slice(5)]: text }));
+    if (key === 'route') { if (text && !/^[A-Z]{4}\/[A-Z]{4}$/.test(text)) { setNotice('ORIG/DEST FORMAT XXXX/XXXX'); return; } const [dep = '', dest = ''] = text.split('/'); setInit(previous => ({ ...previous, dep, dest })); }
+    else if (key.startsWith('init.')) setInit(previous => ({ ...previous, [key.slice(5)]: text }));
     else if (key.startsWith('wx.')) setAirports(previous => previous.map((old, index) => index === Number(key.slice(3)) ? text : old));
     else if (key === 'airport') setAtisAirport(text);
     else if (key === 'to') setTo(text);
@@ -194,19 +195,18 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       </div>
       <div className={styles.mcduBody}>
         <div className={styles.mcduScreen}>
-          <h3>{({ MENU: 'AOC MENU', INIT: 'AOC FLT INIT', WX: 'AOC WEATHER REQUEST', ATIS: 'AOC ATIS REQUEST', FREE: 'AOC FREE TEXT', RECEIVED: 'RECEIVED MESSAGES', SENT: 'SENT MESSAGES' })[page]}</h3>
+          <h3>{({ MENU: 'AOC MENU', INIT: 'AOC DEPARTURE REQUEST', WX: 'AOC WEATHER REQUEST', ATIS: 'AOC ATIS REQUEST', FREE: 'AOC FREE TEXT', RECEIVED: 'RECEIVED MESSAGES', SENT: 'SENT MESSAGES' })[page]}</h3>
           {page === 'MENU' ? <div className={styles.menuGrid}>
-            <button onClick={() => navigate('INIT')}>〈INIT/PRES</button><button onClick={() => navigate('FREE')}>FREE TEXT〉</button>
+            <button onClick={() => navigate('INIT')}>〈DEPARTURE REQUEST</button><button onClick={() => navigate('FREE')}>FREE TEXT〉</button>
             <button onClick={() => navigate('WX')}>〈WX REQUEST</button><button onClick={() => navigate('RECEIVED')}>RECEIVED<br />MESSAGES〉</button>
             <button onClick={() => navigate('ATIS')}>〈ATIS</button><button onClick={() => navigate('SENT')}>SENT<br />MESSAGES〉</button>
             <span className={styles.inactive}>〈W/B</span><span className={styles.inactive}>DIVERSION〉</span>
             <span className={styles.inactive}>ATSU DLK</span><span className={styles.inactive}>MISC〉</span>
           </div> : page === 'INIT' ? <div className={styles.fieldsGrid}>
-            {flightField}{field('UTC', 'init.utc', init.utc, 'HHMM')}
-            {field('DEP', 'init.dep', init.dep)}{field('DATE', 'init.date', init.date, 'DD/MM/YYYY')}
-            {field('DEST', 'init.dest', init.dest)}<span />
-            {field('ALTN', 'init.altn', init.altn)}<span />
-            {field('ETE', 'init.ete', init.ete, 'HHMM')}<span />
+            {field('ORIG/DEST', 'route', init.dep || init.dest ? init.dep + '/' + init.dest : '', '[    /    ]')}{field('ATC CALLSIGN', 'init.flight_no', init.flight_no)}
+            {field('GATE NUMBER', 'init.gate', init.gate || '')}{field('ATIS ID', 'init.atis_id', init.atis_id || '')}
+            <div className={styles.fullWidth}>{field('ENTER OPTIONAL FREE TEXT', 'init.text', init.text || '', '[ FREE TEXT ]')}</div>
+            {field('A/C TYPE', 'init.aircraft_type', init.aircraft_type || '')}{field('STATION', 'init.station', init.station || '')}
           </div> : page === 'WX' ? <div className={styles.fieldsGrid}>
             {flightField}<button type="button" className={styles.field} onClick={() => setWxType(value => value === 'METAR' ? 'TAF' : 'METAR')}><span>WX TYPE</span><strong>↓{wxType}</strong></button>
             {airports.map((airport, index) => field(`AIRPORT ${index + 1}`, `wx.${index}`, airport, '[    ]'))}
@@ -215,7 +215,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
             {history.slice(historyPage * 5, historyPage * 5 + 5).map(item => <button type="button" key={item.id} onClick={() => { setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); }}><span>{time(item.created_at)} {item.incoming ? item.from_station : item.to_station}</span><strong>{item.kind.replace('_', ' ')}{item.incoming && !item.acknowledged ? ' *' : ''}</strong></button>)}
             <div className={styles.historyPages}><button type="button" disabled={!historyPage} onClick={() => setHistoryPage(value => value - 1)}>←</button><span>{historyPage + 1}/{historyPages}</span><button type="button" disabled={historyPage + 1 >= historyPages} onClick={() => setHistoryPage(value => value + 1)}>→</button></div>
           </div>}
-          <div className={styles.screenFooter}>{page !== 'MENU' ? <button type="button" onClick={() => navigate('MENU')}>〈AOC MENU</button> : <span className={styles.connected}>{unavailable ? 'DATALINK UNAVAILABLE' : 'DATALINK READY'}</span>}{['INIT', 'WX', 'ATIS', 'FREE'].includes(page) && <button type="button" disabled={busy || unavailable} onClick={() => void submit()}>{busy ? 'SENDING…' : page === 'INIT' ? 'INIT DATA REQ*' : 'SEND*'}</button>}</div>
+          <div className={styles.screenFooter}>{page !== 'MENU' ? <button type="button" onClick={() => navigate('MENU')}>〈AOC MENU</button> : <span className={styles.connected}>{unavailable ? 'DATALINK UNAVAILABLE' : 'DATALINK READY'}</span>}{['INIT', 'WX', 'ATIS', 'FREE'].includes(page) && <button type="button" disabled={busy || unavailable} onClick={() => void submit()}>{busy ? 'SENDING…' : 'SEND*'}</button>}</div>
           <p className={styles.mcduNotice} role="status">{upper(notice || error || (target ? `EDIT ${target.replace('init.', '').replace('wx.', 'AIRPORT ')}` : ''))}</p>
           <input ref={scratchInput} className={styles.scratchpad} aria-label="MCDU scratchpad" value={scratch} maxLength={1500} autoComplete="off" spellCheck={false} onChange={event => setScratch(upper(event.target.value))} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); close(); } else if (event.key === 'Enter') { event.preventDefault(); insert(); } }} placeholder="[ SCRATCHPAD ]" />
         </div>

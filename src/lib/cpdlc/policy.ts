@@ -29,11 +29,19 @@ export function uuid(value: unknown): string {
   return value;
 }
 export function validateInit(raw: unknown): CpdlcInit {
-  if (!raw || typeof raw !== 'object') throw new CpdlcError('INIT DATA REQUIRED');
+  if (!raw || typeof raw !== 'object') throw new CpdlcError('DEPARTURE REQUEST DATA REQUIRED');
   const value = raw as Record<string, unknown>;
   const airportFormat = (input: unknown) => { const code = stationCode(input); if (!/^[A-Z]{4}$/.test(code)) throw new CpdlcError('INVALID AIRPORT FORMAT - FOUR LETTERS REQUIRED'); return code; };
   const init: CpdlcInit = { flight_no: stationCode(requiredText(value.flight_no, 'FLT NO', 16)), dep: airportFormat(value.dep), dest: airportFormat(value.dest),
     altn: value.altn ? airportFormat(value.altn) : '', ete: value.ete ? requiredText(value.ete, 'ETE', 4) : '', utc: value.utc ? requiredText(value.utc, 'UTC', 4) : '', date: value.date ? requiredText(value.date, 'DATE', 10) : '' };
+  for (const [key, label, max] of [['gate', 'GATE NUMBER', 32], ['aircraft_type', 'A/C TYPE', 32], ['text', 'FREE TEXT', 1500]] as const) {
+    if (value[key]) init[key] = requiredText(value[key], label, max);
+  }
+  if (value.station) init.station = airportFormat(value.station);
+  if (value.atis_id) {
+    init.atis_id = stationCode(value.atis_id);
+    if (!/^[A-Z]$/.test(init.atis_id)) throw new CpdlcError('ATIS ID FORMAT - ONE LETTER REQUIRED');
+  }
   if (init.ete && !/^\d{2}[0-5]\d$/.test(init.ete)) throw new CpdlcError('ETE FORMAT HHMM');
   if (init.utc && !/^(?:[01]\d|2[0-3])[0-5]\d$/.test(init.utc)) throw new CpdlcError('UTC FORMAT HHMM');
   if (!init.date) return init;
@@ -42,6 +50,11 @@ export function validateInit(raw: unknown): CpdlcInit {
   const date = new Date(Date.UTC(year, month - 1, day));
   if (year < 2000 || date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) throw new CpdlcError('INVALID DATE');
   return init;
+}
+export function departureRequestText(init: CpdlcInit): string {
+  return ['DEPARTURE REQUEST', `ORIG/DEST ${init.dep}/${init.dest}`, `ATC CALLSIGN ${init.flight_no}`,
+    init.gate && `GATE NUMBER ${init.gate}`, init.atis_id && `ATIS ID ${init.atis_id}`,
+    init.text, init.aircraft_type && `A/C TYPE ${init.aircraft_type}`, `STATION ${init.station || init.dep}`].filter(Boolean).join('\n');
 }
 export function coversAirport(station: CpdlcStation, airport: string): boolean {
   if (station.code === airport) return true;

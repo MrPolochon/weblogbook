@@ -66,7 +66,7 @@ test('closed ATC panel still signals unacknowledged incoming messages, not sent 
 });
 
 test('selected message replaces a long inbox and terminal requests expose no invalid actions', () => {
-  const message = { id: 'selected', created_at: '2026-11-26T12:00:00Z', from_station: 'DLH324', to_station: 'IRFD', kind: 'CLEARANCE', body: 'CLEARANCE REQUEST\nFLT NO DLH324', incoming: true, acknowledged: true, status: 'SENT' };
+  const message = { id: 'selected', payload: {}, created_at: '2026-11-26T12:00:00Z', from_station: 'DLH324', to_station: 'IRFD', kind: 'CLEARANCE', body: 'CLEARANCE REQUEST\nFLT NO DLH324', incoming: true, acknowledged: true, status: 'SENT' };
   inbox = { available: true, user_id: 'atc', stations: [], messages: [message, ...Array.from({ length: 500 }, (_, index) => ({ ...message, id: `older-${index}` }))] };
   function renderSelected() {
     let stateIndex = 0;

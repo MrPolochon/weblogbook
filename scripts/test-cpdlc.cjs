@@ -228,3 +228,12 @@ test('CPDLC database: authorization, ACK, atomic replies, expiry, late response 
     });
   } finally { await db.close(); }
 });
+
+test('departure request preserves manual fields and formats the same message for preview and ATC',()=>{
+ const init=policy.validateInit({flight_no:'swr193t',dep:'LSZH',dest:'EKCH',gate:'A48',atis_id:'i',aircraft_type:'A320',station:'LSZH',text:'prêt au départ'});
+ assert.equal(policy.departureRequestText(init),'DEPARTURE REQUEST\nORIG/DEST LSZH/EKCH\nATC CALLSIGN SWR193T\nGATE NUMBER A48\nATIS ID I\nPRET AU DEPART\nA/C TYPE A320\nSTATION LSZH');
+ assert.throws(()=>policy.validateInit({...init,atis_id:'AB'}),/ATIS ID FORMAT/);
+ assert.throws(()=>policy.validateInit({...init,station:'ABC'}),/AIRPORT FORMAT/);
+ const minimal=policy.validateInit({flight_no:'F-XZZA',dep:'IPPH',dest:'ILKL'});
+ assert.match(policy.departureRequestText(minimal),/STATION IPPH$/);
+});
