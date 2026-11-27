@@ -42,6 +42,12 @@ export class RadioRoom {
     catch { return json({ error: 'Invalid ticket' }, 401); }
     if (!this.env.SFU_APP_ID || !this.env.SFU_APP_SECRET || !this.env.TURN_KEY_ID || !this.env.TURN_API_TOKEN) return json({ error: 'Service not configured' }, 503);
     return this.ctx.blockConcurrencyWhile(async () => {
+      // Ferme toute session fantôme précédente du même utilisateur dans cette salle
+      for (const existingWs of this.members()) {
+        if (this.state(existingWs)?.identity === claims.sub) {
+          await this.close(existingWs);
+        }
+      }
       const max = Math.min(200, Math.max(2, Number(this.env.MAX_ROOM_MEMBERS) || 100));
       if (this.members().length >= (claims.room.startsWith('call-') ? 2 : max)) return json({ error: 'Room full' }, 429);
       if (await this.ctx.storage.get(`ticket:${claims.jti}`)) return json({ error: 'Ticket already used' }, 401);
@@ -156,18 +162,29 @@ export class RadioRoom {
       }, 'POST', false, true);
       const seen = new Set();
       const tracks = [];
+      let invalidatedPeer = false;
       for (const track of result.tracks || []) {
         const peer = peers.find(other => other.id === track.trackName && other.pubSession === track.sessionId);
         if (!peer || seen.has(peer.id)) throw new Error('Unexpected subscription');
         seen.add(peer.id);
-        // A silent/expired source must not tear down other working subscriptions.
-        // Retry these specific failures on a later client reconciliation.
-        if (['not_found_track_error', 'empty_track_error'].includes(track.errorCode)) continue;
-        if (track.errorCode) throw new Error('Cloudflare subscription refused');
+        // Une piste distante expirée ou refusée ne doit jamais couper le WebSocket ni les autres pilotes
+        if (track.errorCode) {
+          const peerWs = this.members().find(other => this.state(other)?.id === peer.id);
+          if (peerWs) {
+            const peerState = this.state(peerWs);
+            if (peerState && peerState.published) {
+              peerState.published = false;
+              this.save(peerWs, peerState);
+              invalidatedPeer = true;
+            }
+          }
+          continue;
+        }
         if (typeof track.mid !== 'string') throw new Error('Unexpected subscription');
         s.subscriptions[peer.id] = track.mid;
         tracks.push({ peerId: peer.id, mid: track.mid });
       }
+      if (invalidatedPeer) this.broadcast();
       if (seen.size !== peers.length) throw new Error('Incomplete subscription');
       if (!tracks.length && !result.sessionDescription) {
         s.pending = false;
@@ -212,12 +229,11 @@ export class RadioRoom {
   async alarm() {
     for (const ws of this.members()) {
       const s = this.state(ws);
-      // Renew through a fresh join before the 24-hour TURN credentials expire.
-      if (Date.now() - s.lastSeen > 90_000 || Date.now() - s.createdAt > 23 * 3600_000) await this.enqueue(ws, () => this.close(ws));
+      // Tolérance de 5 minutes pour éviter les coupures quand le navigateur bride l'onglet en jeu
+      if (Date.now() - s.lastSeen > 300_000 || Date.now() - s.createdAt > 23 * 3600_000) await this.enqueue(ws, () => this.close(ws));
     }
     const tickets = await this.ctx.storage.list({ prefix: 'ticket:' });
     for (const [key, expiry] of tickets) if (expiry < Date.now() / 1000) await this.ctx.storage.delete(key);
     if (this.members().length || tickets.size) await this.ctx.storage.setAlarm(Date.now() + 60_000);
   }
 }
-
