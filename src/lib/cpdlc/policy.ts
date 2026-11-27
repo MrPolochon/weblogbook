@@ -37,7 +37,11 @@ export function validateInit(raw: unknown): CpdlcInit {
   for (const [key, label, max] of [['gate', 'GATE NUMBER', 32], ['aircraft_type', 'A/C TYPE', 32], ['text', 'FREE TEXT', 1500]] as const) {
     if (value[key]) init[key] = requiredText(value[key], label, max);
   }
-  if (value.station) init.station = airportFormat(value.station);
+  if (value.station) {
+    const st = stationCode(value.station);
+    if (!/^[A-Z]{4,5}$/.test(st)) throw new CpdlcError('INVALID STATION FORMAT - FOUR OR FIVE LETTERS REQUIRED');
+    init.station = st;
+  }
   if (value.atis_id) {
     init.atis_id = stationCode(value.atis_id);
     if (!/^[A-Z]$/.test(init.atis_id)) throw new CpdlcError('ATIS ID FORMAT - ONE LETTER REQUIRED');
