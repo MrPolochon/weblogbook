@@ -38,9 +38,8 @@ export async function contextFor(admin: Admin, userId: string, planId?: unknown)
 async function assertCallsign(admin: Admin, plan: Plan, callsign: unknown): Promise<string> {
   const code = stationCode(requiredText(callsign, 'FLT NO', 16));
   if (!/^[A-Z0-9](?:[A-Z0-9-]{0,14}[A-Z0-9])$/.test(code)) throw new CpdlcError('INVALID FLT NO FORMAT');
-  if (code !== stationCode(plan.numero_vol)) throw new CpdlcError('FLT NO DOES NOT MATCH FILED FLIGHT PLAN');
-  const { data, error } = await admin.from('plans_vol').select('id,numero_vol').in('statut', ACTIVE_PLANS).ilike('numero_vol', `%${code.split('').join('%')}%`); checked(error);
-  if ((data ?? []).filter(p => stationCode(p.numero_vol) === code).length !== 1) throw new CpdlcError('AMBIGUOUS STATION - CHECK FLIGHT NUMBER', 409);
+  // The authenticated flight identifies its crew; manually entered content is
+  // for the controller to verify, not to compare with the filed flight plan.
   return code;
 }
 async function frequencyFallback(admin: Admin, airport: string, target: CpdlcStation | null): Promise<string> {
@@ -202,7 +201,7 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
   }
   const to = init ? init.dep : stationCode(requiredText(body.to, 'DESTINATION STATION', 16));
   const text = init ? `CLEARANCE REQUEST\nFLT NO ${init.flight_no}\nDEP ${init.dep}\nDEST ${init.dest}\nALTN ${init.altn || 'NONE'}\nETE ${init.ete}\nUTC ${init.utc}\nDATE ${init.date}` : requiredText(body.text, 'TEXT');
-  if (CODES_OACI_VALIDES.has(to)) {
+  if (init || CODES_OACI_VALIDES.has(to)) {
     const target = routeStation(context.stations, to, Boolean(init));
     const fallback = await frequencyFallback(admin, to, target);
     return apply(admin, context, 'send', { ...base, to_station: to, recipient_user_ids: target ? [target.user_id] : [], assigned_session_id: target?.session_id ?? null,
@@ -251,7 +250,7 @@ async function respond(admin: Admin, context: Context, body: Record<string, unkn
     if (!plan || !ACTIVE_PLANS.includes(plan.statut)) throw new CpdlcError('FLIGHT STATION NO LONGER ACTIVE', 409);
     recipientIds = crew(plan);
   }
-  return apply(admin, context, 'reply', { message_id: parent.id, client_request_id: requestId, from_station: context.plan ? stationCode(context.plan.numero_vol) : context.station!.code,
+  return apply(admin, context, 'reply', { message_id: parent.id, client_request_id: requestId, from_station: context.plan ? parent.to_station : context.station!.code,
     to_station: parent.from_station, sender_user_ids: context.plan ? crew(context.plan) : [context.userId], recipient_user_ids: recipientIds,
     plan_id: context.plan?.id ?? parent.plan_id, recipient_plan_id: targetMode === 'pilot' ? parent.plan_id : null, assigned_session_id: assigned,
     kind: 'RESPONSE', body: text, status: response === 'FREE_TEXT' ? 'SENT' : response, response_required: response === 'CLEAR',

@@ -31,8 +31,9 @@ export function uuid(value: unknown): string {
 export function validateInit(raw: unknown): CpdlcInit {
   if (!raw || typeof raw !== 'object') throw new CpdlcError('INIT DATA REQUIRED');
   const value = raw as Record<string, unknown>;
-  const init: CpdlcInit = { flight_no: stationCode(requiredText(value.flight_no, 'FLT NO', 16)), dep: airportCode(value.dep), dest: airportCode(value.dest),
-    altn: value.altn ? airportCode(value.altn) : '', ete: value.ete ? requiredText(value.ete, 'ETE', 4) : '', utc: value.utc ? requiredText(value.utc, 'UTC', 4) : '', date: value.date ? requiredText(value.date, 'DATE', 10) : '' };
+  const airportFormat = (input: unknown) => { const code = stationCode(input); if (!/^[A-Z]{4}$/.test(code)) throw new CpdlcError('INVALID AIRPORT FORMAT - FOUR LETTERS REQUIRED'); return code; };
+  const init: CpdlcInit = { flight_no: stationCode(requiredText(value.flight_no, 'FLT NO', 16)), dep: airportFormat(value.dep), dest: airportFormat(value.dest),
+    altn: value.altn ? airportFormat(value.altn) : '', ete: value.ete ? requiredText(value.ete, 'ETE', 4) : '', utc: value.utc ? requiredText(value.utc, 'UTC', 4) : '', date: value.date ? requiredText(value.date, 'DATE', 10) : '' };
   if (init.ete && !/^\d{2}[0-5]\d$/.test(init.ete)) throw new CpdlcError('ETE FORMAT HHMM');
   if (init.utc && !/^(?:[01]\d|2[0-3])[0-5]\d$/.test(init.utc)) throw new CpdlcError('UTC FORMAT HHMM');
   if (!init.date) return init;

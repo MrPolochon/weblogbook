@@ -99,7 +99,8 @@ test('server context and commands enforce active crew, ATC role, manual identity
   const context=await service.contextFor(admin,uid(1),uid(10));
   const init={flight_no:'DLH324',dep:'IBTH',dest:'ITKO',altn:'',ete:'0130',utc:'1200',date:'26/11/2026'};
   const command={action:'clearance',plan_id:plan.id,init,client_request_id:uid(300)};
-  await assert.rejects(service.executeCommand(admin,context,{...command,init:{...init,flight_no:'ACA4553'}}),/DOES NOT MATCH/);
+  await service.executeCommand(admin,context,{...command,init:{...init,flight_no:'ACA4553'}});
+  assert.equal(admin.calls.pop().p_data.from_station,'ACA4553');
   await assert.rejects(service.executeCommand(admin,context,{...command,init:{...init,dep:''}}),/INVALID AIRPORT/);
   const start=Date.now();await service.executeCommand(admin,context,command);
   assert.deepEqual(admin.calls[0].p_data.recipient_user_ids,[uid(2)]);
@@ -109,7 +110,8 @@ test('server context and commands enforce active crew, ATC role, manual identity
   assert.equal(offline.calls[0].p_data.status,'STANDBY');
   assert.ok(Date.parse(offline.calls[0].p_data.deadline_at)-Date.now()<=30000);
   const duplicates=fakeAdmin({plans_vol:[plan,{...plan,id:uid(11),numero_vol:'DLH 324'}]});
-  await assert.rejects(service.executeCommand(duplicates,context,command),/AMBIGUOUS STATION/);
+  await service.executeCommand(duplicates,context,command);
+  assert.equal(duplicates.calls[0].p_data.plan_id,plan.id);
   const parent={id:uid(301),plan_id:plan.id,recipient_plan_id:plan.id,sender_user_ids:[uid(2)],recipient_user_ids:[uid(1)],kind:'RESPONSE',payload:{sender_mode:'atc',recipient_mode:'pilot',response:'CLEAR'},assigned_session_id:null};
   const messages=fakeAdmin({cpdlc_messages:[parent]});
   await assert.rejects(service.executeCommand(messages,context,{action:'respond',message_id:parent.id,response:'WILCO',client_request_id:uid(302)}),/ACK MESSAGE FIRST/);
