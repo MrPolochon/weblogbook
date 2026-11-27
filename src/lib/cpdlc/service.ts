@@ -37,7 +37,8 @@ export async function contextFor(admin: Admin, userId: string, planId?: unknown)
 }
 async function assertCallsign(admin: Admin, plan: Plan, callsign: unknown): Promise<string> {
   const code = stationCode(requiredText(callsign, 'FLT NO', 16));
-  if (!/^[A-Z0-9]{2,16}$/.test(code) || code !== stationCode(plan.numero_vol)) throw new CpdlcError('FLT NO DOES NOT MATCH FILED FLIGHT PLAN');
+  if (!/^[A-Z0-9](?:[A-Z0-9-]{0,14}[A-Z0-9])$/.test(code)) throw new CpdlcError('INVALID FLT NO FORMAT');
+  if (code !== stationCode(plan.numero_vol)) throw new CpdlcError('FLT NO DOES NOT MATCH FILED FLIGHT PLAN');
   const { data, error } = await admin.from('plans_vol').select('id,numero_vol').in('statut', ACTIVE_PLANS).ilike('numero_vol', `%${code.split('').join('%')}%`); checked(error);
   if ((data ?? []).filter(p => stationCode(p.numero_vol) === code).length !== 1) throw new CpdlcError('AMBIGUOUS STATION - CHECK FLIGHT NUMBER', 409);
   return code;
@@ -209,7 +210,7 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
       deadline_at: new Date(Date.now() + (target ? 300_000 : 30_000)).toISOString(), payload: { sender_mode: context.mode, recipient_mode: 'atc', sender_session_id: context.station?.session_id ?? null, init, airport: to, fallback_frequency: fallback } });
   }
   if (init) throw new CpdlcError('INVALID CLEARANCE AIRPORT');
-  if (!/^[A-Z0-9]{2,16}$/.test(to)) throw new CpdlcError('INVALID STATION');
+  if (!/^[A-Z0-9](?:[A-Z0-9-]{0,14}[A-Z0-9])$/.test(to)) throw new CpdlcError('INVALID STATION');
   const { data: plans, error } = await admin.from('plans_vol').select(PLAN_FIELDS).in('statut', ACTIVE_PLANS).ilike('numero_vol', `%${to.split('').join('%')}%`); checked(error);
   const matching = (plans ?? []).filter(p => stationCode(p.numero_vol) === to);
   if (matching.length > 1) throw new CpdlcError('AMBIGUOUS STATION - CHECK FLIGHT NUMBER', 409);

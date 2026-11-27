@@ -74,6 +74,19 @@ function fakeAdmin(tables, unavailable) {
     return query;
   }};
 }
+
+test('registered aircraft callsigns with a hyphen can send clearances and receive free text',async()=>{
+  const service=load('src/lib/cpdlc/service.ts');
+  const plan={id:uid(10),numero_vol:'F-XZZA',pilote_id:uid(1),copilote_id:null,statut:'depose'};
+  const other={...plan,id:uid(11),numero_vol:'DLH324',pilote_id:uid(3)};
+  const admin=fakeAdmin({plans_vol:[plan,other]});
+  const context=await service.contextFor(admin,uid(1),plan.id);
+  await service.executeCommand(admin,context,{action:'clearance',init:{flight_no:'F-XZZA',dep:'IPPH',dest:'ILKL',altn:'IZOL',ete:'0015',utc:'0440',date:''},client_request_id:uid(320)});
+  assert.equal(admin.calls[0].p_data.from_station,'F-XZZA');
+  const otherContext=await service.contextFor(admin,uid(3),other.id);
+  await service.executeCommand(admin,otherContext,{action:'free_text',flight_no:'DLH324',to:'F-XZZA',text:'TEST',client_request_id:uid(321)});
+  assert.deepEqual(admin.calls[1].p_data.recipient_user_ids,[uid(1)]);
+});
 test('server context and commands enforce active crew, ATC role, manual identity, unique callsign and ACK',async()=>{
   const service=load('src/lib/cpdlc/service.ts');
   const plan={id:uid(10),numero_vol:'DLH324',pilote_id:uid(1),copilote_id:uid(4),statut:'depose'};
