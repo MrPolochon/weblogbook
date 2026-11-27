@@ -81,6 +81,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const newestSeen = useRef<string | null>(null);
   const [position, setPosition] = useState({ x: 16, y: 16 });
   const island = useRef<HTMLDivElement>(null);
+  const [mcduScale, setMcduScale] = useState(1);
   const drag = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const message = messages.find(item => item.id === selected) ?? messages[0];
   const messageIndex = message ? messages.findIndex(item => item.id === message.id) : -1;
@@ -94,13 +95,23 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   useEffect(() => { setMessagePage(0); setSelectedAction(null); }, [message?.id, message?.status, message?.acknowledged, draft]);
   const close = useCallback(() => { setOpen(false); trigger.current?.focus(); }, []);
   const clamp = useCallback((x: number, y: number) => ({
-    x: Math.max(8, Math.min(x, window.innerWidth - (island.current?.offsetWidth || Math.min(480, window.innerWidth - 16)) - 8)),
-    y: Math.max(8, Math.min(y, window.innerHeight - Math.min(island.current?.offsetHeight || 560, window.innerHeight - 16) - 8)),
+    x: Math.max(8, Math.min(x, window.innerWidth - (island.current?.getBoundingClientRect().width || Math.min(480, window.innerWidth - 16)) - 8)),
+    y: Math.max(8, Math.min(y, window.innerHeight - (island.current?.getBoundingClientRect().height || Math.min(800, window.innerHeight - 16)) - 8)),
   }), []);
   useEffect(() => {
     if (!open) return;
     setPosition(previous => clamp(previous.x, previous.y));
-    const resize = () => setPosition(previous => clamp(previous.x, previous.y));
+    const resize = () => {
+      const element = island.current;
+      if (!element) return;
+      const scale = Math.min(1, (window.innerWidth - 16) / element.offsetWidth, (window.innerHeight - 16) / element.offsetHeight);
+      setMcduScale(scale);
+      setPosition(previous => ({
+        x: Math.max(8, Math.min(previous.x, window.innerWidth - element.offsetWidth * scale - 8)),
+        y: Math.max(8, Math.min(previous.y, window.innerHeight - element.offsetHeight * scale - 8)),
+      }));
+    };
+    resize();
     const key = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); close(); } };
     window.addEventListener('resize', resize); window.addEventListener('keydown', key);
     const observer = new ResizeObserver(resize);
@@ -251,7 +262,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       </div>
     </div>
     {(error || notice) && <p className={styles.notice} role="status">{upper(notice || error)}</p>}
-    {open && typeof document !== 'undefined' && createPortal(<div ref={island} role="dialog" aria-label="AOC MCDU" className={styles.island} style={{ left: position.x, top: position.y }}>
+    {open && typeof document !== 'undefined' && createPortal(<div ref={island} role="dialog" aria-label="AOC MCDU" className={styles.island} style={{ left: position.x, top: position.y, transform: `scale(${mcduScale})`, transformOrigin: 'top left' }}>
       <div className={styles.dragHandle} onPointerDown={dragStart} onPointerMove={event => { if (drag.current) setPosition(clamp(drag.current.left + event.clientX - drag.current.x, drag.current.top + event.clientY - drag.current.y)); }} onPointerUp={() => { drag.current = null; }} onPointerCancel={() => { drag.current = null; }}>
         <span>⠿ AOC MCDU <small>DRAG TO MOVE</small></span><button type="button" onClick={close} aria-label="Close MCDU">✕</button>
       </div>

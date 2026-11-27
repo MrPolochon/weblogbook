@@ -112,3 +112,9 @@
 .keyboardEntry input { background:#182b32; padding:6px; border:1px solid #6e858b; }
 
 .hardwareColumn { grid-template-columns:minmax(0,1fr); justify-content:stretch; }
+
+/* Fit the complete hardware into the viewport instead of scrolling its bezel. */
+.island { width:480px; max-height:none; overflow:clip; }
+.island .mcduNotice { height:24px; min-height:24px; overflow:hidden; }
+.island .displayCell strong { overflow:hidden; }
+.island .scratchDisplay { height:26px; overflow:hidden; }
