@@ -414,6 +414,7 @@ function messageScenario(overrides = {}) {
   };
   const messages = [];
   const prompts = [];
+  const closures = [];
   let failSend = false;
   let response = { ok: true, text: 'Ouvre la page indiquée puis précise le message affiché.' };
   const db = database((q) => {
@@ -438,7 +439,7 @@ function messageScenario(overrides = {}) {
       },
     },
     '@/lib/auth/create-discord-account': { createSiteAccountFromDiscord: () => { throw new Error('account creation forbidden'); } },
-    '@/lib/support/close-ticket': { closeSupportTicket: () => { throw new Error('closing forbidden'); } },
+    '@/lib/support/close-ticket': { closeSupportTicket: async (args) => { closures.push(args); return { ok: true }; } },
     '@/lib/support/aeroschool-catalog': { findAeroschoolForms: async () => [], aeroschoolBlock: () => '' },
     '@/lib/support/annuaire': {
       findDirectoryMatches: async () => [], directoryBlock: () => '', wantsIfsaPing: () => false,
@@ -447,12 +448,48 @@ function messageScenario(overrides = {}) {
     '@/lib/support/llm': { llmReply: async (input) => { prompts.push(input); return response; } },
   })('src/app/api/support/bot/message/route.ts');
   return {
-    row, messages, prompts, db,
+    row, messages, prompts, closures, db,
     reply: (value) => { response = value; },
     fail: (value) => { failSend = value; },
     send: (content, fields = {}) => route.POST({ json: async () => ({ channel_id: 'channel', discord_user_id: 'member', content, ...fields }) }),
   };
 }
+
+for (const muted of [false, true]) {
+  for (const mentions_bot of [false, true]) {
+    test(`fermeture demandée par le staff : relais=${muted}, mention=${mentions_bot}`, async () => {
+      const s = messageScenario(muted ? { statut: 'staff', staff_takeover_at: '2026-10-01T01:00:00Z' } : {});
+      const result = await s.send('Peux-tu fermer le ticket maintenant s’il te plaît ?', {
+        discord_user_id: 'staff-member', from_staff: true, mentions_bot,
+      });
+      assert.equal(result.body.closed, true);
+      assert.deepEqual(s.closures, [{ channelId: 'channel', closedBy: 'staff:staff-member' }]);
+      assert.equal(s.prompts.length, 0);
+    });
+  }
+  test(`staff mentionnant le bot : réponse à une question, relais existant=${muted}`, async () => {
+    const s = messageScenario(muted ? { statut: 'staff', staff_takeover_at: '2026-10-01T01:00:00Z', staff_takeover_notified: true } : {});
+    const result = await s.send('Peux-tu expliquer pourquoi cette page affiche une erreur ?', {
+      discord_user_id: 'staff-member', from_staff: true, mentions_bot: true,
+    });
+    assert.equal(result.status, 200);
+    assert.equal(s.prompts.length, 1);
+    assert.equal(s.messages.length, 1);
+    assert.equal(s.row.staff_takeover_at, null);
+    assert.doesNotMatch(s.messages[0].content, /Je me tais/);
+  });
+}
+
+test('staff sans mention : prise en charge puis silence conservés', async () => {
+  const s = messageScenario();
+  await s.send('Je prends le relais sur ce ticket.', { discord_user_id: 'staff-member', from_staff: true });
+  assert.ok(s.row.staff_takeover_at);
+  assert.equal(s.prompts.length, 0);
+  assert.equal(s.messages.length, 1);
+  await s.send('Voici les détails de mon problème.');
+  assert.equal(s.prompts.length, 0);
+  assert.equal(s.messages.length, 1);
+});
 
 test('parcours HTTP : information bancaire sans alerte, demande humaine sans LLM, relance sans nouveau ping', async () => {
   const s = messageScenario();

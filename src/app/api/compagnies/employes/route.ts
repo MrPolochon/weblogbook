@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PATCH - Changer le rôle d'un employé (PDG de la compagnie uniquement)
+// PATCH - Rôles : PDG ; salaires : PDG ou co-PDG de la même compagnie.
 export async function PATCH(req: NextRequest) {
   try {
     const supabase = await createClient();
@@ -89,8 +89,12 @@ export async function PATCH(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const body = await req.json();
-    const { id, role } = body;
-    if (!id || !role || !['employe', 'co_pdg'].includes(role)) {
+    const { id, role, pourcentage_salaire } = body;
+    const salaryEdit = Object.hasOwn(body, 'pourcentage_salaire');
+    if (salaryEdit && pourcentage_salaire !== null && (typeof pourcentage_salaire !== 'number' || !Number.isInteger(pourcentage_salaire) || pourcentage_salaire < 0 || pourcentage_salaire > 100)) {
+      return NextResponse.json({ error: 'Le salaire doit être un pourcentage entier entre 0 et 100, ou null pour le taux compagnie.' }, { status: 400 });
+    }
+    if (!id || (!salaryEdit && !role) || (role !== undefined && !['employe', 'co_pdg'].includes(role))) {
       return NextResponse.json({ error: 'id et role (employe | co_pdg) requis' }, { status: 400 });
     }
 
@@ -110,11 +114,19 @@ export async function PATCH(req: NextRequest) {
 
     const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
     if (compagnie.pdg_id !== user.id && profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Seul le PDG peut modifier les rôles' }, { status: 403 });
+      if (role !== undefined || !salaryEdit) {
+        return NextResponse.json({ error: 'Seul le PDG peut modifier les rôles' }, { status: 403 });
+      }
+      const { data: membership, error: membershipError } = await admin.from('compagnie_employes')
+        .select('id').eq('compagnie_id', employe.compagnie_id)
+        .eq('pilote_id', user.id).eq('role', 'co_pdg').maybeSingle();
+      if (membershipError || !membership) {
+        return NextResponse.json({ error: 'Seuls le PDG et les co-PDG de cette compagnie peuvent modifier les salaires' }, { status: 403 });
+      }
     }
 
     const { error } = await admin.from('compagnie_employes')
-      .update({ role })
+      .update({ ...(role !== undefined ? { role } : {}), ...(salaryEdit ? { pourcentage_salaire } : {}) })
       .eq('id', id);
     if (error) return NextResponse.json({ error: 'Erreur lors de la mise à jour' }, { status: 400 });
 

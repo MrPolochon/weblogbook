@@ -265,9 +265,11 @@ export async function POST(req: NextRequest) {
   // Relais staff : état PERSISTANT du ticket, pas une décision par message.
   // Un staff qui plaisante (« trop styleee ») ne coupe plus l'IA ; un staff qui
   // intervient vraiment la coupe une fois pour toutes, avec une seule annonce.
+  // Une mention du bot lui adresse une demande : elle ne constitue jamais
+  // une prise en charge humaine et doit laisser passer questions et commandes.
   // ---------------------------------------------------------------------
   const staffClaimsTicket =
-    staffSpeaking && isRealStaffIntervention(content) && !isStaffAskingIaToContinue(content);
+    staffSpeaking && !mentionsBot && isRealStaffIntervention(content) && !isStaffAskingIaToContinue(content);
   const mentionIntent = mentionsBot ? detectMentionIntent(content) : detectBareCloseIntent(content);
   if (staffClaimsTicket && !mentionIntent) {
     const startsTakeover = !muted && isRealStaffIntervention(content);
@@ -305,11 +307,6 @@ export async function POST(req: NextRequest) {
 
   // Silence persistant : tant que le staff tient le ticket, l'IA ne répond à
   // personne, pas même au demandeur. Aucun appel LLM, aucun token dépensé.
-  if (muted && mentionsBot && staffClaimsTicket) {
-    await recordSilently('staff');
-    return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
-  }
-
   if (muted && !mentionsBot && !mentionIntent) {
     await recordSilently('user');
     return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });

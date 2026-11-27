@@ -14,13 +14,36 @@ export const dynamic = 'force-dynamic';
  * Appelé par FlightStripBoardWrapper pour des mises à jour rapides
  * sans router.refresh() (rechargement SSR complet).
  */
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'Non authentifié' }, { status: 401 });
 
     const admin = createAdminClient();
+    const observedUserId = new URL(request.url).searchParams.get('observer');
+    let holderUserId = user.id;
+    let observation: {
+      session: { aeroport: string; position: string; started_at: string };
+      transfers: { id: string; numero_vol: string; aeroport_depart: string; aeroport_arrivee: string }[];
+    } | null = null;
+    if (observedUserId) {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      if (profile?.role !== 'admin') {
+        return NextResponse.json({ error: 'Observation réservée aux administrateurs.' }, { status: 403 });
+      }
+      const { data: session, error: sessionError } = await admin.from('atc_sessions')
+        .select('id, aeroport, position, started_at').eq('user_id', observedUserId).maybeSingle();
+      if (sessionError) return NextResponse.json({ error: 'Impossible de vérifier la session observée.' }, { status: 503 });
+      if (!session) return NextResponse.json({ error: 'Contrôleur hors service.' }, { status: 404 });
+      holderUserId = observedUserId;
+      const { data: transfers, error: transfersError } = await admin.from('plans_vol')
+        .select('id, numero_vol, aeroport_depart, aeroport_arrivee')
+        .eq('pending_transfer_aeroport', session.aeroport)
+        .eq('pending_transfer_position', session.position);
+      if (transfersError) return NextResponse.json({ error: 'Impossible de charger les transferts.' }, { status: 503 });
+      observation = { session, transfers: transfers ?? [] };
+    }
 
     // Une seule requête avec tous les joins nécessaires
     const { data: plans, error } = await admin
@@ -45,7 +68,7 @@ export async function GET() {
         pilote:profiles!plans_vol_pilote_id_fkey ( identifiant ),
         compagnie:compagnies!plans_vol_compagnie_id_fkey ( code_oaci, callsign_telephonie )
       `)
-      .eq('current_holder_user_id', user.id)
+      .eq('current_holder_user_id', holderUserId)
       .or('automonitoring.eq.false,automonitoring.is.null')
       .in('statut', ['en_cours', 'accepte', 'automonitoring', 'en_attente_cloture', 'depose', 'en_attente'])
       .order('created_at', { ascending: false });
@@ -53,7 +76,9 @@ export async function GET() {
     if (error) {
       // Fallback : si les joins échouent (schema différent), on fait sans
       console.warn('GET /api/atc/strips join error, falling back:', error.message);
-      return await getStripsLegacy(user.id, admin);
+      const fallback = await getStripsLegacy(holderUserId, admin);
+      if (!observation || !fallback.ok) return fallback;
+      return NextResponse.json({ ...await fallback.json(), observation });
     }
 
     const strips: StripData[] = (plans ?? []).map((plan) => {
@@ -148,7 +173,7 @@ export async function GET() {
       } as StripData;
     });
 
-    return NextResponse.json({ strips });
+    return NextResponse.json({ strips, ...(observation ? { observation } : {}) });
   } catch (e) {
     console.error('GET /api/atc/strips:', e);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500 });
