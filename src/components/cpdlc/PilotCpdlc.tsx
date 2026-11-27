@@ -61,6 +61,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const alarm = useCpdlcAlarm(unread.length > 0);
   const [selected, setSelected] = useState<string | null>(null);
   const [messagePage, setMessagePage] = useState(0);
+  const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [brightness, setBrightness] = useState(1);
   const [open, setOpen] = useState(false);
   const [page, setPage] = useState<Page>('MENU');
@@ -90,7 +91,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     const newest = unread[0];
     if (newest && newest.id !== newestSeen.current) { newestSeen.current = newest.id; setSelected(newest.id); setMessagePage(0); }
   }, [unread]);
-  useEffect(() => { setMessagePage(0); }, [message?.id, draft?.body]);
+  useEffect(() => { setMessagePage(0); setSelectedAction(null); }, [message?.id, message?.status, message?.acknowledged, draft]);
   const close = useCallback(() => { setOpen(false); trigger.current?.focus(); }, []);
   const clamp = useCallback((x: number, y: number) => ({
     x: Math.max(8, Math.min(x, window.innerWidth - (island.current?.offsetWidth || Math.min(480, window.innerWidth - 16)) - 8)),
@@ -157,13 +158,66 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     scratchInput.current?.focus();
   };
   const insert = () => { if (target) { put(target, scratch); setScratch(''); setTarget(''); } else setNotice('SELECT A FIELD WITH A LINE KEY'); };
-  const field = (label: string, key: string, value: string, hint = '[          ]') => <button type="button" key={key} className={`${styles.field} ${target === key ? styles.fieldSelected : ''}`} onClick={() => selectField(key, value)} aria-label={`${label}: ${value || 'EMPTY'}`}><span>{label}</span><strong>{value || hint}</strong></button>;
-  const flightField = field('FLT NO', 'init.flight_no', init.flight_no);
   const history = messages.filter(item => page === 'RECEIVED' ? item.incoming : !item.incoming);
   const historyPages = Math.max(1, Math.ceil(history.length / 5));
   const response = (reply: 'WILCO' | 'UNABLE' | 'STANDBY' | 'ROGER') => {
     if (message) void execute({ action: 'respond', plan_id: planId, message_id: message.id, response: reply, client_request_id: crypto.randomUUID() }, `${reply} SENT`);
   };
+
+  type Line = { label: string; value?: string; action: () => void; disabled?: boolean };
+  const left: (Line | undefined)[] = Array(6).fill(undefined), right: (Line | undefined)[] = Array(6).fill(undefined);
+  const editLine = (label: string, key: string, value: string, hint = '[          ]'): Line => ({ label, value: value || hint, action: () => selectField(key, value) });
+  const navLine = (label: string, next: Page): Line => ({ label, action: () => navigate(next) });
+  if (page === 'MENU') {
+    left[0] = navLine('DEPARTURE REQUEST', 'INIT'); left[1] = navLine('WX REQUEST', 'WX'); left[2] = navLine('ATIS', 'ATIS');
+    right[0] = navLine('FREE TEXT', 'FREE'); right[1] = navLine('RECEIVED MESSAGES', 'RECEIVED'); right[2] = navLine('SENT MESSAGES', 'SENT');
+  } else {
+    left[5] = navLine('RETURN', 'MENU');
+    if (['INIT', 'WX', 'ATIS', 'FREE'].includes(page)) right[5] = { label: 'SEND*', action: () => void submit(), disabled: busy || unavailable };
+    if (page === 'INIT') {
+      left[0] = editLine('ORIG/DEST', 'route', init.dep || init.dest ? init.dep + '/' + init.dest : '', '[    /    ]');
+      right[0] = editLine('ATC CALLSIGN', 'init.flight_no', init.flight_no);
+      left[1] = editLine('GATE NUMBER', 'init.gate', init.gate || ''); right[1] = editLine('ATIS ID', 'init.atis_id', init.atis_id || '');
+      left[2] = editLine('OPTIONAL FREE TEXT', 'init.text', init.text || '');
+      left[4] = editLine('A/C TYPE', 'init.aircraft_type', init.aircraft_type || ''); right[4] = editLine('STATION', 'init.station', init.station || '');
+    } else if (page === 'WX') {
+      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no);
+      right[0] = { label: 'WX TYPE', value: wxType, action: () => setWxType(value => value === 'METAR' ? 'TAF' : 'METAR') };
+      airports.forEach((airport, index) => { right[index + 1] = editLine('AIRPORT ' + (index + 1), 'wx.' + index, airport); });
+    } else if (page === 'ATIS') {
+      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no); right[0] = editLine('AIRPORT', 'airport', atisAirport);
+    } else if (page === 'FREE') {
+      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no); right[0] = editLine('TO STATION', 'to', to);
+      left[2] = editLine('MESSAGE', 'text', freeText);
+    } else {
+      history.slice(historyPage * 5, historyPage * 5 + 5).forEach((item, index) => {
+        left[index] = { label: time(item.created_at) + ' ' + (item.incoming ? item.from_station : item.to_station), value: item.kind.replace('_', ' '), action: () => { setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); } };
+      });
+      right[4] = { label: 'PREV PAGE', disabled: historyPage === 0, action: () => setHistoryPage(value => value - 1) };
+      right[5] = { label: 'NEXT PAGE', disabled: historyPage + 1 >= historyPages, action: () => setHistoryPage(value => value + 1) };
+    }
+  }
+  const dcduLeft: (Line | undefined)[] = [undefined, undefined], dcduRight: (Line | undefined)[] = [undefined, undefined];
+  if (draft) {
+    dcduLeft[0] = { label: '*CANCEL', disabled: busy, action: () => { setDraft(null); setNotice('MESSAGE CANCELLED'); } };
+    dcduRight[1] = { label: busy ? 'SENDING' : 'SEND*', disabled: busy || unavailable, action: () => void sendDraft() };
+  } else if (message?.incoming) {
+    if (!message.acknowledged) dcduRight[1] = { label: 'ACK*', disabled: busy, action: () => void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED') };
+    else if (message.response_required && !['WILCO', 'UNABLE', 'ROGER', 'REFUSED'].includes(message.status)) {
+      dcduLeft[0] = { label: '*UNABLE', disabled: busy, action: () => response('UNABLE') };
+      dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => response('STANDBY') };
+      dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => response('WILCO') };
+    } else if (message.kind === 'FREE_TEXT' && !message.response_required && message.status !== 'ROGER') dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => response('ROGER') };
+  }
+  const physicalKey = (line: Line | undefined, name: string) => <button type="button" aria-label={name + (line ? ': ' + line.label : '')} aria-pressed={name.startsWith('DCDU') ? selectedAction === name + ':' + line?.label : undefined} disabled={!line || line.disabled} onClick={() => {
+    if (!line || line.disabled) return;
+    if (name.startsWith('DCDU')) {
+      const id = name + ':' + line.label;
+      if (selectedAction !== id) { setSelectedAction(id); return; }
+      setSelectedAction(null);
+    }
+    line.action();
+  }}>—</button>;
   const dragStart = (event: ReactPointerEvent<HTMLDivElement>) => {
     if ((event.target as HTMLElement).closest('button')) return;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -173,20 +227,28 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   return <section className={styles.root} aria-label="CPDLC datalink">
     <div className={styles.sectionHeader}><div><span className={styles.eyebrow}>DATALINK COMMUNICATIONS</span><h2>DCDU <span>{data?.station || 'NOT CONNECTED'}</span></h2></div><button ref={trigger} type="button" className={styles.openButton} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}>MCDU {open ? '−' : '+'}</button></div>
     {alarm.blocked && <button className={styles.audioWarning} type="button" onClick={() => void alarm.enable()}>ENABLE MESSAGE SOUND — {unread.length} UNACKNOWLEDGED</button>}
-    <div className={styles.dcdu}>{draft && <div className={`${styles.dcduScreen} ${styles.draftScreen}`} aria-label="DCDU outgoing preview"><div className={styles.messageMeta}>OUTGOING MESSAGE — NOT SENT</div><pre className={styles.messageBody}>{messagePages[Math.min(messagePage, messagePages.length - 1)]}</pre><div className={styles.pageCounter}>{messagePage + 1}/{messagePages.length} PGE</div><div className={styles.dcduActions}><button type="button" disabled={busy} onClick={() => { setDraft(null); setNotice('MESSAGE CANCELLED'); }}>CANCEL*</button><button type="button" disabled={busy || unavailable} onClick={() => void sendDraft()}>{busy ? 'SENDING…' : 'SEND*'}</button></div></div>}
-      <div className={styles.hardwareColumn}><span className={styles.screw}>✕</span><button type="button" aria-label="Increase DCDU brightness" onClick={() => setBrightness(value => Math.min(1, value + .1))}>BRT</button><button type="button" aria-label="Decrease DCDU brightness" onClick={() => setBrightness(value => Math.max(.5, value - .1))}>DIM</button><button type="button" disabled={Boolean(draft) || messageIndex <= 0} onClick={() => setSelected(messages[messageIndex - 1]?.id)}>MSG−</button><button type="button" disabled={Boolean(draft) || messageIndex < 0 || messageIndex >= messages.length - 1} onClick={() => setSelected(messages[messageIndex + 1]?.id)}>MSG+</button><span className={styles.screw}>✕</span></div>
-      <div className={styles.dcduScreen} style={{ filter: `brightness(${brightness})`, display: draft ? 'none' : undefined }}>
-        <div className={styles.messageMeta}><span>{message ? `${time(message.created_at)} ${message.incoming ? 'FROM' : 'TO'} ${message.incoming ? message.from_station : message.to_station}` : 'CPDLC'}</span><span>{message?.status.replace('_', ' ') || (loading ? 'CONNECTING' : 'READY')}</span></div>
-        {message?.late && <div className={styles.late}>LATE RESPONSE</div>}
-        <pre className={styles.messageBody}>{message ? messagePages[Math.min(messagePage, messagePages.length - 1)] : error ? 'DATALINK UNAVAILABLE\nRETRYING CONNECTION' : 'NO MESSAGES\n\nOPEN MCDU TO SEND A REQUEST'}</pre>
-        <div className={styles.pageCounter}>{message ? `${messageIndex + 1}/${messages.length} MSG · ${messagePage + 1}/${messagePages.length} PGE` : 'AOC DATALINK'}{unread.length > 0 && <span>{unread.length} NEW</span>}</div>
-        <div className={styles.dcduActions}>
-          {message?.incoming && !message.acknowledged ? <button type="button" disabled={busy} onClick={() => void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED')}>ACK*</button> : <span>{message?.incoming ? 'ACKNOWLEDGED' : 'SENT'}</span>}
-          {message?.incoming && message.acknowledged && message.response_required && !['WILCO', 'UNABLE', 'ROGER', 'REFUSED'].includes(message.status) && <div className={styles.responses}>{(['WILCO', 'UNABLE', 'STANDBY'] as const).map(reply => <button type="button" disabled={busy} key={reply} onClick={() => response(reply)}>{reply}</button>)}</div>}
-          {message?.incoming && message.acknowledged && message.kind === 'FREE_TEXT' && !message.response_required && message.status !== 'ROGER' && <button type="button" disabled={busy} onClick={() => response('ROGER')}>ROGER*</button>}
+    <div className={styles.dcdu}>
+      <div className={styles.hardwareColumn}>
+        <div className={styles.brightnessKeys}><button type="button" aria-label="Increase DCDU brightness" onClick={() => setBrightness(value => Math.min(1, value + .1))}>BRT</button><button type="button" aria-label="Decrease DCDU brightness" onClick={() => setBrightness(value => Math.max(.5, value - .1))}>DIM</button></div>
+        <button type="button" disabled={Boolean(draft) || messageIndex <= 0} onClick={() => setSelected(messages[messageIndex - 1]?.id)}>MSG−</button>
+        <button type="button" disabled={Boolean(draft) || messageIndex < 0 || messageIndex >= messages.length - 1} onClick={() => setSelected(messages[messageIndex + 1]?.id)}>MSG+</button>
+        {dcduLeft.map((line, index) => <div className={styles.physicalSlot} key={index}>{physicalKey(line, 'DCDU L' + (index + 1))}</div>)}
+      </div>
+      <div className={styles.dcduScreen} style={{ filter: 'brightness(' + brightness + ')' }} aria-label={draft ? 'DCDU outgoing preview' : 'DCDU display'}>
+        <div className={styles.messageMeta}>{draft ? 'OUTGOING MESSAGE — NOT SENT' : message ? time(message.created_at) + ' ' + (message.incoming ? 'FROM ' + message.from_station : 'TO ' + message.to_station) + ' ' + message.status.replace('_', ' ') : 'CPDLC READY'}</div>
+        <pre className={styles.messageBody}>{draft || message ? messagePages[Math.min(messagePage, messagePages.length - 1)] : error ? 'DATALINK UNAVAILABLE' : 'NO MESSAGES'}</pre>
+        <div className={styles.dcduLower}>
+          <div>{dcduLeft.map((line, index) => <span key={index} className={selectedAction === "DCDU L" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
+          <div className={styles.dcduCenter}><span>{message?.late && !draft ? 'LATE RESPONSE' : ''}</span><span>{messagePage + 1}/{messagePages.length} PGE</span></div>
+          <div>{dcduRight.map((line, index) => <span key={index} className={selectedAction === "DCDU R" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
         </div>
       </div>
-      <div className={styles.hardwareColumn}><span className={styles.screw}>✕</span><button type="button" aria-label="Print current message" disabled={!message} onClick={() => message && printMessage(`${time(message.created_at)} FROM ${message.from_station} TO ${message.to_station}`, message.body)}>PRINT</button><button type="button" disabled={messagePage === 0} onClick={() => setMessagePage(value => value - 1)}>PGE−</button><button type="button" disabled={messagePage >= messagePages.length - 1} onClick={() => setMessagePage(value => value + 1)}>PGE+</button><button type="button" aria-label="Acknowledge current message" disabled={Boolean(draft) || !message?.incoming || message.acknowledged || busy} onClick={() => message && void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED')}>—</button><span className={styles.screw}>✕</span></div>
+      <div className={styles.hardwareColumn}>
+        <button type="button" disabled={!message || Boolean(draft)} onClick={() => message && printMessage(time(message.created_at), message.body)}>PRINT</button>
+        <button type="button" disabled={messagePage === 0} onClick={() => setMessagePage(value => value - 1)}>PGE−</button>
+        <button type="button" disabled={messagePage >= messagePages.length - 1} onClick={() => setMessagePage(value => value + 1)}>PGE+</button>
+        {dcduRight.map((line, index) => <div className={styles.physicalSlot} key={index}>{physicalKey(line, 'DCDU R' + (index + 1))}</div>)}
+      </div>
     </div>
     {(error || notice) && <p className={styles.notice} role="status">{upper(notice || error)}</p>}
     {open && typeof document !== 'undefined' && createPortal(<div ref={island} role="dialog" aria-label="AOC MCDU" className={styles.island} style={{ left: position.x, top: position.y }}>
@@ -194,31 +256,21 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
         <span>⠿ AOC MCDU <small>DRAG TO MOVE</small></span><button type="button" onClick={close} aria-label="Close MCDU">✕</button>
       </div>
       <div className={styles.mcduBody}>
-        <div className={styles.mcduScreen}>
-          <h3>{({ MENU: 'AOC MENU', INIT: 'AOC DEPARTURE REQUEST', WX: 'AOC WEATHER REQUEST', ATIS: 'AOC ATIS REQUEST', FREE: 'AOC FREE TEXT', RECEIVED: 'RECEIVED MESSAGES', SENT: 'SENT MESSAGES' })[page]}</h3>
-          {page === 'MENU' ? <div className={styles.menuGrid}>
-            <button onClick={() => navigate('INIT')}>〈DEPARTURE REQUEST</button><button onClick={() => navigate('FREE')}>FREE TEXT〉</button>
-            <button onClick={() => navigate('WX')}>〈WX REQUEST</button><button onClick={() => navigate('RECEIVED')}>RECEIVED<br />MESSAGES〉</button>
-            <button onClick={() => navigate('ATIS')}>〈ATIS</button><button onClick={() => navigate('SENT')}>SENT<br />MESSAGES〉</button>
-            <span className={styles.inactive}>〈W/B</span><span className={styles.inactive}>DIVERSION〉</span>
-            <span className={styles.inactive}>ATSU DLK</span><span className={styles.inactive}>MISC〉</span>
-          </div> : page === 'INIT' ? <div className={styles.fieldsGrid}>
-            {field('ORIG/DEST', 'route', init.dep || init.dest ? init.dep + '/' + init.dest : '', '[    /    ]')}{field('ATC CALLSIGN', 'init.flight_no', init.flight_no)}
-            {field('GATE NUMBER', 'init.gate', init.gate || '')}{field('ATIS ID', 'init.atis_id', init.atis_id || '')}
-            <div className={styles.fullWidth}>{field('ENTER OPTIONAL FREE TEXT', 'init.text', init.text || '', '[ FREE TEXT ]')}</div>
-            {field('A/C TYPE', 'init.aircraft_type', init.aircraft_type || '')}{field('STATION', 'init.station', init.station || '')}
-          </div> : page === 'WX' ? <div className={styles.fieldsGrid}>
-            {flightField}<button type="button" className={styles.field} onClick={() => setWxType(value => value === 'METAR' ? 'TAF' : 'METAR')}><span>WX TYPE</span><strong>↓{wxType}</strong></button>
-            {airports.map((airport, index) => field(`AIRPORT ${index + 1}`, `wx.${index}`, airport, '[    ]'))}
-          </div> : page === 'ATIS' ? <div className={styles.fieldsGrid}>{flightField}{field('AIRPORT', 'airport', atisAirport)}<p className={styles.screenHelp}>REQUEST THE CURRENT PUBLISHED ATIS.</p></div> : page === 'FREE' ? <div className={styles.fieldsGrid}>{flightField}{field('TO STATION', 'to', to)}<div className={styles.fullWidth}>{field('MESSAGE', 'text', freeText, '[ FREE TEXT ]')}</div><p className={styles.screenHelp}>ENTER AN AIRPORT OR FLIGHT NUMBER.</p></div> : <div className={styles.history}>
-            {history.length === 0 && <p>NO MESSAGES</p>}
-            {history.slice(historyPage * 5, historyPage * 5 + 5).map(item => <button type="button" key={item.id} onClick={() => { setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); }}><span>{time(item.created_at)} {item.incoming ? item.from_station : item.to_station}</span><strong>{item.kind.replace('_', ' ')}{item.incoming && !item.acknowledged ? ' *' : ''}</strong></button>)}
-            <div className={styles.historyPages}><button type="button" disabled={!historyPage} onClick={() => setHistoryPage(value => value - 1)}>←</button><span>{historyPage + 1}/{historyPages}</span><button type="button" disabled={historyPage + 1 >= historyPages} onClick={() => setHistoryPage(value => value + 1)}>→</button></div>
-          </div>}
-          <div className={styles.screenFooter}>{page !== 'MENU' ? <button type="button" onClick={() => navigate('MENU')}>〈AOC MENU</button> : <span className={styles.connected}>{unavailable ? 'DATALINK UNAVAILABLE' : 'DATALINK READY'}</span>}{['INIT', 'WX', 'ATIS', 'FREE'].includes(page) && <button type="button" disabled={busy || unavailable} onClick={() => void submit()}>{busy ? 'SENDING…' : 'SEND*'}</button>}</div>
-          <p className={styles.mcduNotice} role="status">{upper(notice || error || (target ? `EDIT ${target.replace('init.', '').replace('wx.', 'AIRPORT ')}` : ''))}</p>
-          <input ref={scratchInput} className={styles.scratchpad} aria-label="MCDU scratchpad" value={scratch} maxLength={1500} autoComplete="off" spellCheck={false} onChange={event => setScratch(upper(event.target.value))} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); close(); } else if (event.key === 'Enter') { event.preventDefault(); insert(); } }} placeholder="[ SCRATCHPAD ]" />
+        <div className={styles.mcduAssembly}>
+          <div className={styles.lineKeys}>{left.map((line, index) => <div key={index}>{physicalKey(line, 'MCDU L' + (index + 1))}</div>)}</div>
+          <div className={styles.mcduScreen}>
+            <h3>{({ MENU: 'AOC MENU', INIT: 'AOC DEPARTURE REQUEST', WX: 'AOC WEATHER REQUEST', ATIS: 'AOC ATIS REQUEST', FREE: 'AOC FREE TEXT', RECEIVED: 'RECEIVED MESSAGES', SENT: 'SENT MESSAGES' })[page]}</h3>
+            <div className={styles.displayLines}>{left.map((line, index) => <div className={styles.displayRow} key={index}>
+              {[line, right[index]].map((item, side) => <div key={side} className={styles.displayCell}><span>{item?.label}</span><strong>{item?.value}</strong></div>)}
+            </div>)}</div>
+            <p className={styles.mcduNotice} role="status">{upper(notice || error || '')}</p>
+            <div className={styles.scratchDisplay}>{scratch || '[ SCRATCHPAD ]'}</div>
+          </div>
+          <div className={styles.lineKeys}>{right.map((line, index) => <div key={index}>{physicalKey(line, 'MCDU R' + (index + 1))}</div>)}</div>
         </div>
+        <label className={styles.keyboardEntry}>KEYBOARD INPUT
+          <input ref={scratchInput} className={styles.scratchpad} aria-label="MCDU scratchpad" value={scratch} maxLength={1500} autoComplete="off" spellCheck={false} onChange={event => setScratch(upper(event.target.value))} onKeyDown={event => { event.stopPropagation(); if (event.key === 'Escape') { event.preventDefault(); close(); } else if (event.key === 'Enter') { event.preventDefault(); insert(); } }} placeholder="[ SCRATCHPAD ]" />
+        </label>
         <div className={styles.functionKeys}><button type="button" onClick={() => navigate('MENU')}>AOC<br />MENU</button><button type="button" onClick={() => navigate('RECEIVED')}>RECEIVED<br />MSG</button><button type="button" onClick={() => navigate('SENT')}>SENT<br />MSG</button><button type="button" onClick={insert}>INSERT</button></div>
         <div className={styles.keypad}>{'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789./-'.split('').map(key => <button type="button" key={key} onClick={() => setScratch(value => (value + key).slice(0, 1500))}>{key}</button>)}<button type="button" onClick={() => setScratch(value => (value + ' ').slice(0, 1500))}>SP</button><button type="button" onClick={() => setScratch(value => value.slice(0, -1))}>⌫</button><button type="button" onClick={() => { if (target) put(target, ''); setScratch(''); }}>CLR</button></div>
         <p className={styles.instructions}>TYPE INTO THE SCRATCHPAD, THEN PRESS A FIELD LINE KEY. SELECT AN EXISTING FIELD TO EDIT IT, THEN INSERT.</p>
