@@ -13,7 +13,7 @@ export async function verifyTicket(token, secret, now = Date.now()) {
   const claims = JSON.parse(new TextDecoder().decode(decode(parts[1])));
   const seconds = Math.floor(now / 1000);
   if (claims.aud !== 'weblogbook-radio' || !Number.isInteger(claims.exp) || !Number.isInteger(claims.iat) ||
-      claims.exp <= seconds || claims.iat > seconds + 5 || claims.exp - claims.iat > 90 ||
+      claims.exp <= seconds || claims.iat > seconds + 5 || claims.exp - claims.iat > 3660 ||
       !/^[\w-]{1,80}$/.test(claims.sub || '') || !/^[\w-]{16,80}$/.test(claims.jti || '') ||
       !/^(vhf-\d{6}|call-[a-f\d-]{36})$/.test(claims.room || '') ||
       typeof claims.name !== 'string' || claims.name.length > 80) throw new Error('Invalid ticket');
