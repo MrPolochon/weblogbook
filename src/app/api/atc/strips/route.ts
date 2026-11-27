@@ -7,12 +7,12 @@ import type { StripData } from '@/components/FlightStrip';
 export const dynamic = 'force-dynamic';
 
 /**
- * GET /api/atc/strips
+- GET /api/atc/strips
  *
- * Retourne les strips de l'ATC connecté sous forme de StripData[].
- * Utilise une requête unique avec joins au lieu de N+1 pour chaque plan.
- * Appelé par FlightStripBoardWrapper pour des mises à jour rapides
- * sans router.refresh() (rechargement SSR complet).
+- Retourne les strips de l'ATC connecté sous forme de StripData[].
+- Utilise une requête unique avec joins au lieu de N+1 pour chaque plan.
+- Appelé par FlightStripBoardWrapper pour des mises à jour rapides
+- sans router.refresh() (rechargement SSR complet).
  */
 export async function GET(request: Request) {
   try {
@@ -181,8 +181,8 @@ export async function GET(request: Request) {
 }
 
 /**
- * Fallback N+1 si les joins Supabase échouent (clé étrangère manquante dans le schema).
- * Même logique qu'atc/page.tsx.
+- Fallback N+1 si les joins Supabase échouent (clé étrangère manquante dans le schema).
+- Même logique qu'atc/page.tsx.
  */
 async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAdminClient>): Promise<Response> {
   const { data: plansRaw, error } = await admin
@@ -248,8 +248,8 @@ async function getStripsLegacy(userId: string, admin: ReturnType<typeof createAd
       pending_transfer_aeroport: plan.pending_transfer_aeroport || null,
       pending_transfer_position: plan.pending_transfer_position || null,
       siavi_avion_id: plan.siavi_avion_id || null,
-        medevac_segment_index: plan.medevac_segment_index ?? null,
-        medevac_total_segments: plan.medevac_total_segments ?? null,
+      medevac_segment_index: plan.medevac_segment_index ?? null,
+      medevac_total_segments: plan.medevac_total_segments ?? null,
       sid_depart: plan.sid_depart || null, star_arrivee: plan.star_arrivee || null,
       route_ifr: plan.route_ifr || null, deroutement_at: plan.deroutement_at || null, strip_atd: plan.strip_atd || null, strip_rwy: plan.strip_rwy || null,
       strip_fl: plan.strip_fl || null, strip_fl_unit: plan.strip_fl_unit || null, strip_sid_atc: plan.strip_sid_atc || null,

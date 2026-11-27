@@ -52,6 +52,7 @@ export const DEFAULT_POSITIONS: Record<string, Point> = {
   IBRD: { x: 53.5, y: 11.8 },
   IGFD: { x: 51.5, y: 35.5 },
   IQEL: { x: 48, y: 60.5 },
+
   IBAR: { x: 72.3, y: 86.4 },
   IBLT: { x: 42.5, y: 64.8 },
   IBTH: { x: 54.9, y: 43.5 },
@@ -81,6 +82,7 @@ export const AIRPORT_NAMES: Record<string, string> = {
   IBRD: 'Bird Island',
   IGFD: 'USS Gerald R. Ford',
   IQEL: 'HMS Queen Elizabeth',
+
   ITKO: 'Tokyo Intl.',
   IPPH: 'Perth Intl.',
   ILKL: 'Lukla',
@@ -110,6 +112,7 @@ export const AIRPORT_TO_FIR: Record<string, string> = {
   IBRD: 'TOKYO',
   IGFD: 'ROCKFORD',
   IQEL: 'ROCKFORD',
+
   ITKO: 'TOKYO',
   IPPH: 'PERTH',
   ILKL: 'PERTH',

@@ -102,4 +102,3 @@ test('the legacy fallback retains the observed controller and session', async ()
   assert.deepEqual(api.queriedHolders, ['controller', 'controller']);
   assert.equal(response.body.observation.session.aeroport, 'IZOL');
 });
-
