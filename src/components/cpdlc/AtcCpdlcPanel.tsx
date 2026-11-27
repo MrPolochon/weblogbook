@@ -18,9 +18,7 @@ const emptyClearance: Clearance = { destination: '', departure: '', altitude: ''
 const time = (value: string) => new Date(value).toISOString().slice(11, 16) + 'Z';
 const kindLabel = (message: CpdlcMessage) => typeof message.payload.request_type === 'string' ? message.payload.request_type + ' REQUEST' : message.kind.replace('_', ' ');
 
-export function clearancePreview(clearance: Clearance): string {
-  return clearanceText(clearance);
-}
+export function clearancePreview(clearance: Clearance): string { return clearanceText(clearance); }
 
 export default function AtcCpdlcPanel() {
   const { theme } = useAtcTheme();
@@ -72,32 +70,21 @@ export default function AtcCpdlcPanel() {
     return () => { document.removeEventListener('keydown', keydown); if (previous?.isConnected) previous.focus(); };
   }, [open]);
 
-  useEffect(() => {
-    if (content.current) content.current.scrollTop = selectedId || editor ? 0 : inboxScroll.current;
-  }, [selectedId, editor]);
+  useEffect(() => { if (content.current) content.current.scrollTop = selectedId || editor ? 0 : inboxScroll.current; }, [selectedId, editor]);
+  useEffect(() => { if (selectedRequestAnswered && ['choice', 'clearance', 'preview', 'transfer'].includes(editor ?? '')) setEditor(null); }, [selectedRequestAnswered, editor]);
 
-  useEffect(() => {
-    if (selectedRequestAnswered && ['choice', 'clearance', 'preview', 'transfer'].includes(editor ?? '')) setEditor(null);
-  }, [selectedRequestAnswered, editor]);
-
-  // Keep a selected message visible when its automatic ACK removes it from UNREAD.
-  async function openMessage(message: CpdlcMessage) {
+  // Opening a message only displays it; the controller must deliberately ACK it.
+  function openMessage(message: CpdlcMessage) {
     if (!selectedId) inboxScroll.current = content.current?.scrollTop ?? 0;
     if (draftMessageId.current !== message.id) {
       draftMessageId.current = message.id;
       setClearance(emptyClearance); setReplyText(''); setTransferSession('');
     }
     setSelectedId(message.id); setEditor(null); setActionError('');
-    if (message.incoming && !message.acknowledged) {
-      try { await act({ action: 'ack', message_id: message.id }); }
-      catch (reason) { setActionError(reason instanceof Error ? reason.message : 'ACKNOWLEDGEMENT FAILED'); }
-    }
   }
 
   async function submit(command: CpdlcCommand) {
     setActionError('');
-    // A retry of the same message keeps its nonce; editing a failed draft must
-    // not reuse an identity that may already have been accepted by the server.
     let payload = command;
     if ('client_request_id' in command) {
       const content = JSON.stringify({ ...command, client_request_id: undefined });
@@ -108,18 +95,16 @@ export default function AtcCpdlcPanel() {
     try { await act(payload); requestId.current = null; requestContent.current = null; setEditor(null); setReplyText(''); }
     catch (reason) { setActionError(reason instanceof Error ? reason.message : 'MESSAGE NOT SENT. RETRY.'); }
   }
-
   function startEditor(next: Editor) {
     requestId.current = crypto.randomUUID(); requestContent.current = null; setActionError(''); setEditor(next);
     if (next === 'compose') { inboxScroll.current = content.current?.scrollTop ?? 0; setReplyText(''); }
   }
-
   function statusTone(message: CpdlcMessage) {
     const blinking = message.incoming && !message.acknowledged && ['UNABLE', 'STANDBY'].includes(message.status);
     return cn('border-b border-slate-500/15', blinking && 'animate-pulse motion-reduce:animate-none',
       message.status === 'UNABLE' ? dark ? 'bg-red-950/60 text-red-200' : 'bg-red-100 text-red-900'
         : message.status === 'STANDBY' ? dark ? 'bg-blue-900/50 text-blue-100' : 'bg-blue-100 text-blue-900'
-          : message.status === 'WILCO' ? dark ? 'bg-emerald-950/50 text-emerald-200' : 'bg-emerald-100 text-emerald-900'
+          : (message.status === 'WILCO' || message.status === 'PILOT_RECEIVED') ? dark ? 'bg-emerald-950/50 text-emerald-200' : 'bg-emerald-100 text-emerald-900'
             : selectedId === message.id ? dark ? 'bg-slate-800' : 'bg-slate-100' : '');
   }
 
@@ -139,12 +124,7 @@ export default function AtcCpdlcPanel() {
           <button className={button} disabled={busy} onClick={() => { setEditor(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK TO MESSAGE</button>
           <h3 className="font-semibold">{editor === 'compose' ? 'NEW FREE TEXT' : editor === 'transfer' ? 'TRANSFER MESSAGE' : `REPLY TO ${selected?.from_station ?? ''}`}</h3>
           {editor === 'choice' && selected && <div className="space-y-4"><p className={cn('text-sm', muted)}>Select the clearance decision. No additional fields are required for refusal.</p><div className="grid grid-cols-2 gap-3"><button className="rounded-xl border border-emerald-500 bg-emerald-500/10 p-5 font-bold text-emerald-500" disabled={busy} onClick={() => setEditor('clearance')}>CLEAR <ChevronRight className="ml-1 inline h-4 w-4" /></button><button className="rounded-xl border border-red-500 bg-red-500/10 p-5 font-bold text-red-500" disabled={busy} onClick={() => void submit({ action: 'respond', message_id: selected.id, response: 'REFUSED', client_request_id: requestId.current ?? crypto.randomUUID() })}>REFUSED</button></div></div>}
-          {editor === 'clearance' && <form className="space-y-4" onSubmit={event => {
-            event.preventDefault();
-            try { clearancePreview(clearance); }
-            catch (reason) { setActionError(reason instanceof Error ? reason.message : 'CHECK THE CLEARANCE FIELDS'); return; }
-            setActionError(''); setEditor('preview');
-          }}>
+          {editor === 'clearance' && <form className="space-y-4" onSubmit={event => { event.preventDefault(); try { clearancePreview(clearance); } catch (reason) { setActionError(reason instanceof Error ? reason.message : 'CHECK THE CLEARANCE FIELDS'); return; } setActionError(''); setEditor('preview'); }}>
             <label className="block space-y-1 text-xs font-semibold">CLEARED TO (AIRPORT)<input autoFocus required pattern="[A-Za-z]{4}" maxLength={4} className={field} value={clearance.destination} onChange={event => setClearance({ ...clearance, destination: upper(event.target.value) })} placeholder="IRFD" /></label>
             <label className="block space-y-1 text-xs font-semibold">SID / EXPECT VECTORS / DIRECT FIX<input required maxLength={80} className={field} value={clearance.departure} onChange={event => setClearance({ ...clearance, departure: upper(event.target.value) })} placeholder="EXPECT VECTORS" /></label>
             <label className="block space-y-1 text-xs font-semibold">INITIAL ALTITUDE<input required pattern="([0-9]{1,5} FT|FL[0-9]{3})" maxLength={10} className={field} value={clearance.altitude} onChange={event => setClearance({ ...clearance, altitude: upper(event.target.value) })} placeholder="5000 FT OR FL050" /><span className={muted}>Enter feet followed by FT, or a three-digit flight level.</span></label>
@@ -160,25 +140,21 @@ export default function AtcCpdlcPanel() {
           {editor === 'transfer' && selected && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void submit({ action: 'transfer', message_id: selected.id, session_id: transferSession, client_request_id: requestId.current ?? crypto.randomUUID() }); }}><label className="block space-y-1 text-xs font-semibold">ONLINE CONTROLLER<select required className={field} value={transferSession} onChange={event => setTransferSession(event.target.value)}><option value="">SELECT A POSITION</option>{transferStations.map(station => <option key={station.session_id} value={station.session_id}>{station.code} {station.position.toUpperCase()}</option>)}</select></label><p className={cn('text-sm', muted)}>{transferStations.length ? 'The receiving controller will be alerted. The conversation history is retained.' : 'NO OTHER CONTROLLER COVERS THIS AIRPORT.'}</p><button disabled={busy || !transferSession} className={cn(button, 'w-full bg-sky-600 text-white')}>TRANSFER MESSAGE</button></form>}
         </div> : selected ? <section className="space-y-4 p-4" aria-label="Selected message">
           <button className={button} onClick={() => { setSelectedId(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK TO INBOX</button>
-          <div className="rounded-xl border border-slate-500/30 p-4">
-            <p className="font-mono text-sm font-bold">{selected.from_station} → {selected.to_station}</p>
-            <p className={cn('mt-1 text-xs', muted)}>{time(selected.created_at)} · {kindLabel(selected)} · {selected.status.replace('_', ' ')}{selected.late ? ' · LATE REPLY' : ''}</p>
-            <pre className="mt-4 whitespace-pre-wrap break-words rounded-lg bg-[#050e18] p-3 font-mono text-sm leading-relaxed text-cyan-300">{upper(selected.body)}</pre>
-          </div>
+          <div className="rounded-xl border border-slate-500/30 p-4"><p className="font-mono text-sm font-bold">{selected.from_station} → {selected.to_station}</p><p className={cn('mt-1 text-xs', muted)}>{time(selected.created_at)} · {kindLabel(selected)} · {selected.status.replace('_', ' ')}{selected.late ? ' · LATE REPLY' : ''}</p><pre className="mt-4 whitespace-pre-wrap break-words rounded-lg bg-[#050e18] p-3 font-mono text-sm leading-relaxed text-cyan-300">{upper(selected.body)}</pre></div>
           {selected.status === 'TIMED_OUT' && <p className="text-xs text-amber-500">TIMED OUT — YOU MAY STILL SEND A LATE REPLY.</p>}
           {selectedRequestAnswered && <p className={cn('text-xs', muted)}>THIS CLEARANCE REQUEST HAS ALREADY BEEN ANSWERED.</p>}
           {selected.incoming && <div className="flex flex-wrap gap-2">
             {!selectedRequestAnswered && !['SYSTEM', 'WX', 'ATIS'].includes(selected.kind) && <button disabled={busy || !data?.available} className={cn(button, 'bg-sky-600 text-white')} onClick={() => startEditor(selected.kind === 'CLEARANCE' ? 'choice' : 'text')}><Send className="h-4 w-4" /> REPLY</button>}
             {selectedRequestPending && ['CLEARANCE', 'FREE_TEXT'].includes(selected.kind) && <button disabled={busy || !data?.available} className={button} onClick={() => startEditor('transfer')}>TRANSFER</button>}
-            {!selected.acknowledged && <button className={button} disabled={busy} onClick={() => void act({ action: 'ack', message_id: selected.id }).catch(reason => setActionError(String(reason)))}><Check className="h-4 w-4" /> ACK</button>}
+            {!selected.acknowledged && <button className={button} disabled={busy} onClick={() => void act({ action: 'ack', message_id: selected.id }).catch(reason => setActionError(reason instanceof Error ? reason.message : 'ACK FAILED'))}><Check className="h-4 w-4" /> ACK</button>}
           </div>}
         </section> : <>
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-500/20 p-3"><button className={cn(button, filter === 'all' && 'ring-1 ring-sky-500')} onClick={() => setFilter('all')}>ALL</button><button className={cn(button, filter === 'unread' && 'ring-1 ring-sky-500')} onClick={() => setFilter('unread')}>UNREAD ({unread.length})</button><button className={cn(button, 'ml-auto')} disabled={!data?.available || busy} onClick={() => startEditor('compose')}><Send className="h-4 w-4" /> NEW</button></div>
-          <table className="w-full table-fixed text-left text-xs"><thead className={cn('border-b border-slate-500/20', muted)}><tr><th className="w-[32%] px-3 py-3">IDENT</th><th className="w-[25%] px-2 py-3">TYPE</th><th className="w-[28%] px-2 py-3">STATUS</th><th className="w-[15%] px-2 py-3"><span className="sr-only">OPEN</span></th></tr></thead><tbody>{visibleMessages.map(message => <tr key={message.id} className={cn(statusTone(message), 'cursor-pointer')} onClick={() => void openMessage(message)}><td className="break-words px-3 py-3"><span className="font-mono font-bold">{message.incoming ? message.from_station : message.to_station}</span><span className={cn('mt-1 block text-[10px]', muted)}>{message.incoming ? 'FROM' : 'TO'} · {time(message.created_at)}</span></td><td className="px-2 py-3 font-semibold">{kindLabel(message)}{message.late && <span className="mt-1 block text-[10px] text-amber-500">LATE REPLY</span>}</td><td className="px-2 py-3"><button title={message.response_required ? 'Open this message to acknowledge and reply' : message.incoming && !message.acknowledged ? 'Acknowledge message without opening' : 'Message acknowledged'} disabled={!message.incoming || message.acknowledged || message.response_required || busy} className="min-h-9 max-w-full break-words rounded-md border border-current/30 px-2 py-1 text-[10px] font-bold disabled:cursor-default" onClick={event => { event.stopPropagation(); void act({ action: 'ack', message_id: message.id }).catch(reason => setActionError(reason instanceof Error ? reason.message : 'ACK FAILED')); }}>{message.status.replace('_', ' ')}{message.incoming && <span className="block">{message.acknowledged ? 'ACK' : 'ACK ▸'}</span>}</button></td><td className="px-1 py-3"><button aria-label={`Open ${kindLabel(message)} ${message.incoming ? 'from' : 'to'} ${message.incoming ? message.from_station : message.to_station}`} className="min-h-10 min-w-10 rounded-lg hover:bg-sky-500/15" onClick={event => { event.stopPropagation(); void openMessage(message); }}><ChevronRight className="mx-auto h-4 w-4" /></button></td></tr>)}</tbody></table>
+          <table className="w-full table-fixed text-left text-xs"><thead className={cn('border-b border-slate-500/20', muted)}><tr><th className="w-[32%] px-3 py-3">IDENT</th><th className="w-[25%] px-2 py-3">TYPE</th><th className="w-[28%] px-2 py-3">STATUS</th><th className="w-[15%] px-2 py-3"><span className="sr-only">OPEN</span></th></tr></thead><tbody>{visibleMessages.map(message => <tr key={message.id} className={cn(statusTone(message), 'cursor-pointer')} onClick={() => openMessage(message)}><td className="break-words px-3 py-3"><span className="font-mono font-bold">{message.incoming ? message.from_station : message.to_station}</span><span className={cn('mt-1 block text-[10px]', muted)}>{message.incoming ? 'FROM' : 'TO'} · {time(message.created_at)}</span></td><td className="px-2 py-3 font-semibold">{kindLabel(message)}{message.late && <span className="mt-1 block text-[10px] text-amber-500">LATE REPLY</span>}</td><td className="px-2 py-3"><button title={message.incoming && !message.acknowledged ? 'Acknowledge message and send MSG RECEIVED STANDBY' : 'Message acknowledged'} disabled={!message.incoming || message.acknowledged || busy} className="min-h-9 max-w-full break-words rounded-md border border-current/30 px-2 py-1 text-[10px] font-bold disabled:cursor-default" onClick={event => { event.stopPropagation(); void act({ action: 'ack', message_id: message.id }).catch(reason => setActionError(reason instanceof Error ? reason.message : 'ACK FAILED')); }}>{message.status.replace('_', ' ')}{message.incoming && <span className="block">{message.acknowledged ? 'ACK' : 'ACK ▸'}</span>}</button></td><td className="px-1 py-3"><button aria-label={`Open ${kindLabel(message)} ${message.incoming ? 'from' : 'to'} ${message.incoming ? message.from_station : message.to_station}`} className="min-h-10 min-w-10 rounded-lg hover:bg-sky-500/15" onClick={event => { event.stopPropagation(); openMessage(message); }}><ChevronRight className="mx-auto h-4 w-4" /></button></td></tr>)}</tbody></table>
           {!visibleMessages.length && <p className={cn('px-4 py-10 text-center text-sm', muted)}>{loading ? 'LOADING MESSAGES…' : data?.available === false ? 'CPDLC IS NOT AVAILABLE' : 'NO MESSAGES'}</p>}
         </>}
       </div>
-      <footer className={cn('shrink-0 border-t border-slate-500/20 px-4 py-2 text-[10px]', muted)}>OPEN A MESSAGE TO ACKNOWLEDGE · ACK DOES NOT GRANT A CLEARANCE</footer>
+      <footer className={cn('shrink-0 border-t border-slate-500/20 px-4 py-2 text-[10px]', muted)}>CLICK ACK TO SEND MSG RECEIVED STANDBY · ACK DOES NOT GRANT A CLEARANCE</footer>
     </aside>
   </div>, document.body) : null;
 

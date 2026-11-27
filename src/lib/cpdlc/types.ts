@@ -1,5 +1,5 @@
 export type CpdlcKind = 'CLEARANCE' | 'FREE_TEXT' | 'ATIS' | 'WX' | 'RESPONSE' | 'SYSTEM';
-export type CpdlcStatus = 'SENT' | 'STANDBY' | 'CLEAR' | 'REFUSED' | 'WILCO' | 'UNABLE' | 'ROGER' | 'TIMED_OUT';
+export type CpdlcStatus = 'SENT' | 'STANDBY' | 'PILOT_RECEIVED' | 'CLEAR' | 'REFUSED' | 'WILCO' | 'UNABLE' | 'ROGER' | 'TIMED_OUT';
 export type CpdlcMessage = {
   id: string; created_at: string; from_station: string; to_station: string;
   kind: CpdlcKind; body: string; status: CpdlcStatus; reply_to: string | null;
@@ -7,7 +7,7 @@ export type CpdlcMessage = {
   sender_user_id: string | null; recipient_user_ids: string[];
   assigned_session_id: string | null; deadline_at: string | null;
   response_required: boolean; late: boolean; payload: Record<string, unknown>;
-  /** Computed for this viewer. ACK never implies WILCO or any operational change. */
+  /** Computed for this viewer; ACK never implies WILCO or an operational change. */
   incoming: boolean; acknowledged: boolean;
 };
 export type CpdlcStation = { session_id: string; code: string; position: string; started_at: string; user_id: string };
