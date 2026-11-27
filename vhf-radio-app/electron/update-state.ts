@@ -2,6 +2,7 @@
   | 'idle'
   | 'checking'
   | 'available'
+  | 'up-to-date'
   | 'not-available'
   | 'downloading'
   | 'downloaded'
@@ -11,6 +12,7 @@ export interface DesktopUpdateState {
   status: DesktopUpdateStatus;
   version?: string;
   currentVersion?: string;
+  percent?: number;
   progress?: number;
   releaseNotes?: string;
   error?: string;
