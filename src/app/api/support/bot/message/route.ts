@@ -80,6 +80,7 @@ import { isAnswerToBotQuestion, replyRequestsStaff, stripStaffMarker, supportTop
 import {
   authoritativeSupportReply,
   CLARIFICATION_ONBOARDING,
+  clarificationChoice,
   hasUnresolvedAuthIssue,
   isIfsaSubject,
   sanitizeOfficialSiteUrl,
@@ -240,6 +241,7 @@ export async function POST(req: NextRequest) {
   }
 
   const turns = parseTurns(ticket.conversation);
+  const selectedClarification = requesterSpeaking ? clarificationChoice(content, turns) : null;
   let memory = mergeMemory(ticket.memory_notes || '', extractFacts(content));
   const clarification = requesterSpeaking
     ? updateClarificationMemory(memory, content)
@@ -263,9 +265,11 @@ export async function POST(req: NextRequest) {
   // Relais staff : état PERSISTANT du ticket, pas une décision par message.
   // Un staff qui plaisante (« trop styleee ») ne coupe plus l'IA ; un staff qui
   // intervient vraiment la coupe une fois pour toutes, avec une seule annonce.
+  // Une mention du bot lui adresse une demande : elle ne constitue jamais
+  // une prise en charge humaine et doit laisser passer questions et commandes.
   // ---------------------------------------------------------------------
   const staffClaimsTicket =
-    staffSpeaking && isRealStaffIntervention(content) && !isStaffAskingIaToContinue(content);
+    staffSpeaking && !mentionsBot && isRealStaffIntervention(content) && !isStaffAskingIaToContinue(content);
   const mentionIntent = mentionsBot ? detectMentionIntent(content) : detectBareCloseIntent(content);
   if (staffClaimsTicket && !mentionIntent) {
     const startsTakeover = !muted && isRealStaffIntervention(content);
@@ -303,11 +307,6 @@ export async function POST(req: NextRequest) {
 
   // Silence persistant : tant que le staff tient le ticket, l'IA ne répond à
   // personne, pas même au demandeur. Aucun appel LLM, aucun token dépensé.
-  if (muted && mentionsBot && staffClaimsTicket) {
-    await recordSilently('staff');
-    return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
-  }
-
   if (muted && !mentionsBot && !mentionIntent) {
     await recordSilently('user');
     return NextResponse.json({ ok: true, statut: 'staff', muted: true, reply: null });
@@ -372,7 +371,7 @@ export async function POST(req: NextRequest) {
 
   // Une demande humaine interrompt aussi la collecte d'inscription. Aucun modèle
   // ni dossier du site n'est nécessaire pour transmettre cet appel explicite.
-  if (explicitlyRequestsStaff(content)) {
+  if (explicitlyRequestsStaff(content) || (requesterSpeaking && clarification.count >= 3)) {
     await recordSilently(staffSpeaking ? 'staff' : 'user', {
       ...IA_RESUME_PATCH,
       statut: 'staff_needed',
@@ -383,7 +382,9 @@ export async function POST(req: NextRequest) {
       if (ticket.staff_pinged_at) {
         await discordSendMessage(channelId, 'La demande est déjà transmise ; un membre de l’équipe doit encore prendre en charge ce ticket.');
       } else {
-        await escalateTicketToStaff(channelId, 'Je transmets ta demande à l’équipe pour une prise en charge humaine.', {
+        await escalateTicketToStaff(channelId, clarification.count >= 3
+          ? "Tu sembles encore bloqué malgré les explications. Je transmets ce ticket à l'équipe pour t'accompagner directement."
+          : 'Je transmets ta demande à l’équipe pour une prise en charge humaine.', {
           instructor: needsInstructorHandoff(content),
         });
       }
@@ -617,7 +618,7 @@ export async function POST(req: NextRequest) {
   // Bavardage : « MDR », « XD », « merci », une vanne entre membres. Le bot
   // répondait par une phrase creuse suivie d'une proposition de clôture ; il se
   // tait désormais. Une mention explicite du bot passe outre : on l'a appelé.
-  if (!mentionsBot && isChatter(content) && !isAnswerToBotQuestion(content, turns) && !explicitlyRequestsStaff(content)) {
+  if (!mentionsBot && !selectedClarification && isChatter(content) && !isAnswerToBotQuestion(content, turns) && !explicitlyRequestsStaff(content)) {
     console.info('[support-message] message sans demande — silence', {
       shortId: ticket.short_id,
       contentLen: content.length,
@@ -627,7 +628,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Une relance suit le sujet récent, une nouvelle demande remplace le motif d'ouverture.
-  const topicText = supportTopic(content, turns, ticket);
+  const topicText = selectedClarification || supportTopic(content, turns, ticket);
   const account = await resolveRequesterAccount(admin, openerDiscordId);
   const hasAccount = Boolean(account.userId);
   // Jamais l'ancien user_id du ticket après déliaison, ni une identité fournie dans le texte.

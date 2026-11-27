@@ -64,6 +64,8 @@ export function replyLeavesStepPending(reply: string): boolean {
 export function shouldOfferResolution(rawReply: string, ctx: ResolutionOfferContext): boolean {
   if (ctx.escalate) return false;
   if (!hasResoluMarker(rawReply)) return false;
+  // Le modèle peut ajouter RESOLU alors qu'il attend encore une réponse au diagnostic.
+  if (stripResoluMarker(rawReply).includes('?')) return false;
   if (ctx.unresolvedAuthIssue) return false;
   // Les premiers échanges servent à comprendre la demande, pas à la clore.
   if (ctx.memberMessages < MIN_MEMBER_MESSAGES_BEFORE_OFFER) return false;

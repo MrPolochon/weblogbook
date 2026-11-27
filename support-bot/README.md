@@ -172,3 +172,9 @@ prochain message. La prise en charge par le staff garde l’IA silencieuse.
 Cette amélioration ne nécessite aucun nouveau SQL. Elle se déploie côté site,
 qui fournit les réponses au bot Railway. Simulations sans réseau ni message
 Discord réel : `node scripts/test-support-ai.cjs` (inclut les garde-fous existants).
+
+Une mention directe de PTFR Assistance par le staff reste prioritaire sur le
+silence de prise en charge humaine : une question relance l’IA et une demande
+explicite de fermeture est exécutée même si le ticket est déjà pris en charge.
+Sans mention ni commande de fermeture reconnue, le staff continue à échanger
+avec le demandeur sans intervention du bot. Ce correctif se déploie côté site.

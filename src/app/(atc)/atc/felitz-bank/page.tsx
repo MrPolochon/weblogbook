@@ -5,6 +5,7 @@ import { Landmark, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import ChequesAEncaisserBanner from '@/components/ChequesAEncaisserBanner';
 import { countChequesAEncaisser } from '@/lib/felitz/cheques-count';
+import { enrichTransactionsWithVban } from '@/lib/felitz/utils';
 import FelitzBankAtcClient from './FelitzBankAtcClient';
 
 export default async function FelitzBankAtcPage() {
@@ -33,7 +34,7 @@ export default async function FelitzBankAtcPage() {
       .eq('compte_id', comptePerso.id)
       .order('created_at', { ascending: false })
       .limit(100);
-    transactionsPerso = data || [];
+    transactionsPerso = await enrichTransactionsWithVban(admin, data || []);
   }
 
   const chequesAEncaisser = await countChequesAEncaisser(admin, user.id);
