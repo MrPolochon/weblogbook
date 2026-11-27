@@ -1,0 +1,33 @@
+appId: com.weblogbook.vhf-radio
+productName: VHF Radio
+copyright: Copyright © 2026 WebLogbook
+
+asar: false
+
+directories:
+  output: release
+
+publish:
+  - provider: github
+    owner: MrPolochon
+    repo: weblogbook
+    releaseType: release
+
+win:
+  target: nsis
+  artifactName: VHF-Radio-Setup-${version}.${ext}
+
+nsis:
+  oneClick: true
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+files:
+  - dist/**/*
+  - dist-electron/**/*
+  - package.json
+
+extraResources:
+  - from: native-bin
+    to: native-bin
