@@ -108,7 +108,7 @@ export class Room {
   private tracks = new Map<string, RemoteAudioTrack>();
   private meters = new Map<string, { source: MediaStreamAudioSourceNode; analyser: AnalyserNode; data: Float32Array<ArrayBuffer> }>();
   private reconcileQueue = Promise.resolve();
-  private heartbeat?: ReturnType<typeof setInterval>;
+  private heartbeat?: ReturnType<typeof setTimeout>;
   private meterTimer?: ReturnType<typeof setInterval>;
   private failureTimer?: ReturnType<typeof setTimeout>;
   private publication = {
@@ -154,7 +154,10 @@ export class Room {
     if (this.closed || this.ws?.readyState !== WebSocket.OPEN) return Promise.reject(new Error('Signal radio déconnecté.'));
     const id = ++this.sequence;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.requests.delete(id); reject(new Error('Cloudflare ne répond pas.')); void this.disconnect(); }, 20_000);
+      const timer = setTimeout(() => {
+        this.requests.delete(id);
+        reject(new Error('Cloudflare ne répond pas.'));
+      }, 20_000);
       this.requests.set(id, { resolve, reject, timer });
       this.ws!.send(JSON.stringify({ id, action, payload }));
     });
@@ -204,22 +207,19 @@ export class Room {
       this.subscriber.onconnectionstatechange = () => this.checkConnection();
       this.subscriber.ontrack = event => this.receiveTrack(event);
       if (this.canPublish) {
-      this.publisher = new RTCPeerConnection(configuration);
-      this.publisher.onconnectionstatechange = () => this.checkConnection();
-      const transceiver = this.publisher.addTransceiver(this.silence!, { direction: 'sendonly' });
-      this.sender = transceiver.sender;
-      const offer = await description(this.publisher, true);
-      const answer = await this.rpc('publish', { mid: transceiver.mid, sessionDescription: offer });
-      if (!answer.sessionDescription) throw new Error('Réponse audio absente.');
-      await this.publisher.setRemoteDescription(answer.sessionDescription);
-      await waitFor(this.publisher, 'connectionstatechange', () => this.publisher?.connectionState === 'connected', 15_000);
-      await this.rpc('published');
+        this.publisher = new RTCPeerConnection(configuration);
+        this.publisher.onconnectionstatechange = () => this.checkConnection();
+        const transceiver = this.publisher.addTransceiver(this.silence!, { direction: 'sendonly' });
+        this.sender = transceiver.sender;
+        const offer = await description(this.publisher, true);
+        const answer = await this.rpc('publish', { mid: transceiver.mid, sessionDescription: offer });
+        if (!answer.sessionDescription) throw new Error('Réponse audio absente.');
+        await this.publisher.setRemoteDescription(answer.sessionDescription);
+        await waitFor(this.publisher, 'connectionstatechange', () => this.publisher?.connectionState === 'connected', 15_000);
+        await this.rpc('published');
       }
       this.assertOpen();
-      this.heartbeat = setInterval(() => {
-        // Retry unavailable remote tracks without dropping healthy audio or PTT.
-        void this.rpc('ping').then(() => this.reconcile()).catch(() => this.disconnect());
-      }, 25_000);
+      this.scheduleHeartbeat();
       this.meterTimer = setInterval(() => this.measure(), 150);
       await this.reconcile();
       this.assertOpen();
@@ -227,15 +227,37 @@ export class Room {
       this.emit('connected');
     } catch (error) { await this.disconnect(); throw error; }
   }
+  private scheduleHeartbeat() {
+    if (this.closed) return;
+    clearTimeout(this.heartbeat);
+    // Use a single-flight timeout instead of setInterval: background tab throttling
+    // must not cause overlapping pings or treat one delayed ping as a dead session.
+    this.heartbeat = setTimeout(async () => {
+      if (this.closed) return;
+      try {
+        await this.rpc('ping');
+        await this.reconcile();
+      } catch {
+        // A transient timeout is not proof that the WebSocket is gone. The server
+        // tolerates several minutes without a heartbeat; a real close is handled by
+        // ws.onclose and the hook will then reconnect while powered remains on.
+      }
+      this.scheduleHeartbeat();
+    }, 25_000);
+  }
   private assertOpen() { if (this.closed) throw new Error(this.connectionError || 'Radio déconnectée.'); }
   private checkConnection() {
     if (this.closed) return;
     const states = [this.publisher?.connectionState, this.subscriber?.connectionState];
-    if (states.includes('failed')) { void this.disconnect(); return; }
-    if (states.includes('disconnected')) {
+    if (states.includes('failed') || states.includes('disconnected')) {
+      // ICE can briefly report disconnected during packet loss or network handover.
+      // Leave time for the browser's ICE recovery before replacing the whole room.
       this.setState(ConnectionState.Reconnecting);
-      if (!this.failureTimer) this.failureTimer = setTimeout(() => { void this.disconnect(); }, 5000);
-    } else if (this.failureTimer) { clearTimeout(this.failureTimer); this.failureTimer = undefined; this.setState(ConnectionState.Connected); }
+      if (!this.failureTimer) this.failureTimer = setTimeout(() => { void this.disconnect(); }, 30_000);
+    } else if (this.failureTimer) {
+      clearTimeout(this.failureTimer); this.failureTimer = undefined;
+      this.setState(ConnectionState.Connected);
+    }
   }
   private reconcile() {
     if (!this.subscriber || this.closed) return this.reconcileQueue;
@@ -266,8 +288,7 @@ export class Room {
         }
         const answer = await description(this.subscriber!, false);
         await this.rpc('answer', { sessionDescription: answer });
-        // A third participant can arrive while the first receiver's ICE/DTLS
-        // transport is still connecting. SDP acceptance alone is not readiness.
+        // SDP acceptance alone is not readiness: wait for ICE/DTLS to connect.
         await waitFor(this.subscriber!, 'connectionstatechange', () => this.subscriber?.connectionState === 'connected', 15_000);
       }
     }).catch(error => {
@@ -344,7 +365,7 @@ export class Room {
     void this.publication.mute();
     this.microphone?.getTracks().forEach(t => t.stop());
     this.setState(ConnectionState.Disconnected);
-    clearInterval(this.heartbeat); clearInterval(this.meterTimer); clearTimeout(this.failureTimer);
+    clearTimeout(this.heartbeat); clearInterval(this.meterTimer); clearTimeout(this.failureTimer);
     this.ws?.close(); this.publisher?.close(); this.subscriber?.close(); this.silence?.stop();
     for (const pending of this.requests.values()) { clearTimeout(pending.timer); pending.reject(new Error('Radio déconnectée.')); }
     this.requests.clear();
