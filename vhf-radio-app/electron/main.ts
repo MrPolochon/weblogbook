@@ -1,13 +1,15 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import { StartupGate, startupUrl } from './startup';
+import { installPtt } from './ptt';
+import { app, BrowserWindow, Menu } from 'electron';
+import { installDesktopUpdates } from './updates';
 import * as path from 'path';
 
 let mainWindow: BrowserWindow | null = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
-    width: 480,
-    height: 720,
+    width: 1280,
+    height: 850,
     minWidth: 380,
     minHeight: 600,
     title: 'VHF Radio — WebLogbook',
@@ -16,100 +18,64 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
     },
-    autoHideMenuBar: true,
+    autoHideMenuBar: false,
     icon: path.join(__dirname, '..', 'public', 'icon.png'),
   });
 
+  const window = mainWindow;
+  const gate = new StartupGate(() => {
+    if (!window.isDestroyed()) void window.loadURL('https://www.mixouairlinesptfsweblogbook.com/pilote');
+  }, () => { updates.install(); });
   if (process.env.VITE_DEV_SERVER_URL) {
+    gate.ready = true;
     mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
     mainWindow.webContents.openDevTools({ mode: 'detach' });
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
+    mainWindow.loadURL(startupUrl);
   }
+
+  installPtt(mainWindow);
+  const updates = installDesktopUpdates(mainWindow, state => {
+    gate.update(state);
+    const menu = Menu.getApplicationMenu();
+    const status = menu?.getMenuItemById('update-status');
+    const install = menu?.getMenuItemById('install-update');
+    if (status) status.label = 'Windows ' + state.currentVersion + ' · ' + ({
+      idle: 'Mises à jour automatiques', checking: 'Recherche…', downloading: 'Téléchargement ' + (state.percent ?? 0) + ' %',
+      downloaded: 'Mise à jour prête', 'up-to-date': 'À jour', error: 'Nouvel essai automatique prévu',
+    }[state.status]);
+    if (install) install.enabled = state.status === 'downloaded';
+  }, startupUrl);
+  mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (!gate.ready) { event.preventDefault(); return; }
+    const target = new URL(url);
+    if (!['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com'].includes(target.origin)) event.preventDefault();
+  });
+  Menu.setApplicationMenu(Menu.buildFromTemplate([
+    { label: 'Radio', submenu: [
+      { label: 'COM box du site · PTT global', click: () => { if (!gate.ready) return; void mainWindow?.loadURL('https://www.mixouairlinesptfsweblogbook.com/pilote'); } },
+      { label: 'Radio classique', click: () => { if (!gate.ready) return; void mainWindow?.loadFile(path.join(__dirname, '..', 'dist', 'index.html')); } },
+      { type: 'separator' }, { role: 'quit' },
+    ] },
+    { label: 'Mises à jour', submenu: [
+      { id: 'update-status', label: 'Windows ' + app.getVersion() + ' · Mises à jour automatiques', enabled: false },
+      { label: 'Rechercher une mise à jour', click: () => { void updates.check(); } },
+      { id: 'install-update', label: 'Installer et redémarrer', enabled: false, click: () => { updates.install(); } },
+    ] },
+    { label: 'Affichage', submenu: [{ role: 'reload' }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }] },
+  ]));
 
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
 }
 
-/* ══════════════════════════════════════════════════
-   Auto-updater
-   ══════════════════════════════════════════════════ */
-
-function setupAutoUpdater() {
-  // Don't check in dev
-  if (process.env.VITE_DEV_SERVER_URL) return;
-
-  autoUpdater.autoDownload = true;
-  autoUpdater.autoInstallOnAppQuit = true;
-
-  autoUpdater.on('checking-for-update', () => {
-    sendToRenderer('updater:status', 'checking');
-  });
-
-  autoUpdater.on('update-available', (info) => {
-    sendToRenderer('updater:status', 'available');
-    sendToRenderer('updater:info', {
-      version: info.version,
-      releaseDate: info.releaseDate,
-    });
-  });
-
-  autoUpdater.on('update-not-available', () => {
-    sendToRenderer('updater:status', 'up-to-date');
-  });
-
-  autoUpdater.on('download-progress', (progress) => {
-    sendToRenderer('updater:progress', {
-      percent: Math.round(progress.percent),
-      transferred: progress.transferred,
-      total: progress.total,
-    });
-  });
-
-  autoUpdater.on('update-downloaded', (info) => {
-    sendToRenderer('updater:status', 'downloaded');
-    sendToRenderer('updater:info', {
-      version: info.version,
-      releaseDate: info.releaseDate,
-    });
-  });
-
-  autoUpdater.on('error', (err) => {
-    console.error('[AutoUpdater] Error:', err.message);
-    sendToRenderer('updater:status', 'error');
-  });
-
-  // Check for updates after a short delay
-  setTimeout(() => {
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error('[AutoUpdater] Check failed:', err.message);
-    });
-  }, 5000);
-}
-
-// IPC: renderer asks to install the update now
-ipcMain.on('updater:install', () => {
-  autoUpdater.quitAndInstall(false, true);
-});
-
-// IPC: renderer asks to check for updates manually
-ipcMain.on('updater:check', () => {
-  autoUpdater.checkForUpdates().catch((err) => {
-    console.error('[AutoUpdater] Manual check failed:', err.message);
-  });
-});
-
-function sendToRenderer(channel: string, data: unknown) {
-  mainWindow?.webContents.send(channel, data);
-}
-
-/* ══════════════════════════════════════════════════ */
-
 app.whenReady().then(() => {
   createWindow();
-  setupAutoUpdater();
 });
 
 app.on('window-all-closed', () => {
@@ -119,3 +85,4 @@ app.on('window-all-closed', () => {
 app.on('activate', () => {
   if (BrowserWindow.getAllWindows().length === 0) createWindow();
 });
+

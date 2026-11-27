@@ -1,9 +1,16 @@
 import { contextBridge, ipcRenderer } from 'electron';
+import type { DesktopUpdateState } from './update-state';
 
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
 
   // Auto-updater
+  getUpdateState: (): Promise<DesktopUpdateState | null> => ipcRenderer.invoke('updater:get-state'),
+  onUpdateState: (callback: (state: DesktopUpdateState) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => callback(state);
+    ipcRenderer.on('updater:state', handler);
+    return () => ipcRenderer.removeListener('updater:state', handler);
+  },
   onUpdateStatus: (callback: (status: string) => void) => {
     const handler = (_event: Electron.IpcRendererEvent, status: string) => callback(status);
     ipcRenderer.on('updater:status', handler);
@@ -22,3 +29,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: () => ipcRenderer.send('updater:install'),
   checkForUpdate: () => ipcRenderer.send('updater:check'),
 });
+
+if (['https://www.mixouairlinesptfsweblogbook.com', 'https://mixouairlinesptfsweblogbook.com'].includes(location.origin)) {
+  contextBridge.exposeInMainWorld('radioDesktop', {
+    configure: (code: string) => ipcRenderer.invoke('radio:configure', code),
+    onPtt: (callback: (down: boolean) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, down: boolean) => callback(down === true);
+      ipcRenderer.on('radio:ptt', handler);
+      return () => ipcRenderer.removeListener('radio:ptt', handler);
+    },
+  });
+}
+
