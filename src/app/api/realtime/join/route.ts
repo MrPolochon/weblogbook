@@ -22,11 +22,6 @@ function corsHeadersFor(request: Request) {
   };
 }
 
-// Liste blanche des préfixes de roomName autorisés.
-// - call-<uuid> : appels téléphoniques (vérifiés en DB plus bas)
-// - vhf-<freq>  : conférences VHF (à étendre si besoin)
-
-
 function isValidRoomName(name: string): boolean {
   if (!name || typeof name !== 'string') return false;
   if (name.length > 100) return false;
@@ -50,7 +45,6 @@ export async function POST(request: NextRequest) {
     const authHeader = request.headers.get('authorization');
 
     if (authHeader?.startsWith('Bearer ')) {
-      // External app (Electron/Android) — authenticate via access token
       const accessToken = authHeader.substring(7);
       const supabaseAdmin = createBrowserClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -58,12 +52,10 @@ export async function POST(request: NextRequest) {
       );
       const { data: { user: tokenUser }, error: tokenError } = await supabaseAdmin.auth.getUser(accessToken);
       if (tokenError) {
-        // On évite de logger longueur/préfixe du token pour ne pas faciliter le profilage d'attaques.
         console.error('[Cloudflare Token] Bearer auth failed');
       }
       user = tokenUser;
     } else if (!['null', 'file://'].includes(request.headers.get('origin') || '')) {
-      // Web — authenticate via cookies
       const supabase = await createClient();
       const { data: { user: cookieUser } } = await supabase.auth.getUser();
       user = cookieUser;
@@ -73,7 +65,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Non authentifié' }, { status: 401, headers: corsHeaders });
     }
 
-    const rl = await rateLimitShared(`realtime:${user.id}`, 20, 60_000);
+    const rl = await rateLimitShared(`realtime:${user.id}`, 60, 60_000);
     if (!rl.allowed) return NextResponse.json({ error: 'Trop de requêtes' }, { status: 429, headers: corsHeaders });
 
     let body;
@@ -111,13 +103,21 @@ export async function POST(request: NextRequest) {
     }
     const iat = Math.floor(Date.now() / 1000);
     const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-    const payload = Buffer.from(JSON.stringify({ aud: 'weblogbook-radio', sub: user.id, room: roomName,
+    const payload = Buffer.from(JSON.stringify({
+      aud: 'weblogbook-radio',
+      sub: user.id,
+      room: roomName,
       name: typeof participantName === 'string' ? participantName.trim().slice(0, 80) || user.id : user.id,
-      canPublish, iat, exp: iat + 60, jti: randomUUID(),
+      canPublish,
+      iat,
+      exp: iat + 3600,
+      jti: randomUUID(),
     })).toString('base64url');
     const signature = createHmac('sha256', secret).update(header + '.' + payload).digest('base64url');
-    return NextResponse.json({ token: header + '.' + payload + '.' + signature, url, provider: 'cloudflare', protocol: 1, canPublish },
-      { headers: { ...corsHeaders, 'Cache-Control': 'no-store' } });
+    return NextResponse.json(
+      { token: header + '.' + payload + '.' + signature, url, provider: 'cloudflare', protocol: 1, canPublish },
+      { headers: { ...corsHeaders, 'Cache-Control': 'no-store' } }
+    );
   } catch (error) {
     console.error('[Cloudflare Token] Erreur:', error);
     return NextResponse.json({ error: 'Erreur serveur' }, { status: 500, headers: corsHeaders });
