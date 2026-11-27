@@ -150,32 +150,39 @@ export async function executeCommand(admin: Admin, context: Context, body: Recor
   const action = body.action;
   if (action === 'ack') {
     const row = await recipientMessage(admin, context, body.message_id);
+
+    // Deliver the idempotent logical-ACK notification before recording the ACK.
+    // If sending fails, the receipt is not written and the controller can retry.
+    if (context.mode === 'atc' && context.station && row.payload.sender_mode === 'pilot' && row.plan_id) {
+      const { data: plan, error: planError } = await admin.from('plans_vol').select(PLAN_FIELDS).eq('id', row.plan_id).maybeSingle();
+      checked(planError);
+      if (!plan || !ACTIVE_PLANS.includes(plan.statut)) throw new CpdlcError('FLIGHT STATION NO LONGER ACTIVE', 409);
+
+      const notificationKey = `lack:${row.id}:${context.station.session_id}`;
+      const existing = await admin.from('cpdlc_messages').select('id').eq('sender_user_id', context.userId).eq('client_request_id', notificationKey).maybeSingle();
+      checked(existing.error);
+      if (!existing.data) {
+        await apply(admin, context, 'send', {
+          from_station: context.station.code, to_station: row.from_station,
+          sender_user_ids: [context.userId], recipient_user_ids: crew(plan),
+          plan_id: plan.id, recipient_plan_id: null, client_request_id: notificationKey,
+          kind: 'SYSTEM', body: 'MSG RECEIVED STANDBY', status: 'STANDBY', response_required: false,
+          payload: { sender_mode: 'atc', recipient_mode: 'pilot', airport: context.station.code, sender_session_id: context.station.session_id, acknowledged_message_id: row.id },
+        });
+      }
+
+      const { error: markerError } = await admin.from('cpdlc_messages')
+        .update({ payload: { ...row.payload, atc_lack_sent: true } })
+        .eq('id', row.id);
+      checked(markerError);
+    }
+
     const ackId = await apply(admin, context, 'ack', { message_id: row.id });
 
     // Persist the pilot's receipt as metadata only; do not alter operational status.
     if (context.mode === 'pilot' && row.payload.sender_mode === 'atc') {
       const { error } = await admin.from('cpdlc_messages').update({ payload: { ...row.payload, pilot_acknowledged: true } }).eq('id', row.id);
       checked(error);
-    }
-
-    // A deliberate ATC ACK sends a distinct informational message to the flight crew.
-    if (context.mode === 'atc' && context.station && row.payload.sender_mode === 'pilot' && row.plan_id) {
-      const { data: plan, error: planError } = await admin.from('plans_vol').select(PLAN_FIELDS).eq('id', row.plan_id).maybeSingle();
-      checked(planError);
-      if (plan && ACTIVE_PLANS.includes(plan.statut)) {
-        const notificationKey = `atc-ack:${row.id}:${context.station.session_id}`;
-        const existing = await admin.from('cpdlc_messages').select('id').eq('sender_user_id', context.userId).eq('client_request_id', notificationKey).maybeSingle();
-        checked(existing.error);
-        if (!existing.data) {
-          await apply(admin, context, 'send', {
-            from_station: context.station.code, to_station: row.from_station,
-            sender_user_ids: [context.userId], recipient_user_ids: crew(plan),
-            plan_id: plan.id, recipient_plan_id: null, client_request_id: notificationKey,
-            kind: 'SYSTEM', body: 'MSG RECEIVED STANDBY', status: 'STANDBY', response_required: false,
-            payload: { sender_mode: 'atc', recipient_mode: 'pilot', airport: context.station.code, sender_session_id: context.station.session_id, acknowledged_message_id: row.id },
-          });
-        }
-      }
     }
     return ackId;
   }
