@@ -17,7 +17,7 @@ const emptyInit: CpdlcInit = { flight_no: '', dep: '', dest: '', altn: '', ete: 
 const upper = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 const time = (value: string) => new Date(value).toISOString().slice(11, 16).replace(':', '') + 'Z';
 
-const FINAL_STATUSES = ['WILCO', 'UNABLE', 'ROGER', 'REFUSED', 'CLEAR', 'CLEARED', 'CLOSED'];
+const PILOT_FINAL_STATUSES = ['WILCO', 'UNABLE', 'ROGER', 'REFUSED', 'CLOSED'];
 
 function pagesFor(body: string): string[] {
   const lines: string[] = [];
@@ -90,6 +90,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [closed, setClosed] = useState(false);
   const [recallMode, setRecallMode] = useState(false);
+  const [pilotStandbyIds, setPilotStandbyIds] = useState<Record<string, boolean>>({});
   const [failedResponse, setFailedResponse] = useState<{ messageId: string; reply: 'WILCO' | 'UNABLE' | 'STANDBY' | 'ROGER' } | null>(null);
   const [messagePage, setMessagePage] = useState(0);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
@@ -459,13 +460,23 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     setFailedResponse(null);
     try {
       await act({ action: 'respond', plan_id: planId, message_id: message.id, response: reply, client_request_id: crypto.randomUUID() });
-      setNotice(`${reply} SENT`);
-      if (['WILCO', 'ROGER', 'UNABLE'].includes(reply)) {
-        if (autoCloseTimer.current) window.clearTimeout(autoCloseTimer.current);
-        autoCloseTimer.current = window.setTimeout(() => {
-          setClosed(true);
-          setRecallMode(false);
-        }, 2200);
+      if (reply === 'STANDBY') {
+        setPilotStandbyIds(prev => ({ ...prev, [message.id]: true }));
+        setNotice('STANDBY SENT — AWAITING FINAL PILOT RESPONSE');
+      } else {
+        setPilotStandbyIds(prev => {
+          const next = { ...prev };
+          delete next[message.id];
+          return next;
+        });
+        setNotice(`${reply} SENT`);
+        if (['WILCO', 'ROGER', 'UNABLE'].includes(reply)) {
+          if (autoCloseTimer.current) window.clearTimeout(autoCloseTimer.current);
+          autoCloseTimer.current = window.setTimeout(() => {
+            setClosed(true);
+            setRecallMode(false);
+          }, 2200);
+        }
       }
     } catch (reason) {
       setFailedResponse({ messageId: message.id, reply });
@@ -473,16 +484,19 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     }
   };
 
+  const isPilotStandby = Boolean(message && (pilotStandbyIds[message.id] || (message.incoming && message.status === 'STANDBY' && message.response_required)));
   const isAtcStandbyNotice = Boolean(
     message?.incoming &&
+    !isPilotStandby &&
     (message.status === 'STANDBY' || /\bSTANDBY\b/.test(upper(message.body))),
   );
 
-  // Use backend response_required flag so we only send WILCO/UNABLE/STANDBY when the backend expects a response
-  const isClearanceOrInstruction = Boolean(message?.incoming && message.response_required);
+  const isClearanceOrInstruction = Boolean(
+    message?.incoming && (message.kind === 'CLEARANCE' || message.response_required),
+  );
 
-  const isFinalStatus = Boolean(message && FINAL_STATUSES.includes(message.status));
-  const isOpenActionable = Boolean(message?.incoming && !isFinalStatus && !isAtcStandbyNotice && !recallMode);
+  const isPilotFinalStatus = Boolean(message && PILOT_FINAL_STATUSES.includes(message.status));
+  const isOpenActionable = Boolean(message?.incoming && !isPilotFinalStatus && !isAtcStandbyNotice && !recallMode);
   const hasSendFailed = Boolean(message && failedResponse?.messageId === message.id);
 
   const dcduLeft: (Line | undefined)[] = [undefined, undefined], dcduRight: (Line | undefined)[] = [undefined, undefined];
@@ -497,9 +511,14 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   } else if (message?.incoming && isOpenActionable) {
     if (isClearanceOrInstruction) {
       dcduLeft[0] = { label: '*UNABLE', disabled: busy, action: () => void sendDirectResponse('UNABLE') };
-      dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
+      if (!isPilotStandby) {
+        dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
+      }
       dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => void sendDirectResponse('WILCO') };
     } else if (message.kind === 'FREE_TEXT') {
+      if (!isPilotStandby) {
+        dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
+      }
       dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => void sendDirectResponse('ROGER') };
     } else {
       dcduRight[1] = { label: 'CLOSE*', action: () => { setClosed(true); setRecallMode(false); } };
@@ -515,16 +534,19 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       return { text: failedResponse.reply, tone: 'cyanSolid' as const };
     }
     if (message.incoming) {
-      if (['WILCO', 'ROGER', 'CLEAR', 'CLEARED'].includes(message.status)) {
+      if (['WILCO', 'ROGER'].includes(message.status)) {
         return { text: message.status, tone: 'greenSolid' as const };
       }
       if (['UNABLE', 'REFUSED'].includes(message.status)) {
         return { text: message.status, tone: 'amberSolid' as const };
       }
+      if (isPilotStandby) {
+        return { text: 'STBY', tone: 'cyan' as const };
+      }
       if (isAtcStandbyNotice) {
         return { text: 'OPEN', tone: 'cyan' as const };
       }
-      if (isFinalStatus || recallMode) {
+      if (isPilotFinalStatus || recallMode) {
         return { text: message.status.replace('_', ' '), tone: 'green' as const };
       }
       return { text: 'OPEN', tone: 'cyan' as const };
