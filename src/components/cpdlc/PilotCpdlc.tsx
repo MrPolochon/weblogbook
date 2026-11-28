@@ -7,7 +7,7 @@ import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcInit } from '@/lib/cpdlc/types';
 import styles from './pilot.module.css';
-import { departureRequestText, isCpdlcCapableAircraft, normalizeAircraftIcao, validateInit } from '@/lib/cpdlc/policy';
+import { departureRequestText, validateInit } from '@/lib/cpdlc/policy';
 
 type Page = 'MAIN' | 'ATC_MENU' | 'AOC_MENU' | 'LOGON' | 'REQ' | 'POS' | 'INIT' | 'WX' | 'ATIS' | 'FREE' | 'RECEIVED' | 'SENT';
 type Line = { label: string; value?: string; action: () => void; disabled?: boolean };
@@ -82,7 +82,7 @@ function printMessage(header: string, body: string) {
   document.body.appendChild(frame);
 }
 
-export default function PilotCpdlc({ planId, aircraftType }: { planId: string; aircraftType?: string }) {
+export default function PilotCpdlc({ planId }: { planId: string }) {
   const { data, error, loading, busy, act } = useCpdlc(planId);
   const messages = useMemo(() => data?.messages ?? [], [data?.messages]);
   const unread = useMemo(() => messages.filter(message => message.incoming && !message.acknowledged), [messages]);
@@ -357,7 +357,6 @@ export default function PilotCpdlc({ planId, aircraftType }: { planId: string; a
   const history = messages.filter(item => page === 'RECEIVED' ? item.incoming : !item.incoming);
   const historyPages = Math.max(1, Math.ceil(history.length / 5));
 
-  // MCDU Left & Right Line Select Keys (LSK L1-L6 / R1-R6)
   const left: (Line | undefined)[] = Array(6).fill(undefined);
   const right: (Line | undefined)[] = Array(6).fill(undefined);
   const editLine = (label: string, key: string, value: string, hint = '[          ]'): Line => ({ label, value: value || hint, action: () => selectField(key, value) });
@@ -548,23 +547,6 @@ export default function PilotCpdlc({ planId, aircraftType }: { planId: string; a
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { x: event.clientX, y: event.clientY, left: position.x, top: position.y };
   };
-
-  const notEquipped = Boolean(aircraftType && !isCpdlcCapableAircraft(aircraftType));
-  if (notEquipped) {
-    return (
-      <section className={styles.root} aria-label="CPDLC unavailable">
-        <div className={styles.sectionHeader}>
-          <div>
-            <span className={styles.eyebrow}>DATALINK COMMUNICATIONS</span>
-            <h2>DCDU <span>NOT EQUIPPED ({normalizeAircraftIcao(aircraftType)})</span></h2>
-          </div>
-        </div>
-        <p className={styles.notice} role="status">
-          CE TYPE D&apos;APPAREIL N&apos;EST PAS ÉQUIPÉ DU SYSTÈME CPDLC — UTILISEZ LA RADIO VHF.
-        </p>
-      </section>
-    );
-  }
 
   const currentPageText = messagePages[Math.min(messagePage, messagePages.length - 1)] ?? '';
 
