@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Check, ChevronRight, MessageSquare, PhoneOff, Plane, Radio, RefreshCw, Send, Volume2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, MessageSquare, PhoneOff, Plane, Radio, RefreshCw, Send, Trash2, Volume2, X } from 'lucide-react';
 import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcMessage, CpdlcStation } from '@/lib/cpdlc/types';
@@ -57,6 +57,7 @@ const isPositionReport = (message: CpdlcMessage) => upper(message.body).startsWi
 const isHandoverNotice = (message: CpdlcMessage) => upper(message.body).startsWith('HANDOVER INCOMING');
 
 const POSITION_FLOW = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'];
+const STALE_SESSION_MS = 90 * 60 * 1000;
 
 const kindLabel = (message: CpdlcMessage) => {
   if (typeof message.payload.request_type === 'string') return message.payload.request_type + ' REQUEST';
@@ -91,12 +92,13 @@ export default function AtcCpdlcPanel() {
   const { theme } = useAtcTheme();
   const dark = theme === 'dark';
   const { data, error, loading, busy, refresh, act } = useCpdlc();
-  const messages = data?.messages ?? [];
-  const unread = messages.filter(message => message.incoming && !message.acknowledged);
+  const messages = useMemo(() => data?.messages ?? [], [data?.messages]);
+  const unread = useMemo(() => messages.filter(message => message.incoming && !message.acknowledged), [messages]);
   const alarm = useCpdlcAlarm(unread.length > 0);
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedAircraft, setSelectedAircraft] = useState<string | null>(null);
+  const [dismissedAt, setDismissedAt] = useState<Record<string, number>>({});
   const [editor, setEditor] = useState<Editor>(null);
   const [clearance, setClearance] = useState<Clearance>(emptyClearance);
   const [enroute, setEnroute] = useState<EnrouteClearance>(emptyEnroute);
@@ -161,29 +163,46 @@ export default function AtcCpdlcPanel() {
   }, [sortedHandoverControllers, myStation, data?.station]);
 
   const connectedAircraft = useMemo(() => {
-    const active = new Map<string, { callsign: string; since: string; lastMessageId: string }>();
+    const active = new Map<string, { callsign: string; since: string; lastActivityMs: number; lastMessageId: string }>();
     const chronological = messages.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const now = Date.now();
+
     for (const msg of chronological) {
       const bodyUpper = upper(msg.body);
+      const fromCs = upper(msg.from_station).trim();
+      const toCs = upper(msg.to_station).trim();
+      const msgTs = Date.parse(msg.created_at) || now;
+
       if (msg.incoming && (bodyUpper.startsWith('LOGON REQUEST') || bodyUpper.startsWith('LOGON NOTIFICATION'))) {
-        active.set(msg.from_station, { callsign: msg.from_station, since: msg.created_at, lastMessageId: msg.id });
+        active.set(fromCs, { callsign: fromCs, since: msg.created_at, lastActivityMs: msgTs, lastMessageId: msg.id });
       } else if (msg.incoming && bodyUpper.startsWith('HANDOVER INCOMING')) {
         const fltMatch = bodyUpper.match(/FLT\s+([A-Z0-9]+)/);
         const callsign = fltMatch?.[1];
         if (callsign) {
-          active.set(callsign, { callsign, since: msg.created_at, lastMessageId: msg.id });
+          active.set(callsign, { callsign, since: msg.created_at, lastActivityMs: msgTs, lastMessageId: msg.id });
         }
       } else if (msg.incoming && bodyUpper.startsWith('LOGOFF NOTIFICATION')) {
-        active.delete(msg.from_station);
+        active.delete(fromCs);
       } else if (!msg.incoming && (bodyUpper.startsWith('NEXT DATA AUTHORITY') || bodyUpper.startsWith('CPDLC SERVICE TERMINATED'))) {
-        active.delete(msg.to_station);
-      } else if (msg.incoming && active.has(msg.from_station)) {
-        const current = active.get(msg.from_station)!;
-        active.set(msg.from_station, { ...current, lastMessageId: msg.id });
+        if (toCs) active.delete(toCs);
+        for (const key of active.keys()) {
+          if (toCs.includes(key) || bodyUpper.includes(key)) {
+            active.delete(key);
+          }
+        }
+      } else if (msg.incoming && active.has(fromCs)) {
+        const current = active.get(fromCs)!;
+        active.set(fromCs, { ...current, lastActivityMs: msgTs, lastMessageId: msg.id });
       }
     }
-    return [...active.values()];
-  }, [messages]);
+
+    return [...active.values()].filter(ac => {
+      if (now - ac.lastActivityMs > STALE_SESSION_MS) return false;
+      const dismissedTs = dismissedAt[ac.callsign];
+      if (dismissedTs && ac.lastActivityMs <= dismissedTs) return false;
+      return true;
+    });
+  }, [messages, dismissedAt]);
 
   useEffect(() => {
     if (!open) return;
@@ -298,6 +317,7 @@ export default function AtcCpdlcPanel() {
     setActionError('');
     const target = transferStations.find(s => s.session_id === transferSession);
     const targetLabel = target ? stationLabel(target) : '';
+    const callsign = upper(message.from_station).trim();
     try {
       if (target) {
         await act({
@@ -310,7 +330,7 @@ export default function AtcCpdlcPanel() {
         await act({
           action: 'free_text',
           to: target.code,
-          text: `HANDOVER INCOMING\nFLT ${message.from_station}\nFROM ${myStation ? stationLabel(myStation) : data?.station ?? 'ATC'}`,
+          text: `HANDOVER INCOMING\nFLT ${callsign}\nFROM ${myStation ? stationLabel(myStation) : data?.station ?? 'ATC'}`,
           client_request_id: crypto.randomUUID(),
         }).catch(() => {});
       }
@@ -319,6 +339,8 @@ export default function AtcCpdlcPanel() {
         message_id: message.id,
         session_id: transferSession,
         client_request_id: requestId.current ?? crypto.randomUUID(),
+      }, () => {
+        setDismissedAt(prev => ({ ...prev, [callsign]: Date.now() }));
       });
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'TRANSFER FAILED');
@@ -340,7 +362,7 @@ export default function AtcCpdlcPanel() {
         to: callsign,
         text: `NEXT DATA AUTHORITY ${targetLabel}\nHANDOVER TO ${targetLabel} - NOTIFY ${targetLabel}`,
         client_request_id: crypto.randomUUID(),
-      });
+      }).catch(() => {});
 
       await act({
         action: 'free_text',
@@ -360,6 +382,7 @@ export default function AtcCpdlcPanel() {
           }).catch(() => {});
         }
       }
+      setDismissedAt(prev => ({ ...prev, [callsign]: Date.now() }));
       setEditor(null);
       setSelectedAircraft(null);
     } catch (reason) {
@@ -390,12 +413,19 @@ export default function AtcCpdlcPanel() {
         to: callsign,
         text: lines.join('\n'),
         client_request_id: crypto.randomUUID(),
-      });
+      }).catch(() => {});
+    } finally {
+      setDismissedAt(prev => ({ ...prev, [callsign]: Date.now() + 60_000 }));
       setEditor(null);
       setSelectedAircraft(null);
-    } catch (reason) {
-      setActionError(reason instanceof Error ? reason.message : 'END CPDLC FAILED');
     }
+  }
+
+  function forceClearAircraft(callsign: string) {
+    setDismissedAt(prev => ({ ...prev, [callsign]: Date.now() + 60_000 }));
+    setEditor(null);
+    setSelectedAircraft(null);
+    setActionError('');
   }
 
   function startEditor(next: Editor, presetRecipient = '') {
@@ -418,7 +448,7 @@ export default function AtcCpdlcPanel() {
 
   const needsValue = !['UNABLE', 'STANDBY'].includes(enroute.directive);
   const aircraftHistory = selectedAircraft
-    ? messages.filter(m => m.from_station === selectedAircraft || m.to_station === selectedAircraft).slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
+    ? messages.filter(m => upper(m.from_station).trim() === selectedAircraft || upper(m.to_station).trim() === selectedAircraft).slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
     : [];
   const chosenHandoverStation = onlineControllers.find(s => s.session_id === handoverSessionId);
 
@@ -644,6 +674,9 @@ export default function AtcCpdlcPanel() {
                 <PhoneOff className="h-4 w-4" /> END CPDLC
               </button>
             </div>
+            <button type="button" className={cn(button, 'mt-2 w-full border-slate-600/50 text-xs', muted)} onClick={() => forceClearAircraft(selectedAircraft)}>
+              <Trash2 className="h-3.5 w-3.5" /> REMOVE STALE FLIGHT FROM LIST
+            </button>
           </div>
           <div className="space-y-2">
             <p className={cn('text-xs font-bold uppercase tracking-wider', muted)}>RECENT EXCHANGES WITH {selectedAircraft}</p>
