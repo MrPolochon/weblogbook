@@ -401,13 +401,18 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   } else if (!message && messages.length > 0) {
     dcduRight[1] = { label: 'RECALL*', action: () => { setClosed(false); setSelected(messages[0]?.id ?? null); setMessagePage(0); } };
   } else if (message?.incoming) {
-    if (!message.acknowledged) dcduRight[1] = { label: 'ACK*', disabled: busy, action: () => void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED') };
-    else if (message.response_required && !['WILCO', 'UNABLE', 'ROGER', 'REFUSED'].includes(message.status)) {
+    const isFinalStatus = ['WILCO', 'UNABLE', 'ROGER', 'REFUSED', 'CLEAR', 'CLEARED', 'CLOSED'].includes(message.status);
+    if (!message.acknowledged) {
+      dcduRight[1] = { label: 'ACK*', disabled: busy, action: () => void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED') };
+    } else if (message.response_required && !isFinalStatus) {
       dcduLeft[0] = { label: '*UNABLE', disabled: busy, action: () => response('UNABLE') };
       dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => response('STANDBY') };
       dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => response('WILCO') };
-    } else if (message.kind === 'FREE_TEXT' && !message.response_required && message.status !== 'ROGER') dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => response('ROGER') };
-    else dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
+    } else if (message.kind === 'FREE_TEXT' && !message.response_required && !isFinalStatus) {
+      dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => response('ROGER') };
+    } else {
+      dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
+    }
   } else if (message) {
     dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
   }
