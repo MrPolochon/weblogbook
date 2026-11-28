@@ -7,9 +7,11 @@ import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcInit } from '@/lib/cpdlc/types';
 import styles from './pilot.module.css';
-import { departureRequestText, validateInit } from '@/lib/cpdlc/policy';
+import { departureRequestText, isCpdlcCapableAircraft, normalizeAircraftIcao, validateInit } from '@/lib/cpdlc/policy';
 
 type Page = 'MAIN' | 'ATC_MENU' | 'AOC_MENU' | 'LOGON' | 'REQ' | 'POS' | 'INIT' | 'WX' | 'ATIS' | 'FREE' | 'RECEIVED' | 'SENT';
+type Line = { label: string; value?: string; action: () => void; disabled?: boolean };
+
 const REASONS = ['NONE', 'DUE TO WEATHER', 'DUE TO A/C PERF', 'DUE TO TURBULENCE'] as const;
 const emptyInit: CpdlcInit = { flight_no: '', dep: '', dest: '', altn: '', ete: '', utc: '', date: '', gate: '', atis_id: '', aircraft_type: '', station: '', text: '' };
 const upper = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
@@ -80,10 +82,10 @@ function printMessage(header: string, body: string) {
   document.body.appendChild(frame);
 }
 
-export default function PilotCpdlc({ planId }: { planId: string }) {
+export default function PilotCpdlc({ planId, aircraftType }: { planId: string; aircraftType?: string }) {
   const { data, error, loading, busy, act } = useCpdlc(planId);
-  const messages = data?.messages ?? [];
-  const unread = messages.filter(message => message.incoming && !message.acknowledged);
+  const messages = useMemo(() => data?.messages ?? [], [data?.messages]);
+  const unread = useMemo(() => messages.filter(message => message.incoming && !message.acknowledged), [messages]);
   const alarm = useCpdlcAlarm(unread.length > 0);
   const [selected, setSelected] = useState<string | null>(null);
   const [closed, setClosed] = useState(false);
@@ -355,6 +357,103 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const history = messages.filter(item => page === 'RECEIVED' ? item.incoming : !item.incoming);
   const historyPages = Math.max(1, Math.ceil(history.length / 5));
 
+  // MCDU Left & Right Line Select Keys (LSK L1-L6 / R1-R6)
+  const left: (Line | undefined)[] = Array(6).fill(undefined);
+  const right: (Line | undefined)[] = Array(6).fill(undefined);
+  const editLine = (label: string, key: string, value: string, hint = '[          ]'): Line => ({ label, value: value || hint, action: () => selectField(key, value) });
+  const navLine = (label: string, next: Page): Line => ({ label, action: () => navigate(next) });
+
+  if (page === 'MAIN') {
+    left[0] = navLine('ATC COMM', 'ATC_MENU');
+    left[1] = navLine('AOC MENU', 'AOC_MENU');
+    right[0] = navLine('RECEIVED MESSAGES', 'RECEIVED');
+    right[1] = navLine('SENT MESSAGES', 'SENT');
+  } else if (page === 'ATC_MENU') {
+    left[0] = navLine('NOTIFICATION', 'LOGON');
+    left[1] = navLine('ATC REQUEST', 'REQ');
+    left[2] = navLine('POSITION REPORT', 'POS');
+    right[0] = navLine('DEPARTURE REQ', 'INIT');
+    right[1] = navLine('FREE TEXT', 'FREE');
+    right[2] = navLine('MSG LOG', 'RECEIVED');
+    left[5] = navLine('RETURN', 'MAIN');
+  } else if (page === 'AOC_MENU') {
+    left[0] = navLine('WX REQUEST', 'WX');
+    left[1] = navLine('ATIS', 'ATIS');
+    right[0] = navLine('FREE TEXT', 'FREE');
+    right[1] = navLine('RECEIVED MESSAGES', 'RECEIVED');
+    right[2] = navLine('SENT MESSAGES', 'SENT');
+    left[5] = navLine('RETURN', 'MAIN');
+  } else {
+    const parentMenu: Page = ['LOGON', 'REQ', 'POS', 'INIT'].includes(page) ? 'ATC_MENU' : ['WX', 'ATIS'].includes(page) ? 'AOC_MENU' : 'MAIN';
+    left[5] = navLine('RETURN', parentMenu);
+    if (['INIT', 'WX', 'ATIS', 'FREE'].includes(page)) right[5] = { label: 'SEND*', action: () => void submit(), disabled: busy || unavailable };
+    if (['REQ', 'POS'].includes(page)) right[5] = { label: 'XFER TO DCDU*', action: () => void submit(), disabled: busy || unavailable };
+    if (page === 'LOGON') {
+      left[0] = editLine('ATC FLT NBR', 'init.flight_no', init.flight_no);
+      right[0] = editLine('NOTIFY TO', 'logon.station', logonStation, '[    ]');
+      left[2] = { label: 'CURRENT ATC', value: currentAtc || 'NONE', action: () => {} };
+      right[2] = { label: 'STATUS', value: currentAtc ? 'LOGGED ON' : 'NOT LOGGED', action: () => {} };
+      if (currentAtc) {
+        left[4] = {
+          label: 'LOGOFF*',
+          disabled: busy || unavailable,
+          action: () => void execute(
+            { action: 'free_text', plan_id: planId, flight_no: init.flight_no || data?.station || 'PILOT', to: currentAtc.split('_')[0], text: `LOGOFF NOTIFICATION\nFLT ${init.flight_no || data?.station || ''}`, client_request_id: crypto.randomUUID() },
+            'LOGOFF SENT',
+            () => { activeLogonRef.current.currentAtc = ''; setCurrentAtc(''); },
+          ),
+        };
+      }
+      right[5] = { label: 'NOTIFY*', action: () => void submit(), disabled: busy || unavailable };
+    } else if (page === 'REQ') {
+      left[0] = editLine('CLIMB / DESC TO', 'req.alt', reqAlt, '[FL350/8000FT]');
+      right[0] = editLine('HEADING', 'req.heading', reqHeading, '[   ]');
+      left[1] = editLine('DIRECT TO', 'req.direct', reqDirect, '[     ]');
+      right[1] = { label: 'REASON', value: REASONS[reqReasonIndex], action: () => setReqReasonIndex(i => (i + 1) % REASONS.length) };
+      left[2] = editLine('SPEED / MACH', 'req.speed', reqSpeed, '[280KT/M0.80]');
+      right[2] = { label: 'CURRENT ATC', value: currentAtc || 'NONE', action: () => navigate('LOGON') };
+      left[3] = editLine('ATC FLT NBR', 'init.flight_no', init.flight_no);
+    } else if (page === 'POS') {
+      left[0] = editLine('REPORTING POS', 'pos.fix', posFix, '[     ]');
+      right[0] = editLine('UTC TIME', 'pos.time', posTime, '[HHMMZ]');
+      left[1] = editLine('ALTITUDE / FL', 'pos.alt', posAlt, '[FL350]');
+      right[1] = editLine('NEXT FIX', 'pos.next', posNext, '[     ]');
+      left[2] = editLine('NEXT FIX ETA', 'pos.eta', posEta, '[HHMMZ]');
+      right[2] = editLine('ENSUING FIX', 'pos.ensuing', posEnsuing, '[     ]');
+      left[3] = editLine('ATC FLT NBR', 'init.flight_no', init.flight_no);
+      right[3] = { label: 'CURRENT ATC', value: currentAtc || 'NONE', action: () => navigate('LOGON') };
+    } else if (page === 'INIT') {
+      left[0] = editLine('ORIG/DEST', 'route', init.dep || init.dest ? init.dep + '/' + init.dest : '', '[    /    ]');
+      right[0] = editLine('ATC CALLSIGN', 'init.flight_no', init.flight_no);
+      left[1] = editLine('GATE NUMBER', 'init.gate', init.gate || '');
+      right[1] = editLine('ATIS ID', 'init.atis_id', init.atis_id || '');
+      left[2] = editLine('OPTIONAL FREE TEXT', 'init.text', init.text || '');
+      left[4] = editLine('A/C TYPE', 'init.aircraft_type', init.aircraft_type || '');
+      right[4] = editLine('STATION', 'init.station', init.station || '');
+    } else if (page === 'WX') {
+      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no);
+      right[0] = { label: 'WX TYPE', value: wxType, action: () => setWxType(value => value === 'METAR' ? 'TAF' : 'METAR') };
+      airports.forEach((airport, index) => { right[index + 1] = editLine('AIRPORT ' + (index + 1), 'wx.' + index, airport); });
+    } else if (page === 'ATIS') {
+      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no);
+      right[0] = editLine('AIRPORT', 'airport', atisAirport);
+    } else if (page === 'FREE') {
+      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no);
+      right[0] = editLine('TO STATION', 'to', to);
+      left[2] = editLine('MESSAGE', 'text', freeText);
+    } else {
+      history.slice(historyPage * 5, historyPage * 5 + 5).forEach((item, index) => {
+        left[index] = {
+          label: time(item.created_at) + ' ' + (item.incoming ? item.from_station : item.to_station),
+          value: item.kind.replace('_', ' '),
+          action: () => { setClosed(false); setRecallMode(true); setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); },
+        };
+      });
+      right[4] = { label: 'PREV PAGE', disabled: historyPage === 0, action: () => setHistoryPage(value => value - 1) };
+      right[5] = { label: 'NEXT PAGE', disabled: historyPage + 1 >= historyPages, action: () => setHistoryPage(value => value + 1) };
+    }
+  }
+
   const sendDirectResponse = async (reply: 'WILCO' | 'UNABLE' | 'STANDBY' | 'ROGER') => {
     if (!message || busy) return;
     setNotice('');
@@ -449,6 +548,23 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = { x: event.clientX, y: event.clientY, left: position.x, top: position.y };
   };
+
+  const notEquipped = Boolean(aircraftType && !isCpdlcCapableAircraft(aircraftType));
+  if (notEquipped) {
+    return (
+      <section className={styles.root} aria-label="CPDLC unavailable">
+        <div className={styles.sectionHeader}>
+          <div>
+            <span className={styles.eyebrow}>DATALINK COMMUNICATIONS</span>
+            <h2>DCDU <span>NOT EQUIPPED ({normalizeAircraftIcao(aircraftType)})</span></h2>
+          </div>
+        </div>
+        <p className={styles.notice} role="status">
+          CE TYPE D&apos;APPAREIL N&apos;EST PAS ÉQUIPÉ DU SYSTÈME CPDLC — UTILISEZ LA RADIO VHF.
+        </p>
+      </section>
+    );
+  }
 
   const currentPageText = messagePages[Math.min(messagePage, messagePages.length - 1)] ?? '';
 
