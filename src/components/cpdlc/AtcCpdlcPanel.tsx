@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Check, ChevronRight, MessageSquare, Plane, Radio, RefreshCw, Send, Volume2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, MessageSquare, PhoneOff, Plane, Radio, RefreshCw, Send, Volume2, X } from 'lucide-react';
 import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
-import type { CpdlcCommand, CpdlcMessage } from '@/lib/cpdlc/types';
+import type { CpdlcCommand, CpdlcMessage, CpdlcStation } from '@/lib/cpdlc/types';
 import { useAtcTheme } from '@/contexts/AtcThemeContext';
 import { ATC_NAV_BTN, atcNavIdle, atcNavOpen } from '@/lib/atc-ui';
 import { clearanceText, routeStation } from '@/lib/cpdlc/policy';
@@ -40,6 +40,7 @@ type Editor =
   | 'aircraft_clearance'
   | 'aircraft_clearance_preview'
   | 'aircraft_handover'
+  | 'aircraft_terminate'
   | 'text'
   | 'transfer'
   | 'compose'
@@ -53,13 +54,23 @@ const time = (value: string) => new Date(value).toISOString().slice(11, 16) + 'Z
 const isLogonMessage = (message: CpdlcMessage) => upper(message.body).startsWith('LOGON REQUEST');
 const isEnrouteRequest = (message: CpdlcMessage) => upper(message.body).startsWith('ATC REQUEST');
 const isPositionReport = (message: CpdlcMessage) => upper(message.body).startsWith('POSITION REPORT');
+const isHandoverNotice = (message: CpdlcMessage) => upper(message.body).startsWith('HANDOVER INCOMING');
+
+const POSITION_FLOW = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'];
 
 const kindLabel = (message: CpdlcMessage) => {
   if (typeof message.payload.request_type === 'string') return message.payload.request_type + ' REQUEST';
   if (isLogonMessage(message)) return 'LOGON REQUEST';
+  if (isHandoverNotice(message)) return 'SECTOR HANDOVER';
   if (isEnrouteRequest(message)) return 'ATC REQUEST';
   if (isPositionReport(message)) return 'POSITION REPORT';
   return message.kind.replace('_', ' ');
+};
+
+const stationLabel = (station: { code: string; position: string }) => {
+  const code = upper(station.code).trim();
+  const pos = upper(station.position).trim();
+  return code.includes('_') ? code : `${code}_${pos}`;
 };
 
 export function clearancePreview(clearance: Clearance): string {
@@ -92,7 +103,9 @@ export default function AtcCpdlcPanel() {
   const [replyText, setReplyText] = useState('');
   const [recipient, setRecipient] = useState('');
   const [transferSession, setTransferSession] = useState('');
-  const [handoverCode, setHandoverCode] = useState('');
+  const [handoverSessionId, setHandoverSessionId] = useState('');
+  const [voiceFrequency, setVoiceFrequency] = useState('');
+  const [terminateReason, setTerminateReason] = useState('END OF ATC SERVICE');
   const [actionError, setActionError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const trigger = useRef<HTMLButtonElement>(null);
@@ -106,23 +119,63 @@ export default function AtcCpdlcPanel() {
   const selectedRequestPending = Boolean(selected && ['SENT', 'STANDBY', 'TIMED_OUT'].includes(selected.status));
   const selectedRequestAnswered = selected?.kind === 'CLEARANCE' && !selectedRequestPending;
   const transferStations = selected ? (data?.stations ?? []).filter(station => station.user_id !== data?.user_id && routeStation([station], selected.to_station, selected.kind === 'CLEARANCE')) : [];
-  const onlineControllers = (data?.stations ?? []).filter(station => station.user_id !== data?.user_id);
+  const onlineControllers = useMemo(
+    () => (data?.stations ?? []).filter(station => station.user_id !== data?.user_id),
+    [data?.stations, data?.user_id],
+  );
+  const myStation = useMemo(
+    () => (data?.stations ?? []).find(station => station.user_id === data?.user_id),
+    [data?.stations, data?.user_id],
+  );
   const visibleMessages = (filter === 'unread' ? unread : messages).slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
   const shell = dark ? 'bg-[#0b1220] text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-300';
   const muted = dark ? 'text-slate-400' : 'text-slate-600';
   const field = cn('w-full rounded-lg border px-3 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-sky-500', dark ? 'bg-slate-950 border-slate-700' : 'bg-slate-50 border-slate-300');
   const button = cn('inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40', dark ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-300 hover:bg-slate-100');
 
+  const sortedHandoverControllers = useMemo(() => {
+    const myBaseIcao = upper(myStation?.code ?? data?.station ?? '').split('_')[0];
+    const myPosIdx = myStation ? POSITION_FLOW.indexOf(myStation.position) : -1;
+
+    const scoreStation = (st: CpdlcStation) => {
+      const sameAirport = upper(st.code).split('_')[0] === myBaseIcao;
+      const stPosIdx = POSITION_FLOW.indexOf(st.position);
+      const isNextStep = myPosIdx !== -1 && stPosIdx > myPosIdx;
+      const stepDistance = isNextStep ? stPosIdx - myPosIdx : 50 + (stPosIdx === -1 ? 99 : stPosIdx);
+      return (sameAirport ? 0 : 100) + stepDistance;
+    };
+
+    return [...onlineControllers].sort((a, b) => scoreStation(a) - scoreStation(b));
+  }, [onlineControllers, myStation, data?.station]);
+
+  const recommendedHandoverId = useMemo(() => {
+    if (!sortedHandoverControllers.length) return '';
+    const first = sortedHandoverControllers[0];
+    const myBaseIcao = upper(myStation?.code ?? data?.station ?? '').split('_')[0];
+    const myPosIdx = myStation ? POSITION_FLOW.indexOf(myStation.position) : -1;
+    const firstPosIdx = POSITION_FLOW.indexOf(first.position);
+    const isLogicalNext =
+      upper(first.code).split('_')[0] === myBaseIcao &&
+      (myPosIdx === -1 || firstPosIdx > myPosIdx);
+    return isLogicalNext ? first.session_id : '';
+  }, [sortedHandoverControllers, myStation, data?.station]);
+
   const connectedAircraft = useMemo(() => {
     const active = new Map<string, { callsign: string; since: string; lastMessageId: string }>();
     const chronological = messages.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
     for (const msg of chronological) {
       const bodyUpper = upper(msg.body);
-      if (msg.incoming && bodyUpper.startsWith('LOGON REQUEST')) {
+      if (msg.incoming && (bodyUpper.startsWith('LOGON REQUEST') || bodyUpper.startsWith('LOGON NOTIFICATION'))) {
         active.set(msg.from_station, { callsign: msg.from_station, since: msg.created_at, lastMessageId: msg.id });
+      } else if (msg.incoming && bodyUpper.startsWith('HANDOVER INCOMING')) {
+        const fltMatch = bodyUpper.match(/FLT\s+([A-Z0-9]+)/);
+        const callsign = fltMatch?.[1];
+        if (callsign) {
+          active.set(callsign, { callsign, since: msg.created_at, lastMessageId: msg.id });
+        }
       } else if (msg.incoming && bodyUpper.startsWith('LOGOFF NOTIFICATION')) {
         active.delete(msg.from_station);
-      } else if (!msg.incoming && bodyUpper.startsWith('NEXT DATA AUTHORITY')) {
+      } else if (!msg.incoming && (bodyUpper.startsWith('NEXT DATA AUTHORITY') || bodyUpper.startsWith('CPDLC SERVICE TERMINATED'))) {
         active.delete(msg.to_station);
       } else if (msg.incoming && active.has(msg.from_station)) {
         const current = active.get(msg.from_station)!;
@@ -196,7 +249,7 @@ export default function AtcCpdlcPanel() {
     setSelectedId(null);
     setSelectedAircraft(callsign);
     setEnroute(emptyEnroute);
-    setHandoverCode('');
+    setHandoverSessionId('');
     setReplyText('');
     setEditor(null);
     setActionError('');
@@ -233,7 +286,7 @@ export default function AtcCpdlcPanel() {
         action: 'respond',
         message_id: message.id,
         response: 'FREE_TEXT',
-        text: `LOGON ACCEPTED - CURRENT ATC ${data?.station ?? message.to_station}`,
+        text: `LOGON ACCEPTED - CURRENT ATC ${myStation ? stationLabel(myStation) : data?.station ?? message.to_station}`,
         client_request_id: crypto.randomUUID(),
       });
     } catch (reason) {
@@ -244,15 +297,22 @@ export default function AtcCpdlcPanel() {
   async function transferWithHandover(message: CpdlcMessage) {
     setActionError('');
     const target = transferStations.find(s => s.session_id === transferSession);
+    const targetLabel = target ? stationLabel(target) : '';
     try {
       if (target) {
         await act({
           action: 'respond',
           message_id: message.id,
           response: 'FREE_TEXT',
-          text: `NEXT DATA AUTHORITY ${target.code}`,
+          text: `NEXT DATA AUTHORITY ${targetLabel}\nHANDOVER TO ${targetLabel} - NOTIFY ${targetLabel}`,
           client_request_id: crypto.randomUUID(),
         });
+        await act({
+          action: 'free_text',
+          to: target.code,
+          text: `HANDOVER INCOMING\nFLT ${message.from_station}\nFROM ${myStation ? stationLabel(myStation) : data?.station ?? 'ATC'}`,
+          client_request_id: crypto.randomUUID(),
+        }).catch(() => {});
       }
       await submit({
         action: 'transfer',
@@ -265,26 +325,37 @@ export default function AtcCpdlcPanel() {
     }
   }
 
-  async function handoverAircraft(callsign: string, targetCode: string) {
+  async function handoverAircraft(callsign: string) {
     setActionError('');
-    const code = upper(targetCode).trim();
-    if (!code) { setActionError('SELECT OR ENTER TARGET ATC STATION'); return; }
-    const matchingStation = onlineControllers.find(s => upper(s.code) === code);
+    const targetStation = onlineControllers.find(s => s.session_id === handoverSessionId);
+    if (!targetStation) {
+      setActionError('SELECT AN ONLINE CONTROLLER FIRST');
+      return;
+    }
+    const targetLabel = stationLabel(targetStation);
     const acEntry = connectedAircraft.find(a => a.callsign === callsign);
     try {
       await act({
         action: 'free_text',
         to: callsign,
-        text: `NEXT DATA AUTHORITY ${code}\nHANDOVER TO ${code} - LOGON ${code}`,
+        text: `NEXT DATA AUTHORITY ${targetLabel}\nHANDOVER TO ${targetLabel} - NOTIFY ${targetLabel}`,
         client_request_id: crypto.randomUUID(),
       });
-      if (matchingStation && acEntry) {
+
+      await act({
+        action: 'free_text',
+        to: targetStation.code,
+        text: `HANDOVER INCOMING\nFLT ${callsign}\nFROM ${myStation ? stationLabel(myStation) : data?.station ?? 'ATC'}`,
+        client_request_id: crypto.randomUUID(),
+      }).catch(() => {});
+
+      if (acEntry) {
         const pendingMsg = messages.find(m => m.id === acEntry.lastMessageId && ['SENT', 'STANDBY', 'TIMED_OUT'].includes(m.status));
         if (pendingMsg) {
           await act({
             action: 'transfer',
             message_id: pendingMsg.id,
-            session_id: matchingStation.session_id,
+            session_id: targetStation.session_id,
             client_request_id: crypto.randomUUID(),
           }).catch(() => {});
         }
@@ -293,6 +364,37 @@ export default function AtcCpdlcPanel() {
       setSelectedAircraft(null);
     } catch (reason) {
       setActionError(reason instanceof Error ? reason.message : 'HANDOVER FAILED');
+    }
+  }
+
+  async function terminateCpdlcForAircraft(callsign: string) {
+    setActionError('');
+    const freq = voiceFrequency.replace(',', '.').trim();
+    if (!freq) {
+      setActionError('VOICE FREQUENCY IS REQUIRED');
+      return;
+    }
+    if (!/^[0-9]{3}\.[0-9]{2,3}$/.test(freq)) {
+      setActionError('ENTER VALID VHF FREQUENCY (E.G. 122.800)');
+      return;
+    }
+    const lines = [
+      'CPDLC SERVICE TERMINATED',
+      `CONTACT ${freq} BY VOICE`,
+      terminateReason.trim() ? upper(terminateReason.trim()) : '',
+    ].filter(Boolean);
+
+    try {
+      await act({
+        action: 'free_text',
+        to: callsign,
+        text: lines.join('\n'),
+        client_request_id: crypto.randomUUID(),
+      });
+      setEditor(null);
+      setSelectedAircraft(null);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'END CPDLC FAILED');
     }
   }
 
@@ -318,6 +420,7 @@ export default function AtcCpdlcPanel() {
   const aircraftHistory = selectedAircraft
     ? messages.filter(m => m.from_station === selectedAircraft || m.to_station === selectedAircraft).slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
     : [];
+  const chosenHandoverStation = onlineControllers.find(s => s.session_id === handoverSessionId);
 
   const renderEnrouteForm = (onSubmitSuccess: () => void) => (
     <form className="space-y-4 rounded-xl border border-sky-500/30 p-4" onSubmit={event => {
@@ -362,7 +465,7 @@ export default function AtcCpdlcPanel() {
     <aside ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="atc-cpdlc-title" className={cn('absolute inset-y-0 right-0 flex w-[540px] max-w-full flex-col border-l shadow-2xl outline-none', shell)}>
       <header className="flex shrink-0 items-center gap-3 border-b border-slate-500/20 p-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-500"><MessageSquare className="h-5 w-5" /></div>
-        <div className="min-w-0 flex-1"><h2 id="atc-cpdlc-title" className="font-bold tracking-wide">CPDLC <span className={cn('ml-2 text-sm font-mono', muted)}>{data?.station ?? 'ATC'}</span></h2><p className={cn('text-xs', muted)}>{connectedAircraft.length} LOGGED · {unread.length} UNREAD</p></div>
+        <div className="min-w-0 flex-1"><h2 id="atc-cpdlc-title" className="font-bold tracking-wide">CPDLC <span className={cn('ml-2 text-sm font-mono', muted)}>{myStation ? stationLabel(myStation) : data?.station ?? 'ATC'}</span></h2><p className={cn('text-xs', muted)}>{connectedAircraft.length} LOGGED · {unread.length} UNREAD</p></div>
         <button onClick={() => void refresh()} className={button} title="Refresh messages" aria-label="Refresh messages" disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /></button>
         <button onClick={() => setOpen(false)} className={button} aria-label="Close CPDLC panel"><X className="h-4 w-4" /></button>
       </header>
@@ -376,9 +479,11 @@ export default function AtcCpdlcPanel() {
               ? `MESSAGE TO ${recipient || 'AIRCRAFT'}`
               : editor === 'transfer' || editor === 'aircraft_handover'
                 ? `TRANSFER / HANDOVER ${selectedAircraft || selected?.from_station || ''}`
-                : editor === 'aircraft_clearance' || editor === 'aircraft_clearance_preview'
-                  ? `ORDER TO ${selectedAircraft ?? ''}`
-                  : `REPLY TO ${selected?.from_station ?? ''}`}
+                : editor === 'aircraft_terminate'
+                  ? `END CPDLC — ${selectedAircraft ?? ''}`
+                  : editor === 'aircraft_clearance' || editor === 'aircraft_clearance_preview'
+                    ? `ORDER TO ${selectedAircraft ?? ''}`
+                    : `REPLY TO ${selected?.from_station ?? ''}`}
           </h3>
           {editor === 'choice' && selected && <div className="space-y-4"><p className={cn('text-sm', muted)}>Select the clearance decision. No additional fields are required for refusal.</p><div className="grid grid-cols-2 gap-3"><button className="rounded-xl border border-emerald-500 bg-emerald-500/10 p-5 font-bold text-emerald-500" disabled={busy} onClick={() => setEditor('clearance')}>CLEAR <ChevronRight className="ml-1 inline h-4 w-4" /></button><button className="rounded-xl border border-red-500 bg-red-500/10 p-5 font-bold text-red-500" disabled={busy} onClick={() => void submit({ action: 'respond', message_id: selected.id, response: 'REFUSED', client_request_id: requestId.current ?? crypto.randomUUID() })}>REFUSED</button></div></div>}
           {editor === 'clearance' && <form className="space-y-4" onSubmit={event => {
@@ -413,27 +518,107 @@ export default function AtcCpdlcPanel() {
               <button className={cn(button, 'flex-1 bg-sky-600 text-white')} disabled={busy} onClick={() => void submit({ action: 'free_text', to: selectedAircraft, text: enroutePreview(enroute), client_request_id: requestId.current ?? crypto.randomUUID() })}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND ORDER'}</button>
             </div>
           </div>}
-          {editor === 'aircraft_handover' && selectedAircraft && <form className="space-y-4 rounded-xl border border-amber-500/30 p-4" onSubmit={event => { event.preventDefault(); void handoverAircraft(selectedAircraft, handoverCode); }}>
-            <p className="text-xs font-bold uppercase tracking-wider text-amber-400">SECTOR HANDOVER — {selectedAircraft}</p>
-            {onlineControllers.length > 0 && <label className="block space-y-1 text-xs font-semibold">ONLINE ATC STATIONS
-              <select className={field} value={handoverCode} onChange={event => setHandoverCode(upper(event.target.value))}>
-                <option value="">SELECT ONLINE CONTROLLER</option>
-                {onlineControllers.map(station => (
-                  <option key={station.session_id} value={upper(station.code)}>{upper(station.code)} ({station.position.toUpperCase()})</option>
-                ))}
-              </select>
-            </label>}
-            <label className="block space-y-1 text-xs font-semibold">OR ENTER NEXT ATC ICAO CODE
-              <input required maxLength={6} className={field} value={handoverCode} onChange={event => setHandoverCode(upper(event.target.value))} placeholder="ITKO / LFFF / IRFD" />
-            </label>
-            <p className={cn('text-xs', muted)}>Sends NEXT DATA AUTHORITY to {selectedAircraft}, updates the pilot&apos;s CURRENT ATC automatically, and releases the flight from your logged list.</p>
-            <button disabled={busy || !handoverCode.trim()} className={cn(button, 'w-full bg-amber-600 text-white')}><Radio className="h-4 w-4" /> {busy ? 'TRANSFERRING…' : 'TRANSFER AIRCRAFT'}</button>
+          {editor === 'aircraft_handover' && selectedAircraft && <form className="space-y-4 rounded-xl border border-amber-500/30 p-4" onSubmit={event => { event.preventDefault(); void handoverAircraft(selectedAircraft); }}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wider text-amber-400">SELECT NEXT CONTROLLER — {selectedAircraft}</p>
+              <span className={cn('text-[11px] font-mono', muted)}>{sortedHandoverControllers.length} ONLINE</span>
+            </div>
+            {sortedHandoverControllers.length === 0 ? (
+              <p className={cn('rounded-lg border border-slate-500/20 p-4 text-center text-xs', muted)}>NO OTHER ATC CONTROLLER IS CURRENTLY ONLINE.</p>
+            ) : (
+              <div className="space-y-2" role="radiogroup" aria-label="Online ATC controllers">
+                {sortedHandoverControllers.map(station => {
+                  const isSelected = handoverSessionId === station.session_id;
+                  const isRecommended = recommendedHandoverId === station.session_id;
+                  const label = stationLabel(station);
+                  return (
+                    <button
+                      key={station.session_id}
+                      type="button"
+                      role="radio"
+                      aria-checked={isSelected}
+                      onClick={() => { setHandoverSessionId(station.session_id); setActionError(''); }}
+                      className={cn(
+                        'flex w-full items-center justify-between rounded-xl border p-3 text-left transition',
+                        isSelected
+                          ? 'border-amber-400 bg-amber-500/15 ring-1 ring-amber-400'
+                          : dark
+                            ? 'border-slate-700 bg-slate-900/60 hover:border-slate-500'
+                            : 'border-slate-300 bg-slate-50 hover:border-slate-400',
+                      )}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={cn('h-2.5 w-2.5 rounded-full', isSelected ? 'bg-amber-400' : 'bg-emerald-400')} />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm font-bold">{label}</span>
+                            {isRecommended && (
+                              <span className="rounded bg-sky-500/20 px-1.5 py-0.5 font-mono text-[10px] font-bold text-sky-400">
+                                NEXT IN SEQUENCE
+                              </span>
+                            )}
+                          </div>
+                          <p className={cn('text-[11px]', muted)}>AIRPORT {upper(station.code)} · POSITION {upper(station.position)}</p>
+                        </div>
+                      </div>
+                      {isSelected && <Check className="h-4 w-4 text-amber-400" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {chosenHandoverStation && (
+              <p className={cn('rounded-lg bg-amber-500/10 px-3 py-2 text-xs text-amber-300')}>
+                Confirming handover of <strong>{selectedAircraft}</strong> from <strong>{myStation ? stationLabel(myStation) : data?.station ?? 'ATC'}</strong> to <strong>{stationLabel(chosenHandoverStation)}</strong>.
+              </p>
+            )}
+            <button disabled={busy || !chosenHandoverStation} className={cn(button, 'w-full bg-amber-600 text-white')}>
+              <Radio className="h-4 w-4" /> {busy ? 'TRANSFERRING…' : chosenHandoverStation ? `TRANSFER TO ${stationLabel(chosenHandoverStation)}` : 'SELECT A CONTROLLER'}
+            </button>
           </form>}
+          {editor === 'aircraft_terminate' && selectedAircraft && (() => {
+            const cleanFreq = voiceFrequency.replace(',', '.').trim();
+            const isValidFreq = /^[0-9]{3}\.[0-9]{2,3}$/.test(cleanFreq);
+            return (
+              <form className="space-y-4 rounded-xl border border-red-500/30 p-4" onSubmit={event => { event.preventDefault(); void terminateCpdlcForAircraft(selectedAircraft); }}>
+                <p className="text-xs font-bold uppercase tracking-wider text-red-400">END CPDLC SERVICE — {selectedAircraft}</p>
+                <label className="block space-y-1 text-xs font-semibold">VOICE FREQUENCY TO CONTACT (VHF) *
+                  <input
+                    autoFocus
+                    required
+                    inputMode="decimal"
+                    pattern="[0-9]{3}\.[0-9]{2,3}"
+                    maxLength={7}
+                    className={field}
+                    value={voiceFrequency}
+                    onChange={event => { setVoiceFrequency(event.target.value.replace(',', '.')); setActionError(''); }}
+                    placeholder="122.800"
+                  />
+                  <span className={muted}>Mandatory: enter UNICOM (122.800) or the next sector VHF frequency.</span>
+                </label>
+                <label className="block space-y-1 text-xs font-semibold">REASON / NOTE (OPTIONAL)
+                  <input
+                    maxLength={80}
+                    className={field}
+                    value={terminateReason}
+                    onChange={event => setTerminateReason(upper(event.target.value))}
+                    placeholder="END OF ATC SERVICE"
+                  />
+                </label>
+                <pre className="whitespace-pre-wrap break-words rounded-xl border border-red-900/50 bg-[#050e18] p-3 font-mono text-xs leading-relaxed text-cyan-300">
+                  {`CPDLC SERVICE TERMINATED\nCONTACT ${cleanFreq || '___.___'} BY VOICE${terminateReason.trim() ? `\n${upper(terminateReason.trim())}` : ''}`}
+                </pre>
+                <button disabled={busy || !isValidFreq} className={cn(button, 'w-full bg-red-600 text-white')}>
+                  <PhoneOff className="h-4 w-4" /> {busy ? 'SENDING…' : 'TERMINATE CPDLC & LOGOFF'}
+                </button>
+              </form>
+            );
+          })()}
           {(editor === 'text' || editor === 'compose') && <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (editor === 'compose') void submit({ action: 'free_text', to: upper(recipient.trim()), text: replyText, client_request_id: requestId.current ?? crypto.randomUUID() }); else if (selected) void submit({ action: 'respond', message_id: selected.id, response: 'FREE_TEXT', text: replyText, client_request_id: requestId.current ?? crypto.randomUUID() }); }}>
             {editor === 'compose' && <label className="block space-y-1 text-xs font-semibold">TO STATION / AIRCRAFT<input required className={field} value={recipient} maxLength={16} onChange={event => setRecipient(upper(event.target.value))} placeholder="IRFD / DLH324" /></label>}
             <label className="block space-y-1 text-xs font-semibold">MESSAGE<textarea autoFocus required className={field} rows={6} maxLength={1000} value={replyText} onChange={event => setReplyText(upper(event.target.value))} /></label><button disabled={busy || !replyText.trim()} className={cn(button, 'w-full bg-sky-600 text-white')}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND MESSAGE'}</button>
           </form>}
-          {editor === 'transfer' && selected && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void transferWithHandover(selected); }}><label className="block space-y-1 text-xs font-semibold">ONLINE CONTROLLER<select required className={field} value={transferSession} onChange={event => setTransferSession(event.target.value)}><option value="">SELECT A POSITION</option>{transferStations.map(station => <option key={station.session_id} value={station.session_id}>{station.code} {station.position.toUpperCase()}</option>)}</select></label><p className={cn('text-sm', muted)}>{transferStations.length ? 'The receiving controller will be alerted and NEXT DATA AUTHORITY will be sent to the flight.' : 'NO OTHER CONTROLLER COVERS THIS AIRPORT.'}</p><button disabled={busy || !transferSession} className={cn(button, 'w-full bg-sky-600 text-white')}>TRANSFER MESSAGE</button></form>}
+          {editor === 'transfer' && selected && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void transferWithHandover(selected); }}><label className="block space-y-1 text-xs font-semibold">ONLINE CONTROLLER<select required className={field} value={transferSession} onChange={event => setTransferSession(event.target.value)}><option value="">SELECT A POSITION</option>{transferStations.map(station => <option key={station.session_id} value={station.session_id}>{stationLabel(station)}</option>)}</select></label><p className={cn('text-sm', muted)}>{transferStations.length ? 'The receiving controller will get the flight and the pilot will be prompted to notify the next controller.' : 'NO OTHER CONTROLLER COVERS THIS AIRPORT.'}</p><button disabled={busy || !transferSession} className={cn(button, 'w-full bg-sky-600 text-white')}>TRANSFER MESSAGE</button></form>}
         </div> : selectedAircraft ? <section className="space-y-4 p-4" aria-label="Logged aircraft actions">
           <button className={button} onClick={() => { setSelectedAircraft(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK TO INBOX</button>
           <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
@@ -445,15 +630,18 @@ export default function AtcCpdlcPanel() {
               <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[11px] font-bold text-emerald-400">LOGGED ON</span>
             </div>
             <p className={cn('mt-2 text-xs', muted)}>Select an ATC instruction to send directly to {selectedAircraft}&apos;s DCDU.</p>
-            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <button type="button" disabled={busy || !data?.available} className={cn(button, 'bg-sky-600 text-white')} onClick={() => { setEnroute(emptyEnroute); startEditor('aircraft_clearance'); }}>
                 <Send className="h-4 w-4" /> ORDER
               </button>
-              <button type="button" disabled={busy || !data?.available} className={cn(button, 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10')} onClick={() => { setHandoverCode(''); startEditor('aircraft_handover'); }}>
+              <button type="button" disabled={busy || !data?.available} className={cn(button, 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10')} onClick={() => { setHandoverSessionId(recommendedHandoverId); startEditor('aircraft_handover'); }}>
                 <Radio className="h-4 w-4" /> TRANSFER
               </button>
               <button type="button" disabled={busy || !data?.available} className={button} onClick={() => startEditor('compose', selectedAircraft)}>
                 <MessageSquare className="h-4 w-4" /> FREE TEXT
+              </button>
+              <button type="button" disabled={busy || !data?.available} className={cn(button, 'border-red-500/50 text-red-400 hover:bg-red-500/10')} onClick={() => { setVoiceFrequency(''); setTerminateReason('END OF ATC SERVICE'); startEditor('aircraft_terminate'); }}>
+                <PhoneOff className="h-4 w-4" /> END CPDLC
               </button>
             </div>
           </div>
