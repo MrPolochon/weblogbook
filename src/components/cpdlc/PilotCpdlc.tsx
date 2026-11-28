@@ -467,8 +467,9 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
           setRecallMode(false);
         }, 2200);
       }
-    } catch {
+    } catch (reason) {
       setFailedResponse({ messageId: message.id, reply });
+      setNotice(upper(reason instanceof Error ? reason.message : 'SEND FAILED'));
     }
   };
 
@@ -477,11 +478,8 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     (message.status === 'STANDBY' || /\bSTANDBY\b/.test(upper(message.body))),
   );
 
-  const isClearanceOrInstruction = Boolean(
-    message?.incoming &&
-    (message.response_required ||
-      /\b(CLEARED|CLIMB|DESCEND|MAINTAIN|DIRECT TO|SPEED|HEADING|CONTACT|SQUAWK|NEXT DATA AUTHORITY)\b/.test(upper(message.body))),
-  );
+  // Use backend response_required flag so we only send WILCO/UNABLE/STANDBY when the backend expects a response
+  const isClearanceOrInstruction = Boolean(message?.incoming && message.response_required);
 
   const isFinalStatus = Boolean(message && FINAL_STATUSES.includes(message.status));
   const isOpenActionable = Boolean(message?.incoming && !isFinalStatus && !isAtcStandbyNotice && !recallMode);
@@ -501,9 +499,10 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       dcduLeft[0] = { label: '*UNABLE', disabled: busy, action: () => void sendDirectResponse('UNABLE') };
       dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
       dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => void sendDirectResponse('WILCO') };
-    } else {
-      dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
+    } else if (message.kind === 'FREE_TEXT') {
       dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => void sendDirectResponse('ROGER') };
+    } else {
+      dcduRight[1] = { label: 'CLOSE*', action: () => { setClosed(true); setRecallMode(false); } };
     }
   } else if (message) {
     dcduRight[1] = { label: 'CLOSE*', action: () => { setClosed(true); setRecallMode(false); } };
