@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { PointerEvent as ReactPointerEvent, ReactNode } from 'react';
 import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcInit } from '@/lib/cpdlc/types';
@@ -14,6 +14,9 @@ const REASONS = ['NONE', 'DUE TO WEATHER', 'DUE TO A/C PERF', 'DUE TO TURBULENCE
 const emptyInit: CpdlcInit = { flight_no: '', dep: '', dest: '', altn: '', ete: '', utc: '', date: '', gate: '', atis_id: '', aircraft_type: '', station: '', text: '' };
 const upper = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 const time = (value: string) => new Date(value).toISOString().slice(11, 16).replace(':', '') + 'Z';
+
+const FINAL_STATUSES = ['WILCO', 'UNABLE', 'ROGER', 'REFUSED', 'CLEAR', 'CLEARED', 'CLOSED'];
+
 function pagesFor(body: string): string[] {
   const lines: string[] = [];
   for (const paragraph of upper(body).split('\n')) {
@@ -28,8 +31,31 @@ function pagesFor(body: string): string[] {
     if (line) lines.push(line);
   }
   const pages: string[] = [];
-  for (let index = 0; index < lines.length; index += 7) pages.push(lines.slice(index, index + 7).join('\n'));
+  for (let index = 0; index < lines.length; index += 6) pages.push(lines.slice(index, index + 6).join('\n'));
   return pages.length ? pages : [''];
+}
+
+function highlightAirbusTokens(text: string): ReactNode[] {
+  const tokenRegex = /\b(FL\d{3}|\d{3,5}\s?FT|\d{3}\.\d{2,3}|[0-7]{4}|STANDBY|UNABLE|[A-Z]{4,5}(?:_[A-Z]{3})?)\b/g;
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = tokenRegex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const token = match[0];
+    const isKeyword = !['CLEARED', 'CLIMB', 'DESCEND', 'DIRECT', 'MAINTAIN', 'SPEED', 'HEADING', 'CONTACT', 'SQUAWK', 'REQUEST', 'DEPARTURE', 'REPORT', 'VOICE', 'SERVICE', 'TERMINATED', 'AUTHORITY', 'HANDOVER', 'NOTIFY', 'LOGON', 'ACCEPTED', 'CURRENT', 'STATION', 'CALLSIGN', 'NUMBER', 'LEVEL'].includes(token);
+    parts.push(
+      isKeyword ? <span key={key++} className={styles.tokenCyan}>{token}</span> : token,
+    );
+    lastIndex = match.index + token.length;
+  }
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+  return parts;
 }
 
 function printMessage(header: string, body: string) {
@@ -61,6 +87,8 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const alarm = useCpdlcAlarm(unread.length > 0);
   const [selected, setSelected] = useState<string | null>(null);
   const [closed, setClosed] = useState(false);
+  const [recallMode, setRecallMode] = useState(false);
+  const [failedResponse, setFailedResponse] = useState<{ messageId: string; reply: 'WILCO' | 'UNABLE' | 'STANDBY' | 'ROGER' } | null>(null);
   const [messagePage, setMessagePage] = useState(0);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const [brightness, setBrightness] = useState(1);
@@ -93,6 +121,8 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const trigger = useRef<HTMLButtonElement>(null);
   const scratchInput = useRef<HTMLInputElement>(null);
   const newestSeen = useRef<string | null>(null);
+  const autoAckedRef = useRef<Set<string>>(new Set());
+  const autoCloseTimer = useRef<number | null>(null);
   const [position, setPosition] = useState({ x: 16, y: 16 });
   const island = useRef<HTMLDivElement>(null);
   const [mcduScale, setMcduScale] = useState(1);
@@ -136,14 +166,27 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   useEffect(() => {
     return () => {
       sendAutoLogoff();
+      if (autoCloseTimer.current) window.clearTimeout(autoCloseTimer.current);
     };
   }, [planId, sendAutoLogoff]);
+
+  useEffect(() => {
+    if (!draft && message?.incoming && !message.acknowledged && !busy && !autoAckedRef.current.has(message.id)) {
+      autoAckedRef.current.add(message.id);
+      void act({ action: 'ack', plan_id: planId, message_id: message.id }).catch(() => {
+        autoAckedRef.current.delete(message.id);
+      });
+    }
+  }, [draft, message, busy, act, planId]);
 
   useEffect(() => {
     const newest = unread[0];
     if (newest && newest.id !== newestSeen.current) {
       newestSeen.current = newest.id;
+      if (autoCloseTimer.current) window.clearTimeout(autoCloseTimer.current);
       setClosed(false);
+      setRecallMode(false);
+      setFailedResponse(null);
       setSelected(newest.id);
       setMessagePage(0);
       const bodyUpper = upper(newest.body);
@@ -227,6 +270,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       draft.onSent?.();
       setNotice(draft.success);
       setDraft(null);
+      setRecallMode(false);
     }
     catch (reason) { setNotice(upper(reason instanceof Error ? reason.message : 'TRANSMISSION FAILED')); }
   };
@@ -310,118 +354,87 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const insert = () => { if (target) { put(target, scratch); setScratch(''); setTarget(''); } else setNotice('SELECT A FIELD WITH A LINE KEY'); };
   const history = messages.filter(item => page === 'RECEIVED' ? item.incoming : !item.incoming);
   const historyPages = Math.max(1, Math.ceil(history.length / 5));
-  const response = (reply: 'WILCO' | 'UNABLE' | 'STANDBY' | 'ROGER') => {
-    if (message) void execute({ action: 'respond', plan_id: planId, message_id: message.id, response: reply, client_request_id: crypto.randomUUID() }, `${reply} SENT`);
+
+  const sendDirectResponse = async (reply: 'WILCO' | 'UNABLE' | 'STANDBY' | 'ROGER') => {
+    if (!message || busy) return;
+    setNotice('');
+    setFailedResponse(null);
+    try {
+      await act({ action: 'respond', plan_id: planId, message_id: message.id, response: reply, client_request_id: crypto.randomUUID() });
+      setNotice(`${reply} SENT`);
+      if (['WILCO', 'ROGER', 'UNABLE'].includes(reply)) {
+        if (autoCloseTimer.current) window.clearTimeout(autoCloseTimer.current);
+        autoCloseTimer.current = window.setTimeout(() => {
+          setClosed(true);
+          setRecallMode(false);
+        }, 2200);
+      }
+    } catch {
+      setFailedResponse({ messageId: message.id, reply });
+    }
   };
 
-  type Line = { label: string; value?: string; action: () => void; disabled?: boolean };
-  const left: (Line | undefined)[] = Array(6).fill(undefined), right: (Line | undefined)[] = Array(6).fill(undefined);
-  const editLine = (label: string, key: string, value: string, hint = '[          ]'): Line => ({ label, value: value || hint, action: () => selectField(key, value) });
-  const navLine = (label: string, next: Page): Line => ({ label, action: () => navigate(next) });
-  if (page === 'MAIN') {
-    left[0] = navLine('ATC COMM', 'ATC_MENU');
-    left[1] = navLine('AOC MENU', 'AOC_MENU');
-    right[0] = navLine('RECEIVED MESSAGES', 'RECEIVED');
-    right[1] = navLine('SENT MESSAGES', 'SENT');
-  } else if (page === 'ATC_MENU') {
-    left[0] = navLine('NOTIFICATION', 'LOGON');
-    left[1] = navLine('ATC REQUEST', 'REQ');
-    left[2] = navLine('POSITION REPORT', 'POS');
-    right[0] = navLine('DEPARTURE REQ', 'INIT');
-    right[1] = navLine('FREE TEXT', 'FREE');
-    right[2] = navLine('MSG LOG', 'RECEIVED');
-    left[5] = navLine('RETURN', 'MAIN');
-  } else if (page === 'AOC_MENU') {
-    left[0] = navLine('WX REQUEST', 'WX');
-    left[1] = navLine('ATIS', 'ATIS');
-    right[0] = navLine('FREE TEXT', 'FREE');
-    right[1] = navLine('RECEIVED MESSAGES', 'RECEIVED');
-    right[2] = navLine('SENT MESSAGES', 'SENT');
-    left[5] = navLine('RETURN', 'MAIN');
-  } else {
-    const parentMenu: Page = ['LOGON', 'REQ', 'POS', 'INIT'].includes(page) ? 'ATC_MENU' : ['WX', 'ATIS'].includes(page) ? 'AOC_MENU' : 'MAIN';
-    left[5] = navLine('RETURN', parentMenu);
-    if (['INIT', 'WX', 'ATIS', 'FREE'].includes(page)) right[5] = { label: 'SEND*', action: () => void submit(), disabled: busy || unavailable };
-    if (['REQ', 'POS'].includes(page)) right[5] = { label: 'XFER TO DCDU*', action: () => void submit(), disabled: busy || unavailable };
-    if (page === 'LOGON') {
-      left[0] = editLine('ATC FLT NBR', 'init.flight_no', init.flight_no);
-      right[0] = editLine('NOTIFY TO', 'logon.station', logonStation, '[    ]');
-      left[2] = { label: 'CURRENT ATC', value: currentAtc || 'NONE', action: () => {} };
-      right[2] = { label: 'STATUS', value: currentAtc ? 'LOGGED ON' : 'NOT LOGGED', action: () => {} };
-      if (currentAtc) {
-        left[4] = {
-          label: 'LOGOFF*',
-          disabled: busy || unavailable,
-          action: () => void execute(
-            { action: 'free_text', plan_id: planId, flight_no: init.flight_no || data?.station || 'PILOT', to: currentAtc.split('_')[0], text: `LOGOFF NOTIFICATION\nFLT ${init.flight_no || data?.station || ''}`, client_request_id: crypto.randomUUID() },
-            'LOGOFF SENT',
-            () => { activeLogonRef.current.currentAtc = ''; setCurrentAtc(''); },
-          ),
-        };
-      }
-      right[5] = { label: 'NOTIFY*', action: () => void submit(), disabled: busy || unavailable };
-    } else if (page === 'REQ') {
-      left[0] = editLine('CLIMB / DESC TO', 'req.alt', reqAlt, '[FL350/8000FT]');
-      right[0] = editLine('HEADING', 'req.heading', reqHeading, '[   ]');
-      left[1] = editLine('DIRECT TO', 'req.direct', reqDirect, '[     ]');
-      right[1] = { label: 'REASON', value: REASONS[reqReasonIndex], action: () => setReqReasonIndex(i => (i + 1) % REASONS.length) };
-      left[2] = editLine('SPEED / MACH', 'req.speed', reqSpeed, '[280KT/M0.80]');
-      right[2] = { label: 'CURRENT ATC', value: currentAtc || 'NONE', action: () => navigate('LOGON') };
-      left[3] = editLine('ATC FLT NBR', 'init.flight_no', init.flight_no);
-    } else if (page === 'POS') {
-      left[0] = editLine('REPORTING POS', 'pos.fix', posFix, '[     ]');
-      right[0] = editLine('UTC TIME', 'pos.time', posTime, '[HHMMZ]');
-      left[1] = editLine('ALTITUDE / FL', 'pos.alt', posAlt, '[FL350]');
-      right[1] = editLine('NEXT FIX', 'pos.next', posNext, '[     ]');
-      left[2] = editLine('NEXT FIX ETA', 'pos.eta', posEta, '[HHMMZ]');
-      right[2] = editLine('ENSUING FIX', 'pos.ensuing', posEnsuing, '[     ]');
-      left[3] = editLine('ATC FLT NBR', 'init.flight_no', init.flight_no);
-      right[3] = { label: 'CURRENT ATC', value: currentAtc || 'NONE', action: () => navigate('LOGON') };
-    } else if (page === 'INIT') {
-      left[0] = editLine('ORIG/DEST', 'route', init.dep || init.dest ? init.dep + '/' + init.dest : '', '[    /    ]');
-      right[0] = editLine('ATC CALLSIGN', 'init.flight_no', init.flight_no);
-      left[1] = editLine('GATE NUMBER', 'init.gate', init.gate || ''); right[1] = editLine('ATIS ID', 'init.atis_id', init.atis_id || '');
-      left[2] = editLine('OPTIONAL FREE TEXT', 'init.text', init.text || '');
-      left[4] = editLine('A/C TYPE', 'init.aircraft_type', init.aircraft_type || ''); right[4] = editLine('STATION', 'init.station', init.station || '');
-    } else if (page === 'WX') {
-      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no);
-      right[0] = { label: 'WX TYPE', value: wxType, action: () => setWxType(value => value === 'METAR' ? 'TAF' : 'METAR') };
-      airports.forEach((airport, index) => { right[index + 1] = editLine('AIRPORT ' + (index + 1), 'wx.' + index, airport); });
-    } else if (page === 'ATIS') {
-      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no); right[0] = editLine('AIRPORT', 'airport', atisAirport);
-    } else if (page === 'FREE') {
-      left[0] = editLine('FLT NO', 'init.flight_no', init.flight_no); right[0] = editLine('TO STATION', 'to', to);
-      left[2] = editLine('MESSAGE', 'text', freeText);
-    } else {
-      history.slice(historyPage * 5, historyPage * 5 + 5).forEach((item, index) => {
-        left[index] = { label: time(item.created_at) + ' ' + (item.incoming ? item.from_station : item.to_station), value: item.kind.replace('_', ' '), action: () => { setClosed(false); setSelected(item.id); setMessagePage(0); setNotice('MESSAGE SELECTED ON DCDU'); } };
-      });
-      right[4] = { label: 'PREV PAGE', disabled: historyPage === 0, action: () => setHistoryPage(value => value - 1) };
-      right[5] = { label: 'NEXT PAGE', disabled: historyPage + 1 >= historyPages, action: () => setHistoryPage(value => value + 1) };
-    }
-  }
+  const isAtcStandbyNotice = Boolean(
+    message?.incoming &&
+    (message.status === 'STANDBY' || /\bSTANDBY\b/.test(upper(message.body))),
+  );
+
+  const isClearanceOrInstruction = Boolean(
+    message?.incoming &&
+    (message.response_required ||
+      /\b(CLEARED|CLIMB|DESCEND|MAINTAIN|DIRECT TO|SPEED|HEADING|CONTACT|SQUAWK|NEXT DATA AUTHORITY)\b/.test(upper(message.body))),
+  );
+
+  const isFinalStatus = Boolean(message && FINAL_STATUSES.includes(message.status));
+  const isOpenActionable = Boolean(message?.incoming && !isFinalStatus && !isAtcStandbyNotice && !recallMode);
+  const hasSendFailed = Boolean(message && failedResponse?.messageId === message.id);
+
   const dcduLeft: (Line | undefined)[] = [undefined, undefined], dcduRight: (Line | undefined)[] = [undefined, undefined];
   if (draft) {
     dcduLeft[0] = { label: '*CANCEL', disabled: busy, action: () => { setDraft(null); setNotice('MESSAGE CANCELLED'); } };
     dcduRight[1] = { label: busy ? 'SENDING' : 'SEND*', disabled: busy || unavailable, action: () => void sendDraft() };
+  } else if (hasSendFailed) {
+    dcduLeft[0] = { label: '*CANCEL', disabled: busy, action: () => { setFailedResponse(null); setNotice(''); } };
+    dcduRight[1] = { label: 'CLOSE*', action: () => { setFailedResponse(null); setClosed(true); setRecallMode(false); } };
   } else if (!message && messages.length > 0) {
-    dcduRight[1] = { label: 'RECALL*', action: () => { setClosed(false); setSelected(messages[0]?.id ?? null); setMessagePage(0); } };
-  } else if (message?.incoming) {
-    const isFinalStatus = ['WILCO', 'UNABLE', 'ROGER', 'REFUSED', 'CLEAR', 'CLEARED', 'CLOSED'].includes(message.status);
-    if (!message.acknowledged) {
-      dcduRight[1] = { label: 'ACK*', disabled: busy, action: () => void execute({ action: 'ack', plan_id: planId, message_id: message.id }, 'MESSAGE ACKNOWLEDGED') };
-    } else if (message.response_required && !isFinalStatus) {
-      dcduLeft[0] = { label: '*UNABLE', disabled: busy, action: () => response('UNABLE') };
-      dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => response('STANDBY') };
-      dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => response('WILCO') };
-    } else if (message.kind === 'FREE_TEXT' && !message.response_required && !isFinalStatus) {
-      dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => response('ROGER') };
+    dcduRight[1] = { label: 'RECALL*', action: () => { setClosed(false); setRecallMode(true); setSelected(messages[0]?.id ?? null); setMessagePage(0); } };
+  } else if (message?.incoming && isOpenActionable) {
+    if (isClearanceOrInstruction) {
+      dcduLeft[0] = { label: '*UNABLE', disabled: busy, action: () => void sendDirectResponse('UNABLE') };
+      dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
+      dcduRight[1] = { label: 'WILCO*', disabled: busy, action: () => void sendDirectResponse('WILCO') };
     } else {
-      dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
+      dcduRight[0] = { label: 'STBY*', disabled: busy, action: () => void sendDirectResponse('STANDBY') };
+      dcduRight[1] = { label: 'ROGER*', disabled: busy, action: () => void sendDirectResponse('ROGER') };
     }
   } else if (message) {
-    dcduRight[1] = { label: 'CLOSE*', action: () => setClosed(true) };
+    dcduRight[1] = { label: 'CLOSE*', action: () => { setClosed(true); setRecallMode(false); } };
   }
+
+  const headerBadge = (() => {
+    if (draft) return { text: 'DRAFT', tone: 'cyan' as const };
+    if (!message) return null;
+    if (hasSendFailed && failedResponse) {
+      return { text: failedResponse.reply, tone: 'cyanSolid' as const };
+    }
+    if (message.incoming) {
+      if (['WILCO', 'ROGER', 'CLEAR', 'CLEARED'].includes(message.status)) {
+        return { text: message.status, tone: 'greenSolid' as const };
+      }
+      if (['UNABLE', 'REFUSED'].includes(message.status)) {
+        return { text: message.status, tone: 'amberSolid' as const };
+      }
+      if (isAtcStandbyNotice) {
+        return { text: 'OPEN', tone: 'cyan' as const };
+      }
+      if (isFinalStatus || recallMode) {
+        return { text: message.status.replace('_', ' '), tone: 'green' as const };
+      }
+      return { text: 'OPEN', tone: 'cyan' as const };
+    }
+    return { text: message.status === 'SENT' ? 'SENT' : message.status.replace('_', ' '), tone: 'green' as const };
+  })();
+
   const physicalKey = (line: Line | undefined, name: string) => <button type="button" aria-label={name + (line ? ': ' + line.label : '')} aria-pressed={name.startsWith('DCDU') ? selectedAction === name + ':' + line?.label : undefined} disabled={!line || line.disabled} onClick={() => {
     if (!line || line.disabled) return;
     if (name.startsWith('DCDU')) {
@@ -437,22 +450,78 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     drag.current = { x: event.clientX, y: event.clientY, left: position.x, top: position.y };
   };
 
+  const currentPageText = messagePages[Math.min(messagePage, messagePages.length - 1)] ?? '';
+
   return <section className={styles.root} aria-label="CPDLC datalink">
     <div className={styles.sectionHeader}><div><span className={styles.eyebrow}>DATALINK COMMUNICATIONS</span><h2>DCDU <span>{data?.station || 'NOT CONNECTED'}{currentAtc ? ` · ATC: ${currentAtc}` : ''}</span></h2></div><button ref={trigger} type="button" className={styles.openButton} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(value => !value)}>MCDU {open ? '−' : '+'}</button></div>
     {alarm.blocked && <button className={styles.audioWarning} type="button" onClick={() => void alarm.enable()}>ENABLE MESSAGE SOUND — {unread.length} UNACKNOWLEDGED</button>}
     <div className={styles.dcdu}>
       <div className={styles.hardwareColumn}>
         <div className={styles.brightnessKeys}><button type="button" aria-label="Increase DCDU brightness" onClick={() => setBrightness(value => Math.min(1, value + .1))}>BRT</button><button type="button" aria-label="Decrease DCDU brightness" onClick={() => setBrightness(value => Math.max(.5, value - .1))}>DIM</button></div>
-        <button type="button" disabled={Boolean(draft) || (closed ? messages.length === 0 : messageIndex <= 0)} onClick={() => { if (closed) { setClosed(false); setSelected(messages[0]?.id ?? null); } else setSelected(messages[messageIndex - 1]?.id); }}>MSG−</button>
-        <button type="button" disabled={Boolean(draft) || (closed ? messages.length === 0 : (messageIndex < 0 || messageIndex >= messages.length - 1))} onClick={() => { if (closed) { setClosed(false); setSelected(messages[0]?.id ?? null); } else setSelected(messages[messageIndex + 1]?.id); }}>MSG+</button>
+        <button type="button" disabled={Boolean(draft) || (closed ? messages.length === 0 : messageIndex <= 0)} onClick={() => { setFailedResponse(null); if (closed) { setClosed(false); setRecallMode(true); setSelected(messages[0]?.id ?? null); } else { setRecallMode(true); setSelected(messages[messageIndex - 1]?.id); } }}>MSG−</button>
+        <button type="button" disabled={Boolean(draft) || (closed ? messages.length === 0 : (messageIndex < 0 || messageIndex >= messages.length - 1))} onClick={() => { setFailedResponse(null); if (closed) { setClosed(false); setRecallMode(true); setSelected(messages[0]?.id ?? null); } else { setRecallMode(true); setSelected(messages[messageIndex + 1]?.id); } }}>MSG+</button>
         {dcduLeft.map((line, index) => <div className={styles.physicalSlot} key={index}>{physicalKey(line, 'DCDU L' + (index + 1))}</div>)}
       </div>
       <div className={styles.dcduScreen} style={{ filter: 'brightness(' + brightness + ')' }} aria-label={draft ? 'DCDU outgoing preview' : 'DCDU display'}>
-        <div className={styles.messageMeta}>{draft ? 'OUTGOING MESSAGE — NOT SENT' : message ? `${time(message.created_at)} ${message.incoming ? `FROM ${message.from_station}` : `TO ${message.to_station}`} ${message.incoming && message.status === 'SENT' ? (message.acknowledged ? 'OPEN' : 'NEW') : message.status.replace('_', ' ')}` : currentAtc ? `CPDLC READY · ATC ${currentAtc}` : 'CPDLC READY'}</div>
-        <pre className={styles.messageBody}>{draft || message ? messagePages[Math.min(messagePage, messagePages.length - 1)] : error ? 'DATALINK UNAVAILABLE' : 'NO MESSAGES'}</pre>
+        <div className={styles.messageMeta}>
+          <span className={styles.metaGreen}>
+            {draft
+              ? 'OUTGOING MESSAGE — NOT SENT'
+              : message
+                ? `${time(message.created_at)} ${message.incoming ? `FROM ${message.from_station}` : `TO ${message.to_station}`}`
+                : currentAtc
+                  ? `CPDLC READY · ATC ${currentAtc}`
+                  : 'CPDLC READY'}
+          </span>
+          {headerBadge && (
+            <span
+              className={
+                headerBadge.tone === 'greenSolid'
+                  ? styles.badgeGreenSolid
+                  : headerBadge.tone === 'cyanSolid'
+                    ? styles.badgeCyanSolid
+                    : headerBadge.tone === 'amberSolid'
+                      ? styles.badgeAmberSolid
+                      : headerBadge.tone === 'green'
+                        ? styles.badgeGreen
+                        : styles.badgeCyan
+              }
+            >
+              {headerBadge.text}
+            </span>
+          )}
+        </div>
+        <pre className={styles.messageBody}>
+          {draft || message ? (
+            !draft && message && !message.incoming ? (
+              <span className={styles.outgoingGreenStrip}>{currentPageText}</span>
+            ) : (
+              highlightAirbusTokens(currentPageText)
+            )
+          ) : error ? (
+            'DATALINK UNAVAILABLE'
+          ) : (
+            'NO ACTIVE ATC MSG'
+          )}
+        </pre>
         <div className={styles.dcduLower}>
           <div>{dcduLeft.map((line, index) => <span key={index} className={selectedAction === "DCDU L" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
-          <div className={styles.dcduCenter}><span>{message?.late && !draft ? 'LATE RESPONSE' : !draft && message && messages.length > 0 ? `MSG ${messageIndex + 1}/${messages.length}` : ''}</span><span>{messagePage + 1}/{messagePages.length} PGE</span></div>
+          <div className={styles.dcduCenter}>
+            {hasSendFailed ? (
+              <span className={styles.sendFailedAmber}>SEND FAILED</span>
+            ) : (
+              <span>
+                {recallMode && !draft && message
+                  ? 'RECALL MODE'
+                  : message?.late && !draft
+                    ? 'LATE RESPONSE'
+                    : !draft && message && messages.length > 0
+                      ? `MSG ${messageIndex + 1}/${messages.length}`
+                      : ''}
+              </span>
+            )}
+            <span>{draft || message ? `PG ${messagePage + 1}/${messagePages.length}` : ''}</span>
+          </div>
           <div>{dcduRight.map((line, index) => <span key={index} className={selectedAction === "DCDU R" + (index + 1) + ":" + line?.label ? styles.actionSelected : undefined}>{line?.label}</span>)}</div>
         </div>
       </div>
