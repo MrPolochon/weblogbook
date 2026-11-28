@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ArrowLeft, ArrowRight, Check, ChevronRight, MessageSquare, Plane, RefreshCw, Send, Volume2, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronRight, MessageSquare, Plane, Radio, RefreshCw, Send, Volume2, X } from 'lucide-react';
 import { useCpdlc } from '@/hooks/useCpdlc';
 import { useCpdlcAlarm } from './useCpdlcAlarm';
 import type { CpdlcCommand, CpdlcMessage } from '@/lib/cpdlc/types';
@@ -12,14 +12,38 @@ import { clearanceText, routeStation } from '@/lib/cpdlc/policy';
 import { cn } from '@/lib/utils';
 
 type Clearance = NonNullable<Extract<CpdlcCommand, { action: 'respond' }>['clearance']>;
-type EnrouteDirective = 'CLEARED CLIMB TO' | 'CLEARED DESCEND TO' | 'MAINTAIN' | 'CLEARED DIRECT TO' | 'MAINTAIN SPEED' | 'FLY HEADING' | 'UNABLE' | 'STANDBY';
+type EnrouteDirective =
+  | 'CLEARED CLIMB TO'
+  | 'CLEARED DESCEND TO'
+  | 'MAINTAIN'
+  | 'CLEARED DIRECT TO'
+  | 'MAINTAIN SPEED'
+  | 'FLY HEADING'
+  | 'CONTACT'
+  | 'SQUAWK'
+  | 'UNABLE'
+  | 'STANDBY';
+
 type EnrouteClearance = {
   directive: EnrouteDirective;
   value: string;
   restriction: string;
   text: string;
 };
-type Editor = 'choice' | 'clearance' | 'preview' | 'enroute' | 'enroute_preview' | 'text' | 'transfer' | 'compose' | null;
+
+type Editor =
+  | 'choice'
+  | 'clearance'
+  | 'preview'
+  | 'enroute'
+  | 'enroute_preview'
+  | 'aircraft_clearance'
+  | 'aircraft_clearance_preview'
+  | 'aircraft_handover'
+  | 'text'
+  | 'transfer'
+  | 'compose'
+  | null;
 
 const upper = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 const emptyClearance: Clearance = { destination: '', departure: '', altitude: '', squawk: '', frequency: '', text: '' };
@@ -61,12 +85,14 @@ export default function AtcCpdlcPanel() {
   const alarm = useCpdlcAlarm(unread.length > 0);
   const [open, setOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedAircraft, setSelectedAircraft] = useState<string | null>(null);
   const [editor, setEditor] = useState<Editor>(null);
   const [clearance, setClearance] = useState<Clearance>(emptyClearance);
   const [enroute, setEnroute] = useState<EnrouteClearance>(emptyEnroute);
   const [replyText, setReplyText] = useState('');
   const [recipient, setRecipient] = useState('');
   const [transferSession, setTransferSession] = useState('');
+  const [handoverCode, setHandoverCode] = useState('');
   const [actionError, setActionError] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
   const trigger = useRef<HTMLButtonElement>(null);
@@ -80,6 +106,7 @@ export default function AtcCpdlcPanel() {
   const selectedRequestPending = Boolean(selected && ['SENT', 'STANDBY', 'TIMED_OUT'].includes(selected.status));
   const selectedRequestAnswered = selected?.kind === 'CLEARANCE' && !selectedRequestPending;
   const transferStations = selected ? (data?.stations ?? []).filter(station => station.user_id !== data?.user_id && routeStation([station], selected.to_station, selected.kind === 'CLEARANCE')) : [];
+  const onlineControllers = (data?.stations ?? []).filter(station => station.user_id !== data?.user_id);
   const visibleMessages = (filter === 'unread' ? unread : messages).slice().sort((a, b) => b.created_at.localeCompare(a.created_at));
   const shell = dark ? 'bg-[#0b1220] text-slate-100 border-slate-700' : 'bg-white text-slate-900 border-slate-300';
   const muted = dark ? 'text-slate-400' : 'text-slate-600';
@@ -87,17 +114,22 @@ export default function AtcCpdlcPanel() {
   const button = cn('inline-flex min-h-10 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold disabled:opacity-40', dark ? 'border-slate-700 hover:bg-slate-800' : 'border-slate-300 hover:bg-slate-100');
 
   const connectedAircraft = useMemo(() => {
-    const active = new Map<string, string>();
+    const active = new Map<string, { callsign: string; since: string; lastMessageId: string }>();
     const chronological = messages.slice().sort((a, b) => a.created_at.localeCompare(b.created_at));
     for (const msg of chronological) {
       const bodyUpper = upper(msg.body);
       if (msg.incoming && bodyUpper.startsWith('LOGON REQUEST')) {
-        active.set(msg.from_station, msg.created_at);
+        active.set(msg.from_station, { callsign: msg.from_station, since: msg.created_at, lastMessageId: msg.id });
       } else if (msg.incoming && bodyUpper.startsWith('LOGOFF NOTIFICATION')) {
         active.delete(msg.from_station);
+      } else if (!msg.incoming && bodyUpper.startsWith('NEXT DATA AUTHORITY')) {
+        active.delete(msg.to_station);
+      } else if (msg.incoming && active.has(msg.from_station)) {
+        const current = active.get(msg.from_station)!;
+        active.set(msg.from_station, { ...current, lastMessageId: msg.id });
       }
     }
-    return [...active.keys()];
+    return [...active.values()];
   }, [messages]);
 
   useEffect(() => {
@@ -118,8 +150,8 @@ export default function AtcCpdlcPanel() {
   }, [open]);
 
   useEffect(() => {
-    if (content.current) content.current.scrollTop = selectedId || editor ? 0 : inboxScroll.current;
-  }, [selectedId, editor]);
+    if (content.current) content.current.scrollTop = selectedId || selectedAircraft || editor ? 0 : inboxScroll.current;
+  }, [selectedId, selectedAircraft, editor]);
 
   useEffect(() => {
     if (selectedRequestAnswered && ['choice', 'clearance', 'preview', 'transfer'].includes(editor ?? '')) setEditor(null);
@@ -132,8 +164,7 @@ export default function AtcCpdlcPanel() {
     const speedMatch = body.match(/REQUEST SPEED\s+([A-Z0-9.]+)/);
     const hdgMatch = body.match(/REQUEST HEADING\s+([0-9]{1,3})/);
     if (levelMatch) {
-      const val = levelMatch[1].trim();
-      setEnroute({ directive: 'CLEARED CLIMB TO', value: val, restriction: '', text: '' });
+      setEnroute({ directive: 'CLEARED CLIMB TO', value: levelMatch[1].trim(), restriction: '', text: '' });
     } else if (directMatch) {
       setEnroute({ directive: 'CLEARED DIRECT TO', value: directMatch[1].trim(), restriction: '', text: '' });
     } else if (speedMatch) {
@@ -146,7 +177,7 @@ export default function AtcCpdlcPanel() {
   }
 
   function openMessage(message: CpdlcMessage) {
-    if (!selectedId) inboxScroll.current = content.current?.scrollTop ?? 0;
+    if (!selectedId && !selectedAircraft) inboxScroll.current = content.current?.scrollTop ?? 0;
     if (draftMessageId.current !== message.id) {
       draftMessageId.current = message.id;
       setClearance(emptyClearance);
@@ -154,10 +185,24 @@ export default function AtcCpdlcPanel() {
       setReplyText('');
       setTransferSession('');
     }
-    setSelectedId(message.id); setEditor(null); setActionError('');
+    setSelectedAircraft(null);
+    setSelectedId(message.id);
+    setEditor(null);
+    setActionError('');
   }
 
-  async function submit(command: CpdlcCommand) {
+  function openAircraftPanel(callsign: string) {
+    if (!selectedId && !selectedAircraft) inboxScroll.current = content.current?.scrollTop ?? 0;
+    setSelectedId(null);
+    setSelectedAircraft(callsign);
+    setEnroute(emptyEnroute);
+    setHandoverCode('');
+    setReplyText('');
+    setEditor(null);
+    setActionError('');
+  }
+
+  async function submit(command: CpdlcCommand, afterSuccess?: () => void) {
     setActionError('');
     let payload = command;
     if ('client_request_id' in command) {
@@ -166,8 +211,16 @@ export default function AtcCpdlcPanel() {
       requestContent.current = content;
       payload = { ...command, client_request_id: requestId.current! };
     }
-    try { await act(payload); requestId.current = null; requestContent.current = null; setEditor(null); setReplyText(''); }
-    catch (reason) { setActionError(reason instanceof Error ? reason.message : 'MESSAGE NOT SENT. RETRY.'); }
+    try {
+      await act(payload);
+      requestId.current = null;
+      requestContent.current = null;
+      setEditor(null);
+      setReplyText('');
+      afterSuccess?.();
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'MESSAGE NOT SENT. RETRY.');
+    }
   }
 
   async function acceptLogon(message: CpdlcMessage) {
@@ -212,10 +265,41 @@ export default function AtcCpdlcPanel() {
     }
   }
 
+  async function handoverAircraft(callsign: string, targetCode: string) {
+    setActionError('');
+    const code = upper(targetCode).trim();
+    if (!code) { setActionError('SELECT OR ENTER TARGET ATC STATION'); return; }
+    const matchingStation = onlineControllers.find(s => upper(s.code) === code);
+    const acEntry = connectedAircraft.find(a => a.callsign === callsign);
+    try {
+      await act({
+        action: 'free_text',
+        to: callsign,
+        text: `NEXT DATA AUTHORITY ${code}\nHANDOVER TO ${code} - LOGON ${code}`,
+        client_request_id: crypto.randomUUID(),
+      });
+      if (matchingStation && acEntry) {
+        const pendingMsg = messages.find(m => m.id === acEntry.lastMessageId && ['SENT', 'STANDBY', 'TIMED_OUT'].includes(m.status));
+        if (pendingMsg) {
+          await act({
+            action: 'transfer',
+            message_id: pendingMsg.id,
+            session_id: matchingStation.session_id,
+            client_request_id: crypto.randomUUID(),
+          }).catch(() => {});
+        }
+      }
+      setEditor(null);
+      setSelectedAircraft(null);
+    } catch (reason) {
+      setActionError(reason instanceof Error ? reason.message : 'HANDOVER FAILED');
+    }
+  }
+
   function startEditor(next: Editor, presetRecipient = '') {
     requestId.current = crypto.randomUUID(); requestContent.current = null; setActionError(''); setEditor(next);
     if (next === 'compose') {
-      inboxScroll.current = content.current?.scrollTop ?? 0;
+      if (!selectedId && !selectedAircraft) inboxScroll.current = content.current?.scrollTop ?? 0;
       setRecipient(presetRecipient);
       setReplyText('');
     }
@@ -231,13 +315,54 @@ export default function AtcCpdlcPanel() {
   }
 
   const needsValue = !['UNABLE', 'STANDBY'].includes(enroute.directive);
+  const aircraftHistory = selectedAircraft
+    ? messages.filter(m => m.from_station === selectedAircraft || m.to_station === selectedAircraft).slice().sort((a, b) => b.created_at.localeCompare(a.created_at))
+    : [];
+
+  const renderEnrouteForm = (onSubmitSuccess: () => void) => (
+    <form className="space-y-4 rounded-xl border border-sky-500/30 p-4" onSubmit={event => {
+      event.preventDefault();
+      if (needsValue && !enroute.value.trim()) {
+        setActionError('ENTER THE CLEARANCE VALUE');
+        return;
+      }
+      setActionError('');
+      onSubmitSuccess();
+    }}>
+      <p className="text-xs font-bold uppercase tracking-wider text-sky-400">ENROUTE ATC CLEARANCE</p>
+      <label className="block space-y-1 text-xs font-semibold">DIRECTIVE / ACTION
+        <select className={field} value={enroute.directive} onChange={event => setEnroute({ ...enroute, directive: event.target.value as EnrouteDirective })}>
+          <option value="CLEARED CLIMB TO">CLEARED CLIMB TO</option>
+          <option value="CLEARED DESCEND TO">CLEARED DESCEND TO</option>
+          <option value="MAINTAIN">MAINTAIN LEVEL / ALTITUDE</option>
+          <option value="CLEARED DIRECT TO">CLEARED DIRECT TO</option>
+          <option value="MAINTAIN SPEED">MAINTAIN SPEED / MACH</option>
+          <option value="FLY HEADING">FLY HEADING</option>
+          <option value="CONTACT">CONTACT FREQUENCY</option>
+          <option value="SQUAWK">SQUAWK</option>
+          <option value="UNABLE">UNABLE</option>
+          <option value="STANDBY">STANDBY</option>
+        </select>
+      </label>
+      {needsValue && <label className="block space-y-1 text-xs font-semibold">LEVEL / WAYPOINT / SPEED / HEADING
+        <input autoFocus required maxLength={30} className={field} value={enroute.value} onChange={event => setEnroute({ ...enroute, value: upper(event.target.value) })} placeholder="FL350 / MAKEL / 280 KT / 270" />
+      </label>}
+      <label className="block space-y-1 text-xs font-semibold">RESTRICTION / CONDITION (OPTIONAL)
+        <input maxLength={80} className={field} value={enroute.restriction} onChange={event => setEnroute({ ...enroute, restriction: upper(event.target.value) })} placeholder="REPORT REACHING / DUE TRAFFIC" />
+      </label>
+      <label className="block space-y-1 text-xs font-semibold">ADDITIONAL FREE TEXT (OPTIONAL)
+        <textarea className={field} rows={2} maxLength={400} value={enroute.text} onChange={event => setEnroute({ ...enroute, text: upper(event.target.value) })} />
+      </label>
+      <button type="submit" className={cn(button, 'w-full bg-sky-600 text-white')}>REVIEW CLEARANCE <ArrowRight className="h-4 w-4" /></button>
+    </form>
+  );
 
   const dialog = open && typeof document !== 'undefined' ? createPortal(<div className="fixed inset-0 z-[120]">
     <button className="absolute inset-0 bg-black/30" tabIndex={-1} aria-label="Close CPDLC panel" onClick={() => setOpen(false)} />
     <aside ref={panel} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby="atc-cpdlc-title" className={cn('absolute inset-y-0 right-0 flex w-[540px] max-w-full flex-col border-l shadow-2xl outline-none', shell)}>
       <header className="flex shrink-0 items-center gap-3 border-b border-slate-500/20 p-4">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/15 text-sky-500"><MessageSquare className="h-5 w-5" /></div>
-        <div className="min-w-0 flex-1"><h2 id="atc-cpdlc-title" className="font-bold tracking-wide">CPDLC <span className={cn('ml-2 text-sm font-mono', muted)}>{data?.station ?? 'ATC'}</span></h2><p className={cn('text-xs', muted)}>{unread.length} UNACKNOWLEDGED · {messages.length} MESSAGES</p></div>
+        <div className="min-w-0 flex-1"><h2 id="atc-cpdlc-title" className="font-bold tracking-wide">CPDLC <span className={cn('ml-2 text-sm font-mono', muted)}>{data?.station ?? 'ATC'}</span></h2><p className={cn('text-xs', muted)}>{connectedAircraft.length} LOGGED · {unread.length} UNREAD</p></div>
         <button onClick={() => void refresh()} className={button} title="Refresh messages" aria-label="Refresh messages" disabled={loading}><RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /></button>
         <button onClick={() => setOpen(false)} className={button} aria-label="Close CPDLC panel"><X className="h-4 w-4" /></button>
       </header>
@@ -245,8 +370,16 @@ export default function AtcCpdlcPanel() {
       {alarm.blocked && <button className="m-3 flex items-center justify-center gap-2 rounded-lg bg-amber-500 px-3 py-2 text-sm font-semibold text-black" onClick={() => void alarm.enable()}><Volume2 className="h-4 w-4" /> ENABLE MESSAGE SOUND</button>}
       <div ref={content} className="min-h-0 flex-1 overflow-y-auto">
         {editor ? <div className="space-y-4 p-4">
-          <button className={button} disabled={busy} onClick={() => { setEditor(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK TO MESSAGE</button>
-          <h3 className="font-semibold">{editor === 'compose' ? 'NEW FREE TEXT' : editor === 'transfer' ? 'TRANSFER MESSAGE' : `REPLY TO ${selected?.from_station ?? ''}`}</h3>
+          <button className={button} disabled={busy} onClick={() => { setEditor(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK</button>
+          <h3 className="font-semibold">
+            {editor === 'compose'
+              ? `MESSAGE TO ${recipient || 'AIRCRAFT'}`
+              : editor === 'transfer' || editor === 'aircraft_handover'
+                ? `TRANSFER / HANDOVER ${selectedAircraft || selected?.from_station || ''}`
+                : editor === 'aircraft_clearance' || editor === 'aircraft_clearance_preview'
+                  ? `CLEARANCE TO ${selectedAircraft ?? ''}`
+                  : `REPLY TO ${selected?.from_station ?? ''}`}
+          </h3>
           {editor === 'choice' && selected && <div className="space-y-4"><p className={cn('text-sm', muted)}>Select the clearance decision. No additional fields are required for refusal.</p><div className="grid grid-cols-2 gap-3"><button className="rounded-xl border border-emerald-500 bg-emerald-500/10 p-5 font-bold text-emerald-500" disabled={busy} onClick={() => setEditor('clearance')}>CLEAR <ChevronRight className="ml-1 inline h-4 w-4" /></button><button className="rounded-xl border border-red-500 bg-red-500/10 p-5 font-bold text-red-500" disabled={busy} onClick={() => void submit({ action: 'respond', message_id: selected.id, response: 'REFUSED', client_request_id: requestId.current ?? crypto.randomUUID() })}>REFUSED</button></div></div>}
           {editor === 'clearance' && <form className="space-y-4" onSubmit={event => {
             event.preventDefault();
@@ -262,39 +395,7 @@ export default function AtcCpdlcPanel() {
             <button type="submit" className={cn(button, 'w-full bg-sky-600 text-white')}>REVIEW MESSAGE <ArrowRight className="h-4 w-4" /></button>
           </form>}
           {editor === 'preview' && selected && <div className="space-y-4"><p className={cn('text-xs', muted)}>CHECK THE CLEARANCE BEFORE SENDING</p><pre className="whitespace-pre-wrap break-words rounded-xl border border-sky-900 bg-[#050e18] p-4 font-mono text-sm leading-relaxed text-cyan-300">{clearancePreview(clearance)}</pre><div className="flex gap-2"><button className={button} disabled={busy} onClick={() => setEditor('clearance')}>EDIT</button><button className={cn(button, 'flex-1 bg-sky-600 text-white')} disabled={busy} onClick={() => void submit({ action: 'respond', message_id: selected.id, response: 'CLEAR', clearance, client_request_id: requestId.current ?? crypto.randomUUID() })}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND CLEARANCE'}</button></div></div>}
-          {editor === 'enroute' && selected && <form className="space-y-4 rounded-xl border border-sky-500/30 p-4" onSubmit={event => {
-            event.preventDefault();
-            if (needsValue && !enroute.value.trim()) {
-              setActionError('ENTER THE CLEARANCE VALUE');
-              return;
-            }
-            setActionError('');
-            setEditor('enroute_preview');
-          }}>
-            <p className={cn('text-xs font-bold uppercase tracking-wider text-sky-400')}>ENROUTE ATC CLEARANCE</p>
-            <label className="block space-y-1 text-xs font-semibold">DIRECTIVE / ACTION
-              <select className={field} value={enroute.directive} onChange={event => setEnroute({ ...enroute, directive: event.target.value as EnrouteDirective })}>
-                <option value="CLEARED CLIMB TO">CLEARED CLIMB TO</option>
-                <option value="CLEARED DESCEND TO">CLEARED DESCEND TO</option>
-                <option value="MAINTAIN">MAINTAIN LEVEL / ALTITUDE</option>
-                <option value="CLEARED DIRECT TO">CLEARED DIRECT TO</option>
-                <option value="MAINTAIN SPEED">MAINTAIN SPEED / MACH</option>
-                <option value="FLY HEADING">FLY HEADING</option>
-                <option value="UNABLE">UNABLE</option>
-                <option value="STANDBY">STANDBY</option>
-              </select>
-            </label>
-            {needsValue && <label className="block space-y-1 text-xs font-semibold">LEVEL / WAYPOINT / SPEED / HEADING
-              <input autoFocus required maxLength={30} className={field} value={enroute.value} onChange={event => setEnroute({ ...enroute, value: upper(event.target.value) })} placeholder="FL350 / MAKEL / 280 KT / 270" />
-            </label>}
-            <label className="block space-y-1 text-xs font-semibold">RESTRICTION / CONDITION (OPTIONAL)
-              <input maxLength={80} className={field} value={enroute.restriction} onChange={event => setEnroute({ ...enroute, restriction: upper(event.target.value) })} placeholder="REPORT REACHING / DUE TRAFFIC" />
-            </label>
-            <label className="block space-y-1 text-xs font-semibold">ADDITIONAL FREE TEXT (OPTIONAL)
-              <textarea className={field} rows={2} maxLength={400} value={enroute.text} onChange={event => setEnroute({ ...enroute, text: upper(event.target.value) })} />
-            </label>
-            <button type="submit" className={cn(button, 'w-full bg-sky-600 text-white')}>REVIEW ENROUTE CLEARANCE <ArrowRight className="h-4 w-4" /></button>
-          </form>}
+          {editor === 'enroute' && selected && renderEnrouteForm(() => setEditor('enroute_preview'))}
           {editor === 'enroute_preview' && selected && <div className="space-y-4">
             <p className={cn('text-xs', muted)}>CHECK THE ENROUTE CLEARANCE BEFORE SENDING</p>
             <pre className="whitespace-pre-wrap break-words rounded-xl border border-sky-900 bg-[#050e18] p-4 font-mono text-sm leading-relaxed text-cyan-300">{enroutePreview(enroute)}</pre>
@@ -303,12 +404,74 @@ export default function AtcCpdlcPanel() {
               <button className={cn(button, 'flex-1 bg-sky-600 text-white')} disabled={busy} onClick={() => void submit({ action: 'respond', message_id: selected.id, response: 'FREE_TEXT', text: enroutePreview(enroute), client_request_id: requestId.current ?? crypto.randomUUID() })}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND CLEARANCE'}</button>
             </div>
           </div>}
+          {editor === 'aircraft_clearance' && selectedAircraft && renderEnrouteForm(() => setEditor('aircraft_clearance_preview'))}
+          {editor === 'aircraft_clearance_preview' && selectedAircraft && <div className="space-y-4">
+            <p className={cn('text-xs', muted)}>CHECK THE ENROUTE CLEARANCE BEFORE SENDING TO {selectedAircraft}</p>
+            <pre className="whitespace-pre-wrap break-words rounded-xl border border-sky-900 bg-[#050e18] p-4 font-mono text-sm leading-relaxed text-cyan-300">{enroutePreview(enroute)}</pre>
+            <div className="flex gap-2">
+              <button className={button} disabled={busy} onClick={() => setEditor('aircraft_clearance')}>EDIT</button>
+              <button className={cn(button, 'flex-1 bg-sky-600 text-white')} disabled={busy} onClick={() => void submit({ action: 'free_text', to: selectedAircraft, text: enroutePreview(enroute), client_request_id: requestId.current ?? crypto.randomUUID() })}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND CLEARANCE'}</button>
+            </div>
+          </div>}
+          {editor === 'aircraft_handover' && selectedAircraft && <form className="space-y-4 rounded-xl border border-amber-500/30 p-4" onSubmit={event => { event.preventDefault(); void handoverAircraft(selectedAircraft, handoverCode); }}>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-400">SECTOR HANDOVER — {selectedAircraft}</p>
+            {onlineControllers.length > 0 && <label className="block space-y-1 text-xs font-semibold">ONLINE ATC STATIONS
+              <select className={field} value={handoverCode} onChange={event => setHandoverCode(upper(event.target.value))}>
+                <option value="">SELECT ONLINE CONTROLLER</option>
+                {onlineControllers.map(station => (
+                  <option key={station.session_id} value={upper(station.code)}>{upper(station.code)} ({station.position.toUpperCase()})</option>
+                ))}
+              </select>
+            </label>}
+            <label className="block space-y-1 text-xs font-semibold">OR ENTER NEXT ATC ICAO CODE
+              <input required maxLength={6} className={field} value={handoverCode} onChange={event => setHandoverCode(upper(event.target.value))} placeholder="ITKO / LFFF / IRFD" />
+            </label>
+            <p className={cn('text-xs', muted)}>Sends NEXT DATA AUTHORITY to {selectedAircraft}, updates the pilot&apos;s CURRENT ATC automatically, and releases the flight from your logged list.</p>
+            <button disabled={busy || !handoverCode.trim()} className={cn(button, 'w-full bg-amber-600 text-white')}><Radio className="h-4 w-4" /> {busy ? 'TRANSFERRING…' : 'TRANSFER AIRCRAFT'}</button>
+          </form>}
           {(editor === 'text' || editor === 'compose') && <form className="space-y-4" onSubmit={event => { event.preventDefault(); if (editor === 'compose') void submit({ action: 'free_text', to: upper(recipient.trim()), text: replyText, client_request_id: requestId.current ?? crypto.randomUUID() }); else if (selected) void submit({ action: 'respond', message_id: selected.id, response: 'FREE_TEXT', text: replyText, client_request_id: requestId.current ?? crypto.randomUUID() }); }}>
-            {editor === 'compose' && <label className="block space-y-1 text-xs font-semibold">TO STATION<input required className={field} value={recipient} maxLength={16} onChange={event => setRecipient(upper(event.target.value))} placeholder="IRFD / DLH324" /></label>}
+            {editor === 'compose' && <label className="block space-y-1 text-xs font-semibold">TO STATION / AIRCRAFT<input required className={field} value={recipient} maxLength={16} onChange={event => setRecipient(upper(event.target.value))} placeholder="IRFD / DLH324" /></label>}
             <label className="block space-y-1 text-xs font-semibold">MESSAGE<textarea autoFocus required className={field} rows={6} maxLength={1000} value={replyText} onChange={event => setReplyText(upper(event.target.value))} /></label><button disabled={busy || !replyText.trim()} className={cn(button, 'w-full bg-sky-600 text-white')}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND MESSAGE'}</button>
           </form>}
           {editor === 'transfer' && selected && <form className="space-y-4" onSubmit={event => { event.preventDefault(); void transferWithHandover(selected); }}><label className="block space-y-1 text-xs font-semibold">ONLINE CONTROLLER<select required className={field} value={transferSession} onChange={event => setTransferSession(event.target.value)}><option value="">SELECT A POSITION</option>{transferStations.map(station => <option key={station.session_id} value={station.session_id}>{station.code} {station.position.toUpperCase()}</option>)}</select></label><p className={cn('text-sm', muted)}>{transferStations.length ? 'The receiving controller will be alerted and NEXT DATA AUTHORITY will be sent to the flight.' : 'NO OTHER CONTROLLER COVERS THIS AIRPORT.'}</p><button disabled={busy || !transferSession} className={cn(button, 'w-full bg-sky-600 text-white')}>TRANSFER MESSAGE</button></form>}
-        </div> : selected ? <section className="space-y-4 p-4" aria-label="Selected message">
+        </div> : selectedAircraft ? <section className="space-y-4 p-4" aria-label="Logged aircraft actions">
+          <button className={button} onClick={() => { setSelectedAircraft(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK TO INBOX</button>
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Plane className="h-5 w-5 text-emerald-400" />
+                <span className="font-mono text-base font-bold">{selectedAircraft}</span>
+              </div>
+              <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 font-mono text-[11px] font-bold text-emerald-400">LOGGED ON</span>
+            </div>
+            <p className={cn('mt-2 text-xs', muted)}>Select an ATC instruction to send directly to {selectedAircraft}&apos;s DCDU.</p>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <button type="button" disabled={busy || !data?.available} className={cn(button, 'bg-sky-600 text-white')} onClick={() => { setEnroute(emptyEnroute); startEditor('aircraft_clearance'); }}>
+                <Send className="h-4 w-4" /> CLIMB / DESC / DCT
+              </button>
+              <button type="button" disabled={busy || !data?.available} className={cn(button, 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10')} onClick={() => { setHandoverCode(''); startEditor('aircraft_handover'); }}>
+                <Radio className="h-4 w-4" /> TRANSFER
+              </button>
+              <button type="button" disabled={busy || !data?.available} className={button} onClick={() => startEditor('compose', selectedAircraft)}>
+                <MessageSquare className="h-4 w-4" /> FREE TEXT
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className={cn('text-xs font-bold uppercase tracking-wider', muted)}>RECENT EXCHANGES WITH {selectedAircraft}</p>
+            {aircraftHistory.length === 0 ? (
+              <p className={cn('text-xs', muted)}>NO MESSAGES YET.</p>
+            ) : aircraftHistory.slice(0, 8).map(item => (
+              <button key={item.id} type="button" onClick={() => openMessage(item)} className={cn('block w-full rounded-lg border border-slate-500/20 p-3 text-left text-xs hover:border-sky-500/40', dark ? 'bg-slate-900/60' : 'bg-slate-50')}>
+                <div className="flex items-center justify-between font-mono text-[11px]">
+                  <span className="font-bold">{item.incoming ? `${item.from_station} → ATC` : `ATC → ${item.to_station}`}</span>
+                  <span className={muted}>{time(item.created_at)} · {item.status.replace('_', ' ')}</span>
+                </div>
+                <pre className="mt-1.5 whitespace-pre-wrap break-words font-mono text-xs text-cyan-300">{upper(item.body)}</pre>
+              </button>
+            ))}
+          </div>
+        </section> : selected ? <section className="space-y-4 p-4" aria-label="Selected message">
           <button className={button} onClick={() => { setSelectedId(null); setActionError(''); }}><ArrowLeft className="h-4 w-4" /> BACK TO INBOX</button>
           <div className="rounded-xl border border-slate-500/30 p-4">
             <p className="font-mono text-sm font-bold">{selected.from_station} → {selected.to_station}</p>
@@ -325,20 +488,26 @@ export default function AtcCpdlcPanel() {
             {!selected.acknowledged && <button className={button} disabled={busy} onClick={() => void act({ action: 'ack', message_id: selected.id }).catch(reason => setActionError(String(reason)))}><Check className="h-4 w-4" /> ACK</button>}
           </div>}
         </section> : <>
-          {connectedAircraft.length > 0 && <div className="flex flex-wrap items-center gap-1.5 border-b border-slate-500/20 px-3 py-2 text-xs">
-            <span className={cn('inline-flex items-center gap-1 font-semibold', muted)}><Plane className="h-3.5 w-3.5" /> LOGGED:</span>
-            {connectedAircraft.map(callsign => (
-              <button key={callsign} type="button" disabled={!data?.available || busy} onClick={() => startEditor('compose', callsign)} className="rounded-md border border-emerald-500/40 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/20">
-                {callsign}
-              </button>
-            ))}
+          {connectedAircraft.length > 0 && <div className="border-b border-slate-500/20 px-3 py-2.5 text-xs">
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className={cn('inline-flex items-center gap-1.5 font-bold uppercase tracking-wider', muted)}><Plane className="h-3.5 w-3.5 text-emerald-400" /> LOGGED AIRCRAFT ({connectedAircraft.length})</span>
+              <span className={cn('text-[10px]', muted)}>CLICK FOR ACTIONS</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {connectedAircraft.map(ac => (
+                <button key={ac.callsign} type="button" disabled={!data?.available || busy} onClick={() => openAircraftPanel(ac.callsign)} className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-2.5 py-1 font-mono text-xs font-bold text-emerald-400 hover:bg-emerald-500/20">
+                  <span>{ac.callsign}</span>
+                  <ChevronRight className="h-3 w-3 opacity-70" />
+                </button>
+              ))}
+            </div>
           </div>}
           <div className="flex flex-wrap items-center gap-2 border-b border-slate-500/20 p-3"><button className={cn(button, filter === 'all' && 'ring-1 ring-sky-500')} onClick={() => setFilter('all')}>ALL</button><button className={cn(button, filter === 'unread' && 'ring-1 ring-sky-500')} onClick={() => setFilter('unread')}>UNREAD ({unread.length})</button><button className={cn(button, 'ml-auto')} disabled={!data?.available || busy} onClick={() => startEditor('compose')}><Send className="h-4 w-4" /> NEW</button></div>
           <table className="w-full table-fixed text-left text-xs"><thead className={cn('border-b border-slate-500/20', muted)}><tr><th className="w-[32%] px-3 py-3">IDENT</th><th className="w-[25%] px-2 py-3">TYPE</th><th className="w-[28%] px-2 py-3">STATUS</th><th className="w-[15%] px-2 py-3"><span className="sr-only">OPEN</span></th></tr></thead><tbody>{visibleMessages.map(message => <tr key={message.id} className={cn(statusTone(message), 'cursor-pointer')} onClick={() => openMessage(message)}><td className="break-words px-3 py-3"><span className="font-mono font-bold">{message.incoming ? message.from_station : message.to_station}</span><span className={cn('mt-1 block text-[10px]', muted)}>{message.incoming ? 'FROM' : 'TO'} · {time(message.created_at)}</span></td><td className="px-2 py-3 font-semibold">{kindLabel(message)}{message.late && <span className="mt-1 block text-[10px] text-amber-500">LATE REPLY</span>}</td><td className="px-2 py-3"><button title={message.incoming && !message.acknowledged ? 'Acknowledge message and send MSG RECEIVED STANDBY' : 'Message acknowledged'} disabled={!message.incoming || message.acknowledged || busy} className="min-h-9 max-w-full break-words rounded-md border border-current/30 px-2 py-1 text-[10px] font-bold disabled:cursor-default" onClick={event => { event.stopPropagation(); void act({ action: 'ack', message_id: message.id }).catch(reason => setActionError(reason instanceof Error ? reason.message : 'ACK FAILED')); }}>{message.status.replace('_', ' ')}{message.incoming && <span className="block">{message.acknowledged ? 'ACK' : 'ACK ▸'}</span>}</button></td><td className="px-1 py-3"><button aria-label={`Open ${kindLabel(message)} ${message.incoming ? 'from' : 'to'} ${message.incoming ? message.from_station : message.to_station}`} className="min-h-10 min-w-10 rounded-lg hover:bg-sky-500/15" onClick={event => { event.stopPropagation(); openMessage(message); }}><ChevronRight className="mx-auto h-4 w-4" /></button></td></tr>)}</tbody></table>
           {!visibleMessages.length && <p className={cn('px-4 py-10 text-center text-sm', muted)}>{loading ? 'LOADING MESSAGES…' : data?.available === false ? 'CPDLC IS NOT AVAILABLE' : 'NO MESSAGES'}</p>}
         </>}
       </div>
-      <footer className={cn('shrink-0 border-t border-slate-500/20 px-4 py-2 text-[10px]', muted)}>CLICK ACK TO SEND MSG RECEIVED STANDBY · ACK DOES NOT GRANT A CLEARANCE</footer>
+      <footer className={cn('shrink-0 border-t border-slate-500/20 px-4 py-2 text-[10px]', muted)}>CLICK LOGGED AIRCRAFT FOR DIRECT ORDERS · ACK DOES NOT GRANT A CLEARANCE</footer>
     </aside>
   </div>, document.body) : null;
 
