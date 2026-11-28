@@ -39,7 +39,7 @@ export function validateInit(raw: unknown): CpdlcInit {
   }
   if (value.station) {
     const st = stationCode(value.station);
-    if (!/^[A-Z]{4,5}$/.test(st)) throw new CpdlcError('INVALID STATION FORMAT - FOUR OR FIVE LETTERS REQUIRED');
+    if (!/^[A-Z0-9_]{4,12}$/.test(st)) throw new CpdlcError('INVALID STATION FORMAT');
     init.station = st;
   }
   if (value.atis_id) {
@@ -62,16 +62,18 @@ export function departureRequestText(init: CpdlcInit): string {
 }
 
 export function coversAirport(station: CpdlcStation, airport: string): boolean {
-  if (station.code === airport) return true;
-  const fir = AIRPORT_TO_FIR[station.code];
-  if (!fir || fir !== AIRPORT_TO_FIR[airport]) return false;
+  const baseAirport = airport.split('_')[0];
+  const baseStation = station.code.split('_')[0];
+  if (baseStation === baseAirport) return true;
+
+  const fir = AIRPORT_TO_FIR[baseStation];
+  if (!fir || fir !== AIRPORT_TO_FIR[baseAirport]) return false;
 
   const tmaAirports = [...(TMA_CORE_BY_FIR[fir] ?? []), ...(TMA_SATELLITES_BY_FIR[fir] ?? [])];
-  const isTmaAirport = tmaAirports.includes(airport);
+  const isTmaAirport = tmaAirports.includes(baseAirport);
 
-  // Delivery / Clairance d'un terrain principal de la TMA couvre aussi les terrains satellites de la TMA (ex: IRFD Delivery -> IMLR)
   if (['Delivery', 'Clairance'].includes(station.position)) {
-    return isTmaAirport && (TMA_CORE_BY_FIR[fir] ?? []).includes(station.code);
+    return isTmaAirport && (TMA_CORE_BY_FIR[fir] ?? []).includes(baseStation);
   }
 
   if (['DEP', 'APP'].includes(station.position)) {
@@ -84,17 +86,23 @@ export function coversAirport(station: CpdlcStation, airport: string): boolean {
 const PRIORITY = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'];
 
 export function routeStation(stations: CpdlcStation[], airport: string, _clearance: boolean): CpdlcStation | null {
-  const candidates = stations.filter(s => PRIORITY.includes(s.position) && coversAirport(s, airport));
+  const target = airport.trim().toUpperCase();
+  const exact = stations.find(s => {
+    const code = s.code.trim().toUpperCase();
+    const pos = s.position.trim().toUpperCase();
+    return PRIORITY.includes(s.position) && (code === target || `${code}_${pos}` === target);
+  });
+  if (exact) return exact;
+
+  const baseAirport = target.split('_')[0];
+  const candidates = stations.filter(s => PRIORITY.includes(s.position) && coversAirport(s, baseAirport));
   candidates.sort((a, b) => {
-    // 1. Toujours prioriser Delivery / Clairance en premier (y compris sur terrain satellite rattaché à la TMA)
     const priority = PRIORITY.indexOf(a.position) - PRIORITY.indexOf(b.position);
     if (priority) return priority;
 
-    // 2. À poste égal (ex: deux Tours ou deux Delivery), privilégier le contrôleur local du terrain demandé
-    const local = Number(b.code === airport) - Number(a.code === airport);
+    const local = Number(b.code.split('_')[0] === baseAirport) - Number(a.code.split('_')[0] === baseAirport);
     if (local) return local;
 
-    // 3. Départage par ancienneté de connexion
     return Date.parse(a.started_at) - Date.parse(b.started_at) || a.session_id.localeCompare(b.session_id);
   });
   return candidates[0] ?? null;
