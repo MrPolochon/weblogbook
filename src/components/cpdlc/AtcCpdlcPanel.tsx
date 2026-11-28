@@ -377,7 +377,7 @@ export default function AtcCpdlcPanel() {
               : editor === 'transfer' || editor === 'aircraft_handover'
                 ? `TRANSFER / HANDOVER ${selectedAircraft || selected?.from_station || ''}`
                 : editor === 'aircraft_clearance' || editor === 'aircraft_clearance_preview'
-                  ? `CLEARANCE TO ${selectedAircraft ?? ''}`
+                  ? `ORDER TO ${selectedAircraft ?? ''}`
                   : `REPLY TO ${selected?.from_station ?? ''}`}
           </h3>
           {editor === 'choice' && selected && <div className="space-y-4"><p className={cn('text-sm', muted)}>Select the clearance decision. No additional fields are required for refusal.</p><div className="grid grid-cols-2 gap-3"><button className="rounded-xl border border-emerald-500 bg-emerald-500/10 p-5 font-bold text-emerald-500" disabled={busy} onClick={() => setEditor('clearance')}>CLEAR <ChevronRight className="ml-1 inline h-4 w-4" /></button><button className="rounded-xl border border-red-500 bg-red-500/10 p-5 font-bold text-red-500" disabled={busy} onClick={() => void submit({ action: 'respond', message_id: selected.id, response: 'REFUSED', client_request_id: requestId.current ?? crypto.randomUUID() })}>REFUSED</button></div></div>}
@@ -406,11 +406,11 @@ export default function AtcCpdlcPanel() {
           </div>}
           {editor === 'aircraft_clearance' && selectedAircraft && renderEnrouteForm(() => setEditor('aircraft_clearance_preview'))}
           {editor === 'aircraft_clearance_preview' && selectedAircraft && <div className="space-y-4">
-            <p className={cn('text-xs', muted)}>CHECK THE ENROUTE CLEARANCE BEFORE SENDING TO {selectedAircraft}</p>
+            <p className={cn('text-xs', muted)}>CHECK THE ORDER BEFORE SENDING TO {selectedAircraft}</p>
             <pre className="whitespace-pre-wrap break-words rounded-xl border border-sky-900 bg-[#050e18] p-4 font-mono text-sm leading-relaxed text-cyan-300">{enroutePreview(enroute)}</pre>
             <div className="flex gap-2">
               <button className={button} disabled={busy} onClick={() => setEditor('aircraft_clearance')}>EDIT</button>
-              <button className={cn(button, 'flex-1 bg-sky-600 text-white')} disabled={busy} onClick={() => void submit({ action: 'free_text', to: selectedAircraft, text: enroutePreview(enroute), client_request_id: requestId.current ?? crypto.randomUUID() })}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND CLEARANCE'}</button>
+              <button className={cn(button, 'flex-1 bg-sky-600 text-white')} disabled={busy} onClick={() => void submit({ action: 'free_text', to: selectedAircraft, text: enroutePreview(enroute), client_request_id: requestId.current ?? crypto.randomUUID() })}><Send className="h-4 w-4" /> {busy ? 'SENDING…' : 'SEND ORDER'}</button>
             </div>
           </div>}
           {editor === 'aircraft_handover' && selectedAircraft && <form className="space-y-4 rounded-xl border border-amber-500/30 p-4" onSubmit={event => { event.preventDefault(); void handoverAircraft(selectedAircraft, handoverCode); }}>
@@ -447,7 +447,7 @@ export default function AtcCpdlcPanel() {
             <p className={cn('mt-2 text-xs', muted)}>Select an ATC instruction to send directly to {selectedAircraft}&apos;s DCDU.</p>
             <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
               <button type="button" disabled={busy || !data?.available} className={cn(button, 'bg-sky-600 text-white')} onClick={() => { setEnroute(emptyEnroute); startEditor('aircraft_clearance'); }}>
-                <Send className="h-4 w-4" /> CLIMB / DESC / DCT
+                <Send className="h-4 w-4" /> ORDER
               </button>
               <button type="button" disabled={busy || !data?.available} className={cn(button, 'border-amber-500/50 text-amber-400 hover:bg-amber-500/10')} onClick={() => { setHandoverCode(''); startEditor('aircraft_handover'); }}>
                 <Radio className="h-4 w-4" /> TRANSFER
