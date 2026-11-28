@@ -49,7 +49,6 @@ function printMessage(header: string, body: string) {
     printWindow.addEventListener('afterprint', () => frame.remove(), { once: true });
     printWindow.focus();
     printWindow.print();
-    // Some browsers do not emit afterprint for an iframe.
     window.setTimeout(() => frame.remove(), 60000);
   };
   document.body.appendChild(frame);
@@ -103,7 +102,6 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
   const messagePages = useMemo(() => pagesFor(draft?.body || message?.body || ''), [draft?.body, message?.body]);
   const unavailable = !data?.available;
 
-  // Keep latest active CPDLC logon state in a ref for automatic logoff when the flight plan ends or unmounts
   const activeLogonRef = useRef({ planId, currentAtc: '', flightNo: '', act });
   useEffect(() => {
     activeLogonRef.current = {
@@ -123,20 +121,18 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       action: 'free_text',
       plan_id: pid,
       flight_no: flightNo,
-      to: atc,
+      to: atc.split('_')[0],
       text: `LOGOFF NOTIFICATION\nFLT ${flightNo}`,
       client_request_id: crypto.randomUUID(),
     }).catch(() => {});
   }, []);
 
-  // Trigger automatic logoff as soon as the flight plan is no longer active (data.available becomes false)
   useEffect(() => {
     if (!loading && data && !data.available && currentAtc) {
       sendAutoLogoff();
     }
   }, [loading, data, currentAtc, sendAutoLogoff]);
 
-  // Trigger automatic logoff when switching flight plan or leaving the pilot cockpit view
   useEffect(() => {
     return () => {
       sendAutoLogoff();
@@ -151,9 +147,19 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
       setSelected(newest.id);
       setMessagePage(0);
       const bodyUpper = upper(newest.body);
-      const ndaMatch = bodyUpper.match(/NEXT DATA AUTHORITY\s+([A-Z0-9]{4,5})/);
-      if (ndaMatch) setCurrentAtc(ndaMatch[1]);
-      else if (bodyUpper.includes('LOGON ACCEPTED')) setCurrentAtc(upper(newest.from_station));
+      const ndaMatch = bodyUpper.match(/NEXT DATA AUTHORITY\s+([A-Z0-9_]{4,12})/);
+      if (ndaMatch) {
+        const nextAtc = ndaMatch[1];
+        setCurrentAtc(nextAtc);
+        setLogonStation(nextAtc);
+        setTo(nextAtc);
+        setInit(prev => ({ ...prev, station: nextAtc }));
+      } else if (bodyUpper.includes('LOGON ACCEPTED')) {
+        setCurrentAtc(upper(newest.from_station));
+      } else if (bodyUpper.includes('CPDLC SERVICE TERMINATED')) {
+        activeLogonRef.current.currentAtc = '';
+        setCurrentAtc('');
+      }
     }
   }, [unread]);
   useEffect(() => { setMessagePage(0); setSelectedAction(null); }, [message?.id, message?.status, message?.acknowledged, draft, closed]);
@@ -260,7 +266,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
     const client_request_id = crypto.randomUUID();
     if (page === 'LOGON') {
       if (!init.flight_no) { setNotice('ENTER ATC FLT NBR'); return; }
-      if (!/^[A-Z]{4,5}$/.test(logonStation)) { setNotice('FOUR OR FIVE LETTERS REQUIRED'); return; }
+      if (!/^[A-Z0-9_]{4,12}$/.test(logonStation)) { setNotice('INVALID STATION FORMAT'); return; }
       const targetAtc = logonStation;
       return execute(
         { action: 'free_text', plan_id: planId, flight_no: init.flight_no, to: targetAtc, text: `LOGON REQUEST\nFLT ${init.flight_no}\nSTATION ${targetAtc}`, client_request_id },
@@ -347,7 +353,7 @@ export default function PilotCpdlc({ planId }: { planId: string }) {
           label: 'LOGOFF*',
           disabled: busy || unavailable,
           action: () => void execute(
-            { action: 'free_text', plan_id: planId, flight_no: init.flight_no || data?.station || 'PILOT', to: currentAtc, text: `LOGOFF NOTIFICATION\nFLT ${init.flight_no || data?.station || ''}`, client_request_id: crypto.randomUUID() },
+            { action: 'free_text', plan_id: planId, flight_no: init.flight_no || data?.station || 'PILOT', to: currentAtc.split('_')[0], text: `LOGOFF NOTIFICATION\nFLT ${init.flight_no || data?.station || ''}`, client_request_id: crypto.randomUUID() },
             'LOGOFF SENT',
             () => { activeLogonRef.current.currentAtc = ''; setCurrentAtc(''); },
           ),
