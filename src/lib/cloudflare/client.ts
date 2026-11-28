@@ -1,6 +1,6 @@
 /** Audio-only Cloudflare SFU client, shared by the website and Electron.
- * All SFU credentials and room authorization live on the server.
- * Publisher and subscriber SDP exchanges use separate PeerConnections.
+- All SFU credentials and room authorization live on the server.
+- Publisher and subscriber SDP exchanges use separate PeerConnections.
  */
 export enum ConnectionState { Disconnected = 'disconnected', Connecting = 'connecting', Connected = 'connected', Reconnecting = 'reconnecting' }
 export const Track = { Kind: { Audio: 'audio' }, Source: { Microphone: 'microphone' } } as const;
@@ -111,6 +111,7 @@ export class Room {
   private heartbeat?: ReturnType<typeof setTimeout>;
   private meterTimer?: ReturnType<typeof setInterval>;
   private failureTimer?: ReturnType<typeof setTimeout>;
+  private onVisibilityChange?: () => void;
   private publication = {
     mute: async () => { this.microphone?.getAudioTracks().forEach(t => { t.enabled = false; }); },
     unmute: async () => {
@@ -183,6 +184,16 @@ export class Room {
       } catch { void this.disconnect(); }
     };
     ws.onclose = () => { void this.disconnect(); };
+    if (typeof document !== 'undefined') {
+      this.onVisibilityChange = () => {
+        if (document.visibilityState === 'visible' && !this.closed) {
+          void this.context?.resume().catch(() => {});
+          void this.rpc('ping').catch(() => {});
+          this.scheduleHeartbeat();
+        }
+      };
+      document.addEventListener('visibilitychange', this.onVisibilityChange);
+    }
     try {
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => { reject(new Error('Connexion Cloudflare expirée.')); ws.close(); }, 15_000);
@@ -243,17 +254,22 @@ export class Room {
         // ws.onclose and the hook will then reconnect while powered remains on.
       }
       this.scheduleHeartbeat();
-    }, 25_000);
+    }, 15_000);
   }
   private assertOpen() { if (this.closed) throw new Error(this.connectionError || 'Radio déconnectée.'); }
   private checkConnection() {
     if (this.closed) return;
     const states = [this.publisher?.connectionState, this.subscriber?.connectionState];
-    if (states.includes('failed') || states.includes('disconnected')) {
+    if (states.includes('failed')) {
+      this.publisher?.restartIce?.();
+      this.subscriber?.restartIce?.();
+      this.setState(ConnectionState.Reconnecting);
+      if (!this.failureTimer) this.failureTimer = setTimeout(() => { void this.disconnect(); }, 45_000);
+    } else if (states.includes('disconnected')) {
       // ICE can briefly report disconnected during packet loss or network handover.
       // Leave time for the browser's ICE recovery before replacing the whole room.
       this.setState(ConnectionState.Reconnecting);
-      if (!this.failureTimer) this.failureTimer = setTimeout(() => { void this.disconnect(); }, 30_000);
+      if (!this.failureTimer) this.failureTimer = setTimeout(() => { void this.disconnect(); }, 45_000);
     } else if (this.failureTimer) {
       clearTimeout(this.failureTimer); this.failureTimer = undefined;
       this.setState(ConnectionState.Connected);
@@ -288,12 +304,15 @@ export class Room {
         }
         const answer = await description(this.subscriber!, false);
         await this.rpc('answer', { sessionDescription: answer });
-        // SDP acceptance alone is not readiness: wait for ICE/DTLS to connect.
-        await waitFor(this.subscriber!, 'connectionstatechange', () => this.subscriber?.connectionState === 'connected', 15_000);
+        // Do not tear down the whole radio session if ICE is still establishing;
+        // checkConnection() monitors real ICE failure with a recovery grace window.
+        await waitFor(this.subscriber!, 'connectionstatechange', () => ['connected', 'connecting'].includes(this.subscriber?.connectionState || ''), 15_000).catch(() => {});
       }
     }).catch(error => {
-      if (!this.closed) this.connectionError = error instanceof Error ? error.message : 'Connexion audio interrompue.';
-      void this.disconnect();
+      if (!this.closed && this.ws?.readyState !== WebSocket.OPEN) {
+        this.connectionError = error instanceof Error ? error.message : 'Connexion audio interrompue.';
+        void this.disconnect();
+      }
     });
     return this.reconcileQueue;
   }
@@ -362,6 +381,10 @@ export class Room {
     this.closed = true;
     ++this.captureRequest;
     ++this.enableRequest;
+    if (this.onVisibilityChange && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.onVisibilityChange);
+      this.onVisibilityChange = undefined;
+    }
     void this.publication.mute();
     this.microphone?.getTracks().forEach(t => t.stop());
     this.setState(ConnectionState.Disconnected);
