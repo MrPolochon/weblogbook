@@ -60,27 +60,46 @@ export function departureRequestText(init: CpdlcInit): string {
     init.gate && `GATE NUMBER ${init.gate}`, init.atis_id && `ATIS ID ${init.atis_id}`,
     init.text, init.aircraft_type && `A/C TYPE ${init.aircraft_type}`, `STATION ${init.station || init.dep}`].filter(Boolean).join('\n');
 }
+
 export function coversAirport(station: CpdlcStation, airport: string): boolean {
   if (station.code === airport) return true;
-  if (!['DEP', 'APP', 'Center'].includes(station.position)) return false;
   const fir = AIRPORT_TO_FIR[station.code];
   if (!fir || fir !== AIRPORT_TO_FIR[airport]) return false;
-  return station.position === 'Center' || [...(TMA_CORE_BY_FIR[fir] ?? []), ...(TMA_SATELLITES_BY_FIR[fir] ?? [])].includes(airport);
+
+  const tmaAirports = [...(TMA_CORE_BY_FIR[fir] ?? []), ...(TMA_SATELLITES_BY_FIR[fir] ?? [])];
+  const isTmaAirport = tmaAirports.includes(airport);
+
+  // Delivery / Clairance d'un terrain principal de la TMA couvre aussi les terrains satellites de la TMA (ex: IRFD Delivery -> IMLR)
+  if (['Delivery', 'Clairance'].includes(station.position)) {
+    return isTmaAirport && (TMA_CORE_BY_FIR[fir] ?? []).includes(station.code);
+  }
+
+  if (['DEP', 'APP'].includes(station.position)) {
+    return isTmaAirport;
+  }
+
+  return station.position === 'Center';
 }
+
 const PRIORITY = ['Delivery', 'Clairance', 'Ground', 'Tower', 'DEP', 'APP', 'Center'];
-export function routeStation(stations: CpdlcStation[], airport: string, clearance: boolean): CpdlcStation | null {
+
+export function routeStation(stations: CpdlcStation[], airport: string, _clearance: boolean): CpdlcStation | null {
   const candidates = stations.filter(s => PRIORITY.includes(s.position) && coversAirport(s, airport));
   candidates.sort((a, b) => {
-    if (clearance) {
-      const priority = PRIORITY.indexOf(a.position) - PRIORITY.indexOf(b.position);
-      if (priority) return priority;
-      const local = Number(b.code === airport) - Number(a.code === airport);
-      if (local) return local;
-    }
+    // 1. Toujours prioriser Delivery / Clairance en premier (y compris sur terrain satellite rattaché à la TMA)
+    const priority = PRIORITY.indexOf(a.position) - PRIORITY.indexOf(b.position);
+    if (priority) return priority;
+
+    // 2. À poste égal (ex: deux Tours ou deux Delivery), privilégier le contrôleur local du terrain demandé
+    const local = Number(b.code === airport) - Number(a.code === airport);
+    if (local) return local;
+
+    // 3. Départage par ancienneté de connexion
     return Date.parse(a.started_at) - Date.parse(b.started_at) || a.session_id.localeCompare(b.session_id);
   });
   return candidates[0] ?? null;
 }
+
 export function clearanceText(raw: unknown): string {
   if (!raw || typeof raw !== 'object') throw new CpdlcError('CLEARANCE DATA REQUIRED');
   const c = raw as Record<string, unknown>;
